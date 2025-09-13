@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale-1.0">
+    <title>RTRL Property Prospector</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    
+    <script>
+        window.rtrlApp = window.rtrlApp || {};
+        window.initMap = function() {
+            if (typeof window.rtrlApp.initializeMapServices === 'function') {
+                window.rtrlApp.initializeMapServices();
+            }
+        };
+    </script>
+    <script src="https://maps.googleapis.com/maps/api/js?key=%%GOOGLE_MAPS_API_KEY%%&libraries=places&callback=initMap" async defer></script>
+</head>
+<body>
+    <div class="app-container">
+        <header>
+            <div class="logo">
+                <i class="fas fa-building"></i>
+            </div>
+            <div class="header-text">
+                <h1>RTRL Property Prospector</h1>
+                <p>Intelligent Client Prospecting for Commercial Real Estate</p>
+            </div>
+        </header>
+
+        <main class="main-layout">
+
+            <div class="search-controls card">
+                <h2><i class="fas fa-search"></i> Define Your Search</h2>
+                
+                <div id="bulkSearchContainer">
+                    <h4>Bulk Search by Category</h4>
+                    <div class="form-group">
+                        <label for="primaryCategorySelect">Business Category</label>
+                        <select id="primaryCategorySelect"></select>
+                    </div>
+    
+                    <div class="form-group" id="subCategoryGroup" style="display: none;">
+                        <label for="subCategorySelect">Sub-Category (Optional)</label>
+                        <select id="subCategorySelect"></select>
+                    </div>
+    
+                    <div class="form-group" id="customCategoryGroup" style="display: none;">
+                        <label for="customCategoryInput">Custom Category</label>
+                        <input type="text" id="customCategoryInput" placeholder="e.g., Artisan Cheese Shop">
+                    </div>
+    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="locationInput"><i class="fas fa-map-marker-alt"></i> Suburb / Area</label>
+                            <input type="text" id="locationInput" placeholder="e.g. Melbourne" autocomplete="off">
+                            <div id="locationSuggestions" class="autocomplete-suggestions"></div>
+                        </div>
+                        <div class="form-group">
+                            <label for="postalCodeInput"><i class="fas fa-hashtag"></i> Postal Code</label>
+                            <input type="text" id="postalCodeInput" placeholder="e.g. 3000" autocomplete="off">
+                            <div id="postalCodeSuggestions" class="autocomplete-suggestions"></div>
+                        </div>
+                    </div>
+    
+                    <div class="form-group">
+                        <label for="countryInput"><i class="fas fa-globe-asia"></i> Country</label>
+                        <input type="text" id="countryInput" placeholder="e.g. Australia" autocomplete="off">
+                        <div id="countrySuggestions" class="autocomplete-suggestions"></div>
+                    </div>
+    
+                    <div class="form-group">
+                        <label for="count">Number of Businesses to Find</label>
+                        <input type="number" id="count" placeholder="10" min="1">
+                    </div>
+                    
+                    <div class="form-group checkbox-group">
+                        <input type="checkbox" id="findAllBusinesses" name="find_option">
+                        <label for="findAllBusinesses">Find all available businesses</label>
+                    </div>
+                </div>
+
+                <hr class="separator">
+
+                <div id="individualSearchContainer">
+                    <h4>Or, Search by Specific Name</h4>
+                     <div class="form-group">
+                        <label for="businessNameInput"><i class="fas fa-store"></i> Business Name</label>
+                        <input type="text" id="businessNameInput" placeholder="e.g., Johnny's Bakery">
+                        <small class="form-text">Fills all location info automatically. Overrides bulk search.</small>
+                    </div>
+                </div>
+                
+                <button id="startButton" class="btn btn-primary"><i class="fas fa-play"></i> Start Research</button>
+            </div>
+
+            <div class="results-display">
+                <div class="research-progress card">
+                    <h2><i class="fas fa-check-circle" id="researchStatusIcon"></i> Research in Progress</h2>
+                    <label>Progress</label>
+                    <div class="progress-bar-container">
+                        <div class="progress-bar">
+                            <div id="progressBar"></div>
+                        </div>
+                        <span id="progressPercentage" class="progress-percentage">0%</span>
+                    </div>
+                    <label>System Log</label>
+                    <pre id="log" class="log-console">Waiting to start research...</pre>
+                </div>
+                
+                <div class="collected-data card" id="collectedDataCard">
+                    <h2>Collected Data</h2>
+                    <div class="placeholder-text">No data collected yet. Start a research to see results here.</div>
+                    
+                    <div class="filter-bar">
+                        <i class="fas fa-filter"></i>
+                        <input type="text" id="filterInput" placeholder="Filter results by name, suburb, address...">
+                    </div>
+
+                    <div class="results-grid-container">
+                        <div class="results-grid" id="resultsGrid">
+                            <div class="grid-header" id="resultsTableHeader">
+                                <div class="checkbox-column"><input type="checkbox" id="selectAllCheckbox"></div>
+                                <div class="sortable" data-sort-key="BusinessName">Business</div>
+                                <div>Category</div>
+                                <div class="sortable" data-sort-key="SuburbArea">Suburb</div>
+                                <div>Address</div>
+                                <div>Website</div>
+                                <div>Owner</div>
+                                <div>Email</div>
+                                <div>Phone</div>
+                                <div>Insta</div>
+                                <div>FB</div>
+                                <div>Maps</div>
+                            </div>
+                            <div class="grid-body" id="resultsTableBody">
+                            </div>
+                        </div>
+                    </div>
+
+                     <div class="download-buttons-group">
+                        <button id="downloadFullExcelButton" class="btn btn-success" disabled>Download Selected (.xlsx)</button>
+                        <button id="downloadNotifyreCSVButton" class="btn btn-secondary" disabled>Generate SMS List</button>
+                        <button id="downloadGoogleWorkspaceCSVButton" class="btn btn-secondary" disabled>Generate Email List</button>
+                    </div>
+                </div>
+            </div>
+        </main>
+        
+        <footer>
+            <p>&copy; <span id="currentYear"></span> RTRL Property. All rights reserved.</p>
+        </footer>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="ui-helpers.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
