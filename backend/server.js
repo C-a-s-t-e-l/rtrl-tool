@@ -31,6 +31,15 @@ if (!GOOGLE_MAPS_API_KEY) {
 app.use(cors());
 app.use(express.json());
 
+// --- START: NEW API ENDPOINT ---
+// This endpoint provides the necessary configuration to the frontend.
+app.get('/api/config', (req, res) => {
+    res.json({
+        googleMapsApiKey: GOOGLE_MAPS_API_KEY
+    });
+});
+// --- END: NEW API ENDPOINT ---
+
 const publicPath = path.join(__dirname, '..', 'public');
 app.use(express.static(publicPath, { index: false }));
 
@@ -41,10 +50,13 @@ app.get(/(.*)/, (req, res) => {
             console.error('Error reading index.html:', err);
             return res.status(500).send('Error loading the application.');
         }
+        // This replacement is now a fallback for local development if needed,
+        // but the primary method is the /api/config endpoint.
         const modifiedHtml = data.replace(PLACEHOLDER_KEY, GOOGLE_MAPS_API_KEY);
         res.send(modifiedHtml);
     });
 });
+
 
 io.on('connection', (socket) => {
     console.log(`Client connected: ${socket.id}`);
@@ -76,14 +88,14 @@ io.on('connection', (socket) => {
         
         let browser;
         try {
-            browser = await puppeteer.launch({ headless: false, args: ['--no-sandbox', '--disable-setuid-sandbox', '--lang=en-US,en'], protocolTimeout: 120000 });
+            browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox', '--lang=en-US,en'], protocolTimeout: 120000 });
             const page = await browser.newPage();
             page.setDefaultNavigationTimeout(60000);
             await page.setExtraHTTPHeaders({ 'Accept-Language': 'en' });
 
             const allProcessedBusinesses = [];
             const processedUrlSet = new Set();
-            let totalRawUrlsAttemptedDetails =.0;
+            let totalRawUrlsAttemptedDetails = 0;
             let mapsCollectionAttempts = 0;
             
             const MAX_MAPS_COLLECTION_ATTEMPTS = isSearchAll ? 10 : 5;
