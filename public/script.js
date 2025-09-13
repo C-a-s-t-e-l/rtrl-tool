@@ -3,7 +3,7 @@ const isLocal = window.location.hostname === 'localhost' || window.location.host
 
 const BACKEND_URL = isLocal 
     ? 'http://localhost:3000' 
-    : 'https://your-render-backend-url.onrender.com'; 
+    : 'https://rtrl-prospector.onrender.com'; 
 
 const socket = io(BACKEND_URL);
     
