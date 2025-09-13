@@ -247,28 +247,42 @@ io.on('connection', (socket) => {
 // The rest of your functions (collectGoogleMapsUrlsContinuously, etc.) remain unchanged.
 // ... (paste the rest of your original functions here) ...
 
+// REPLACE your old collectGoogleMapsUrlsContinuously function with this one
+
 async function collectGoogleMapsUrlsContinuously(page, searchQuery, socket, maxUrlsToCollectThisBatch, processedUrlSet) {
     const newlyDiscoveredUrls = [];
     const resultsContainerSelector = 'div[role="feed"]';
     
     await page.goto('https://www.google.com/maps', { waitUntil: 'networkidle2', timeout: 60000 });
+    
     try {
+        // This is the section that is likely failing
         await page.waitForSelector('form[action^="https://consent.google.com"] button[aria-label="Accept all"]', { timeout: 15000 });
         await page.click('form[action^="https://consent.google.com"] button[aria-label="Accept all"]');
         socket.emit('log', '   -> Accepted Google consent dialog.');
-    } catch (e) { }
-
-    await page.type('#searchboxinput', searchQuery);
-    await page.click('#searchbox-searchbutton');
+    } catch (e) { 
+        socket.emit('log', '   -> No consent dialog found, or a different one appeared. Continuing...');
+    }
 
     try {
+        // This is the line that is throwing the error
+        await page.type('#searchboxinput', searchQuery);
+        await page.click('#searchbox-searchbutton');
+
         await page.waitForSelector(resultsContainerSelector, { timeout: 60000 });
         socket.emit('log', `   -> Initial search results container loaded.`);
     } catch (error) {
-        socket.emit('log', `Error: Google Maps results container not found after search. Cannot collect URLs.`, 'error');
-        return [];
+        // --- THIS IS THE NEW DEBUGGING CODE ---
+        socket.emit('log', `CRITICAL ERROR: Could not interact with the search page. Saving a screenshot...`, 'error');
+        await page.screenshot({ path: 'error_screenshot.png', fullPage: true });
+        socket.emit('log', `Screenshot saved to 'error_screenshot.png' on the server.`, 'info');
+        // --- END OF NEW DEBUGGING CODE ---
+        
+        socket.emit('log', `Error: ${error.message}. Cannot collect URLs.`, 'error');
+        return []; // Return an empty array to stop the scrape
     }
-    
+
+    // ... the rest of the function (the while loop for scrolling) remains the same ...
     let lastScrollHeight = 0;
     let consecutiveNoProgressAttempts = 0;
     const MAX_CONSECUTIVE_NO_PROGRESS_ATTEMPTS = 7; 
@@ -286,25 +300,20 @@ async function collectGoogleMapsUrlsContinuously(page, searchQuery, socket, maxU
                 newUrlsFoundInIteration++;
             }
         });
-
         const containerHandle = await page.$(resultsContainerSelector);
         if (!containerHandle) {
             socket.emit('log', `Error: Google Maps results container disappeared during scroll check. Stopping collection.`);
             break;
         }
-
         await page.evaluate(selector => {
             const el = document.querySelector(selector);
             if (el) el.scrollTop = el.scrollHeight;
         }, resultsContainerSelector);
         await new Promise(r => setTimeout(r, 3000));
-
         totalScrollsMade++;
         const newScrollHeight = await page.evaluate(selector => document.querySelector(selector)?.scrollHeight || 0, resultsContainerSelector);
-        
         const hasNewUrls = newUrlsFoundInIteration > 0;
         const hasScrolledFurther = newScrollHeight > lastScrollHeight;
-
         if (hasNewUrls || hasScrolledFurther) {
             consecutiveNoProgressAttempts = 0; 
             if (hasNewUrls) {
@@ -315,7 +324,6 @@ async function collectGoogleMapsUrlsContinuously(page, searchQuery, socket, maxU
             socket.emit('log', `   -> No new URLs or scroll progress. Attempt ${consecutiveNoProgressAttempts}/${MAX_CONSECUTIVE_NO_PROGRESS_ATTEMPTS}.`);
         }
         lastScrollHeight = newScrollHeight;
-
         if (consecutiveNoProgressAttempts >= MAX_CONSECUTIVE_NO_PROGRESS_ATTEMPTS) {
             socket.emit('log', `   -> Max consecutive attempts without progress reached. Assuming end of results.`);
             break; 
@@ -441,4 +449,5 @@ async function scrapeWebsiteForGoldData(page, websiteUrl, socket) {
 
 server.listen(PORT, () => {
     console.log(`Scraping server running on http://localhost:${PORT}`);
+    //test1
 });
