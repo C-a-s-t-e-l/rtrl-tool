@@ -23,6 +23,14 @@ const PORT = process.env.PORT || 3000;
 const GOOGLE_MAPS_API_KEY = process.env.MAPS_API_KEY;
 const PLACEHOLDER_KEY = '%%GOOGLE_MAPS_API_KEY%%';
 
+const BRIGHTDATA_HOST = process.env.BRIGHTDATA_HOST;
+const BRIGHTDATA_PORT = process.env.BRIGHTDATA_PORT;
+const BRIGHTDATA_USERNAME = process.env.BRIGHTDATA_USERNAME;
+const BRIGHTDATA_PASSWORD = process.env.BRIGHTDATA_PASSWORD;
+
+const useProxy = BRIGHTDATA_HOST && BRIGHTDATA_USERNAME && BRIGHTDATA_PASSWORD;
+
+
 if (!GOOGLE_MAPS_API_KEY) {
     console.error("ERROR: MAPS_API_KEY not found in .env file!");
     process.exit(1);
@@ -82,35 +90,55 @@ io.on('connection', (socket) => {
         
         let browser;
         try {
+          
+            const puppeteerArgs = [
+                '--no-sandbox', 
+                '--disable-setuid-sandbox', 
+                '--disable-dev-shm-usage',
+                '--disable-gpu',
+                '--single-process',
+                '--no-zygote',
+                '--lang=en-US,en'
+            ];
+
+          
+            if (useProxy) {
+                const proxyServer = `http://${BRIGHTDATA_HOST}:${BRIGHTDATA_PORT}`;
+                puppeteerArgs.push(`--proxy-server=${proxyServer}`);
+                socket.emit('log', `[Server] Using Bright Data proxy server.`);
+            }
+
             browser = await puppeteer.launch({ 
                 headless: true, 
-                args: [
-                    '--no-sandbox', 
-                    '--disable-setuid-sandbox', 
-                    '--disable-dev-shm-usage',
-                    '--disable-gpu',
-                    // Memory optimization flags
-                    '--single-process',
-                    '--no-zygote',
-                    '--lang=en-US,en'
-                ], 
+                args: puppeteerArgs, 
                 protocolTimeout: 120000 
             });
+           
             
             const allProcessedBusinesses = [];
             const allDiscoveredUrls = new Set();
             const MAX_MAPS_COLLECTION_ATTEMPTS = isSearchAll ? 10 : 5;
             const MAX_TOTAL_RAW_URLS_TO_PROCESS = isSearchAll ? 750 : Math.max(count * 5, 50);
 
-            // --- Phase 1: Collect all URLs first ---
             socket.emit('log', `[Server] Starting URL collection phase...`);
             let collectionPage = await browser.newPage();
+            
+      
+            if (useProxy) {
+                await collectionPage.authenticate({
+                    username: BRIGHTDATA_USERNAME,
+                    password: BRIGHTDATA_PASSWORD,
+                });
+                socket.emit('log', `[Server] Authenticated collection page with proxy.`);
+            }
+           
+
             await collectionPage.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36');
             
             let mapsCollectionAttempts = 0;
             while (allDiscoveredUrls.size < MAX_TOTAL_RAW_URLS_TO_PROCESS && mapsCollectionAttempts < MAX_MAPS_COLLECTION_ATTEMPTS) {
                  mapsCollectionAttempts++;
-                 const remainingToFind = isSearchAll ? 50 : (targetCount * 2) - allDiscoveredUrls.size; // Aim for more URLs than target
+                 const remainingToFind = isSearchAll ? 50 : (targetCount * 2) - allDiscoveredUrls.size;
                  if (remainingToFind <= 0 && !isSearchAll) break;
 
                  const rawUrlsToCollectThisAttempt = Math.max(remainingToFind, 20);
@@ -124,9 +152,8 @@ io.on('connection', (socket) => {
                  }
                  newlyDiscoveredUrls.forEach(url => allDiscoveredUrls.add(url));
             }
-            await collectionPage.close(); // Close the collection page to save memory
+            await collectionPage.close();
 
-            // --- Phase 2: Process the collected URLs ---
             socket.emit('log', `-> URL Collection complete. Discovered ${allDiscoveredUrls.size} unique listings. Now processing...`);
             let totalRawUrlsAttemptedDetails = 0;
             const urlList = Array.from(allDiscoveredUrls);
@@ -141,11 +168,19 @@ io.on('connection', (socket) => {
                     : `Added: ${allProcessedBusinesses.length}/${finalCount}`;
                 socket.emit('log', `--- Processing business #${totalRawUrlsAttemptedDetails} of ${allDiscoveredUrls.size} | ${progressStatus} ---`);
 
-                // Create a fresh, clean page for each business to prevent memory leaks
                 const detailPage = await browser.newPage();
+
+              
+                if (useProxy) {
+                    await detailPage.authenticate({
+                        username: BRIGHTDATA_USERNAME,
+                        password: BRIGHTDATA_PASSWORD,
+                    });
+                }
+                
+
                 await detailPage.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36');
                 
-                // Block unnecessary resources like images, CSS, and fonts to save memory
                 await detailPage.setRequestInterception(true);
                 detailPage.on('request', (req) => {
                     if (['image', 'stylesheet', 'font', 'media'].includes(req.resourceType())) {
@@ -164,7 +199,6 @@ io.on('connection', (socket) => {
                 } catch (detailError) {
                     socket.emit('log', `Error processing URL (${urlToProcess}): ${detailError.message.split('\n')[0]}. Skipping.`, 'error');
                 } finally {
-                    // CRITICAL: Close the page to release its memory
                     await detailPage.close();
                 }
 
@@ -201,6 +235,7 @@ io.on('connection', (socket) => {
 
     socket.on('disconnect', () => console.log(`Client disconnected: ${socket.id}`));
 });
+
 
 async function collectGoogleMapsUrlsContinuously(page, searchQuery, socket, maxUrlsToCollectThisBatch, processedUrlSet) {
     const newlyDiscoveredUrls = [];
