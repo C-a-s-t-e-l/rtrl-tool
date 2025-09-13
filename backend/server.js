@@ -23,13 +23,16 @@ const PORT = process.env.PORT || 3000;
 const GOOGLE_MAPS_API_KEY = process.env.MAPS_API_KEY;
 const PLACEHOLDER_KEY = '%%GOOGLE_MAPS_API_KEY%%';
 
+// --- BRIGHT DATA INTEGRATION START ---
+// Load proxy credentials from the .env file
 const BRIGHTDATA_HOST = process.env.BRIGHTDATA_HOST;
 const BRIGHTDATA_PORT = process.env.BRIGHTDATA_PORT;
 const BRIGHTDATA_USERNAME = process.env.BRIGHTDATA_USERNAME;
 const BRIGHTDATA_PASSWORD = process.env.BRIGHTDATA_PASSWORD;
 
+// A simple flag to check if we should use the proxy
 const useProxy = BRIGHTDATA_HOST && BRIGHTDATA_USERNAME && BRIGHTDATA_PASSWORD;
-
+// --- BRIGHT DATA INTEGRATION END ---
 
 if (!GOOGLE_MAPS_API_KEY) {
     console.error("ERROR: MAPS_API_KEY not found in .env file!");
@@ -90,7 +93,8 @@ io.on('connection', (socket) => {
         
         let browser;
         try {
-          
+            // --- BRIGHT DATA INTEGRATION START ---
+            // Prepare the arguments for launching Puppeteer
             const puppeteerArgs = [
                 '--no-sandbox', 
                 '--disable-setuid-sandbox', 
@@ -101,11 +105,11 @@ io.on('connection', (socket) => {
                 '--lang=en-US,en'
             ];
 
-          
+            // If proxy credentials are provided in the .env file, add the proxy server argument
             if (useProxy) {
                 const proxyServer = `http://${BRIGHTDATA_HOST}:${BRIGHTDATA_PORT}`;
                 puppeteerArgs.push(`--proxy-server=${proxyServer}`);
-                socket.emit('log', `[Server] 1Using1 Bright Data proxy server.`);
+                socket.emit('log', `[Server] Using Bright Data proxy server.`);
             }
 
             browser = await puppeteer.launch({ 
@@ -113,17 +117,19 @@ io.on('connection', (socket) => {
                 args: puppeteerArgs, 
                 protocolTimeout: 120000 
             });
-           
+            // --- BRIGHT DATA INTEGRATION END ---
             
             const allProcessedBusinesses = [];
             const allDiscoveredUrls = new Set();
             const MAX_MAPS_COLLECTION_ATTEMPTS = isSearchAll ? 10 : 5;
             const MAX_TOTAL_RAW_URLS_TO_PROCESS = isSearchAll ? 750 : Math.max(count * 5, 50);
 
+            // --- Phase 1: Collect all URLs first ---
             socket.emit('log', `[Server] Starting URL collection phase...`);
             let collectionPage = await browser.newPage();
             
-      
+            // --- BRIGHT DATA INTEGRATION START ---
+            // Authenticate the page with the proxy if we are using one
             if (useProxy) {
                 await collectionPage.authenticate({
                     username: BRIGHTDATA_USERNAME,
@@ -131,7 +137,7 @@ io.on('connection', (socket) => {
                 });
                 socket.emit('log', `[Server] Authenticated collection page with proxy.`);
             }
-           
+            // --- BRIGHT DATA INTEGRATION END ---
 
             await collectionPage.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36');
             
@@ -154,6 +160,7 @@ io.on('connection', (socket) => {
             }
             await collectionPage.close();
 
+            // --- Phase 2: Process the collected URLs ---
             socket.emit('log', `-> URL Collection complete. Discovered ${allDiscoveredUrls.size} unique listings. Now processing...`);
             let totalRawUrlsAttemptedDetails = 0;
             const urlList = Array.from(allDiscoveredUrls);
@@ -170,14 +177,15 @@ io.on('connection', (socket) => {
 
                 const detailPage = await browser.newPage();
 
-              
+                // --- BRIGHT DATA INTEGRATION START ---
+                // Authenticate each new detail page with the proxy
                 if (useProxy) {
                     await detailPage.authenticate({
                         username: BRIGHTDATA_USERNAME,
                         password: BRIGHTDATA_PASSWORD,
                     });
                 }
-                
+                // --- BRIGHT DATA INTEGRATION END ---
 
                 await detailPage.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36');
                 
@@ -236,6 +244,8 @@ io.on('connection', (socket) => {
     socket.on('disconnect', () => console.log(`Client disconnected: ${socket.id}`));
 });
 
+// The rest of your functions (collectGoogleMapsUrlsContinuously, etc.) remain unchanged.
+// ... (paste the rest of your original functions here) ...
 
 async function collectGoogleMapsUrlsContinuously(page, searchQuery, socket, maxUrlsToCollectThisBatch, processedUrlSet) {
     const newlyDiscoveredUrls = [];
