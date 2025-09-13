@@ -1,7 +1,7 @@
 const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 const BACKEND_URL = isLocal 
     ? 'http://localhost:3000' 
-    : 'http://34.82.111.217:3000'; 
+    : 'https://rtrl-prospector.ddnsfree.com'; 
 
 
 function initializeMainApp() {
