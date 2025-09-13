@@ -31,14 +31,11 @@ if (!GOOGLE_MAPS_API_KEY) {
 app.use(cors());
 app.use(express.json());
 
-// --- START: NEW API ENDPOINT ---
-// This endpoint provides the necessary configuration to the frontend.
 app.get('/api/config', (req, res) => {
     res.json({
         googleMapsApiKey: GOOGLE_MAPS_API_KEY
     });
 });
-// --- END: NEW API ENDPOINT ---
 
 const publicPath = path.join(__dirname, '..', 'public');
 app.use(express.static(publicPath, { index: false }));
@@ -50,8 +47,6 @@ app.get(/(.*)/, (req, res) => {
             console.error('Error reading index.html:', err);
             return res.status(500).send('Error loading the application.');
         }
-        // This replacement is now a fallback for local development if needed,
-        // but the primary method is the /api/config endpoint.
         const modifiedHtml = data.replace(PLACEHOLDER_KEY, GOOGLE_MAPS_API_KEY);
         res.send(modifiedHtml);
     });
@@ -63,6 +58,7 @@ io.on('connection', (socket) => {
     socket.emit('log', `[Server] Connected to Real-time Scraper.`);
 
     socket.on('start_scrape', async ({ category, location, postalCode, country, count, businessName }) => {
+        // ... (The top part of this function remains the same) ...
         const isIndividualSearch = !!businessName;
         const finalCount = isIndividualSearch ? -1 : count;
         const isSearchAll = finalCount === -1;
@@ -88,9 +84,27 @@ io.on('connection', (socket) => {
         
         let browser;
         try {
-            browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox', '--lang=en-US,en'], protocolTimeout: 120000 });
+            // --- START: MODIFIED PUPPETEER LAUNCH OPTIONS ---
+            browser = await puppeteer.launch({ 
+                headless: false, 
+                args: [
+                    '--no-sandbox', 
+                    '--disable-setuid-sandbox', 
+                    '--disable-dev-shm-usage', // Important for Docker environments
+                    '--disable-gpu', // Often needed in headless
+                    '--lang=en-US,en'
+                ], 
+                protocolTimeout: 120000 
+            });
+            // --- END: MODIFIED PUPPETEER LAUNCH OPTIONS ---
+
             const page = await browser.newPage();
-            page.setDefaultNavigationTimeout(60000);
+            
+            // --- START: INCREASED TIMEOUT AND ADDED USER AGENT ---
+            page.setDefaultNavigationTimeout(90000); // Increased from 60s to 90s
+            await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36');
+            // --- END: INCREASED TIMEOUT AND ADDED USER AGENT ---
+            
             await page.setExtraHTTPHeaders({ 'Accept-Language': 'en' });
 
             const allProcessedBusinesses = [];
@@ -195,13 +209,22 @@ async function collectGoogleMapsUrlsContinuously(page, searchQuery, socket, maxU
     await page.click('#searchbox-searchbutton');
 
     try {
-        await page.waitForSelector(resultsContainerSelector, { timeout: 45000 });
+        // --- START: INCREASED TIMEOUT ---
+        await page.waitForSelector(resultsContainerSelector, { timeout: 60000 }); // Increased from 45s to 60s
+        // --- END: INCREASED TIMEOUT ---
         socket.emit('log', `   -> Initial search results container loaded.`);
     } catch (error) {
+        // --- START: ESSENTIAL DEBUGGING WITH SCREENSHOT ---
+        socket.emit('log', `Error: Google Maps results container not found after search. Taking a screenshot for debugging...`);
+        const screenshotPath = path.join(__dirname, 'debug_screenshot.png');
+        await page.screenshot({ path: screenshotPath, fullPage: true });
+        socket.emit('log', `   -> Screenshot saved. Check the logs for the file path if running locally. On Render, this is temporary.`);
+        // --- END: ESSENTIAL DEBUGGING WITH SCREENSHOT ---
         socket.emit('log', `Error: Google Maps results container not found after search. Cannot collect URLs.`, 'error');
         return [];
     }
-
+    
+    // ... (The rest of this function remains the same) ...
     let lastScrollHeight = 0;
     let consecutiveNoProgressAttempts = 0;
     const MAX_CONSECUTIVE_NO_PROGRESS_ATTEMPTS = 7; 
@@ -258,6 +281,7 @@ async function collectGoogleMapsUrlsContinuously(page, searchQuery, socket, maxU
     socket.emit('log', `   -> Finished Maps collection attempt. Found ${urlsDiscoveredInThisBatch} new URLs after ${totalScrollsMade} scrolls.`);
     return newlyDiscoveredUrls; 
 }
+
 
 async function scrapeGoogleMapsDetails(page, url, socket, country) {
     try {
