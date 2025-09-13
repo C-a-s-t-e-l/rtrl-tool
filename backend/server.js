@@ -221,15 +221,42 @@ async function collectGoogleMapsUrlsContinuously(page, searchQuery, socket, maxU
     const newlyDiscoveredUrls = [];
     const resultsContainerSelector = 'div[role="feed"]';
     
-    await page.goto('https://www.google.com/maps', { waitUntil: 'networkidle2', timeout: 60000 });
+    try {
+        // --- NEW HUMAN-LIKE BEHAVIOR ---
+        // 1. Set a common desktop viewport.
+        await page.setViewport({ width: 1920, height: 1080 });
+        // 2. Set a very common User-Agent to appear as a regular browser.
+        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36');
+
+        await page.goto('https://www.google.com/maps', { waitUntil: 'networkidle2', timeout: 60000 });
+        
+        // 3. Wait for the main body of the page to exist before doing anything else.
+        await page.waitForSelector('body');
+
+    } catch (e) {
+        socket.emit('log', `CRITICAL ERROR: Failed to load the initial Google Maps page. It might be blocked. Error: ${e.message}`, 'error');
+        await page.screenshot({ path: 'debug_screenshot_initial_load.png' });
+        throw new Error('Initial page load failed.');
+    }
+
     try {
         await page.waitForSelector('form[action^="https://consent.google.com"] button[aria-label="Accept all"]', { timeout: 15000 });
         await page.click('form[action^="https://consent.google.com"] button[aria-label="Accept all"]');
         socket.emit('log', '   -> Accepted Google consent dialog.');
-    } catch (e) { }
+    } catch (e) { 
+        socket.emit('log', '   -> No consent dialog found, continuing...');
+    }
 
-    await page.type('#searchboxinput', searchQuery);
-    await page.click('#searchbox-searchbutton');
+    try {
+        await page.waitForSelector('#searchboxinput', { visible: true, timeout: 30000 });
+        await page.type('#searchboxinput', searchQuery);
+        await page.click('#searchbox-searchbutton'); // This ID might also change. Check it!
+    } catch (e) {
+        socket.emit('log', `CRITICAL ERROR: Could not find the Google Maps search box (#searchboxinput). Google may have blocked the scraper or changed their site.`, 'error');
+        // This is the most useful debugging tool. It will save a picture of what the scraper sees.
+        await page.screenshot({ path: 'debug_screenshot_no_searchbox.png' });
+        throw new Error('Search box not found.');
+    }
 
     try {
         await page.waitForSelector(resultsContainerSelector, { timeout: 60000 });
@@ -239,6 +266,7 @@ async function collectGoogleMapsUrlsContinuously(page, searchQuery, socket, maxU
         return [];
     }
     
+    // ... the rest of your scrolling logic remains exactly the same ...
     let lastScrollHeight = 0;
     let consecutiveNoProgressAttempts = 0;
     const MAX_CONSECUTIVE_NO_PROGRESS_ATTEMPTS = 7; 
