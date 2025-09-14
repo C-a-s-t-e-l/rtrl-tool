@@ -34,8 +34,9 @@ body {
 
 .app-container {
   max-width: 1400px;
-  margin: 2rem auto;
-  padding: 0 2rem;
+  margin: 0 auto;
+  /* CHANGED: Swapped margin-top for padding-top for better consistency */
+  padding: 2rem;
 }
 
 header {
@@ -69,11 +70,14 @@ header {
   margin: 0;
 }
 
+/* --- MAJOR RESPONSIVENESS FIX --- */
 .main-layout {
   display: grid;
-  grid-template-columns: 380px 1fr;
+  /* Use a more flexible grid that can wrap */
+  grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
   gap: 2rem;
 }
+
 .card {
   background-color: var(--card-bg);
   border: 1px solid var(--border-color);
@@ -167,6 +171,8 @@ header {
   display: flex;
   flex-direction: column;
   gap: 2rem;
+  /* ADDED: ensures it doesn't cause overflow */
+  min-width: 0;
 }
 .research-progress label {
   display: block;
@@ -200,6 +206,7 @@ header {
   white-space: nowrap;
 }
 
+/* --- RESPONSIVENESS FIX --- */
 .log-console {
   background-color: var(--log-bg);
   color: var(--log-text);
@@ -211,7 +218,8 @@ header {
   font-size: 0.85rem;
   white-space: pre-wrap;
   line-height: 1.5;
-  max-width: 940px;
+  /* CHANGED: removed fixed max-width */
+  max-width: 100%;
 }
 .log-entry {
   display: block;
@@ -226,12 +234,15 @@ header {
   color: #6cb6f5;
 }
 
+/* --- RESPONSIVENESS FIX --- */
 .collected-data {
   display: flex;
   flex-direction: column;
   flex-grow: 1;
   min-height: 0;
-  max-width: 1000px;
+  /* CHANGED: removed fixed max-width and added width 100% */
+  max-width: 100%;
+  width: 100%;
   overflow: hidden;
 }
 
@@ -499,38 +510,34 @@ footer {
   accent-color: var(--accent-color);
 }
 
+
+/* --- RESPONSIVENESS MEDIA QUERIES --- */
+
+/* For smaller laptops and tablets */
 @media (max-width: 1200px) {
-  .main-layout {
-    grid-template-columns: 320px 1fr;
-  }
-}
-@media (max-width: 992px) {
-  .main-layout {
-    grid-template-columns: 1fr;
-  }
   .app-container {
-    margin: 1rem auto;
-    padding: 0 1rem;
+      padding: 1.5rem;
   }
 }
+
+/* DELETED: The new main-layout grid handles stacking automatically, so the 992px breakpoint is no longer needed for that. */
+
+/* For mobile devices */
 @media (max-width: 576px) {
   .app-container {
-    margin: 0;
-    padding: 0;
+      /* CHANGED: reduce padding instead of removing it */
+      padding: 1rem;
   }
   .card {
-    border-radius: 0;
-    border-left: 0;
-    border-right: 0;
+    /* Optional: make cards go edge-to-edge on mobile */
+    margin: 0 -1rem;
   }
   header {
-    padding: 1.5rem;
+    padding: 1.5rem 1rem;
+    margin: -1rem -1rem 2rem -1rem;
   }
   .form-row {
     flex-direction: column;
     gap: 1.25rem;
-  }
-  .filter-bar {
-      width: 100%;
   }
 }
