@@ -1,5 +1,5 @@
 // --- IMPORTANT: REPLACE THIS URL WITH YOUR PUBLIC CODESPACE URL ---
-const BACKEND_URL = 'https://7ab1fb932871.ngrok-free.app';
+const BACKEND_URL = 'https://blue-states-enter.loca.lt';
 
 function initializeMainApp() {
     async function loadGoogleMaps() {
@@ -312,5 +312,6 @@ socketIoScript.onerror = () => {
         logEl.innerHTML = "FATAL ERROR: Could not connect to the backend server. Please check the server status and refresh the page.";
     }
 };
+
 
 document.head.appendChild(socketIoScript);
