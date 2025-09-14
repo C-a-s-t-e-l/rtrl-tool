@@ -1,5 +1,5 @@
 // --- IMPORTANT: REPLACE THIS URL WITH YOUR PUBLIC CODESPACE URL ---
-const BACKEND_URL = 'https://blue-states-enter.loca.lt';
+const BACKEND_URL = 'https://7ab1fb932871.ngrok-free.app';
 
 function initializeMainApp() {
     async function loadGoogleMaps() {
@@ -315,3 +315,4 @@ socketIoScript.onerror = () => {
 
 
 document.head.appendChild(socketIoScript);
+
