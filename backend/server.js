@@ -6,7 +6,6 @@ const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
 const fs = require('fs');
-const axios = require('axios');
 require('dotenv').config();
 
 puppeteer.use(StealthPlugin());
@@ -28,7 +27,6 @@ const BRIGHTDATA_HOST = process.env.BRIGHTDATA_HOST;
 const BRIGHTDATA_PORT = process.env.BRIGHTDATA_PORT;
 const BRIGHTDATA_USERNAME = process.env.BRIGHTDATA_USERNAME;
 const BRIGHTDATA_PASSWORD = process.env.BRIGHTDATA_PASSWORD;
-const BRIGHTDATA_API_TOKEN = process.env.BRIGHTDATA_API_TOKEN;
 const useProxy = BRIGHTDATA_HOST && BRIGHTDATA_USERNAME && BRIGHTDATA_PASSWORD;
 
 if (!GOOGLE_MAPS_API_KEY) {
@@ -91,20 +89,20 @@ io.on('connection', (socket) => {
             });
             
             const allProcessedBusinesses = [];
-            
-            socket.emit('log', `[Server] Starting URL collection phase by simulating user behavior...`);
-            const newlyDiscoveredUrls = await collectGoogleMapsUrlsByScrolling(browser, searchQuery, socket, targetCount);
-            const allDiscoveredUrls = new Set(newlyDiscoveredUrls);
+            const processedUrlSet = new Set();
+            let totalRawUrlsAttemptedDetails = 0;
 
-            socket.emit('log', `-> URL Collection complete. Discovered ${allDiscoveredUrls.size} unique listings. Now processing...`);
+            socket.emit('log', `[Server] Starting URL collection phase by simulating user behavior...`);
+            const newlyDiscoveredUrls = await collectGoogleMapsUrlsContinuously(browser, searchQuery, socket, targetCount, processedUrlSet);
             
-            if (allDiscoveredUrls.size === 0) {
+            socket.emit('log', `-> URL Collection complete. Discovered ${processedUrlSet.size} unique listings. Now processing...`);
+            
+            if (processedUrlSet.size === 0) {
                  socket.emit('log', 'No business URLs were found. This could be a "No results found" page on Google, or a change in page structure.', 'error');
             }
 
-            let totalRawUrlsAttemptedDetails = 0;
-            const urlList = Array.from(allDiscoveredUrls);
             const CONCURRENCY = 4;
+            const urlList = Array.from(processedUrlSet);
 
             for (let i = 0; i < urlList.length; i += CONCURRENCY) {
                 if (allProcessedBusinesses.length >= targetCount) break;
@@ -141,7 +139,7 @@ io.on('connection', (socket) => {
                         allProcessedBusinesses.push(businessData);
                         socket.emit('log', `-> ADDED: ${businessData.BusinessName}.`);
                     }
-                    socket.emit('progress_update', { processed: totalRawUrlsAttemptedDetails, discovered: allDiscoveredUrls.size, added: allProcessedBusinesses.length, target: finalCount });
+                    socket.emit('progress_update', { processed: totalRawUrlsAttemptedDetails, discovered: processedUrlSet.size, added: allProcessedBusinesses.length, target: finalCount });
                 });
             }
 
@@ -159,79 +157,100 @@ io.on('connection', (socket) => {
     socket.on('disconnect', () => console.log(`Client disconnected: ${socket.id}`));
 });
 
+
 // ===================================================================================
-// == THE DEFINITIVE SOLUTION: SCROLLING AND SCRAPING VISIBLE HTML ELEMENTS         ==
+// == THIS IS THE SUPERIOR, WORKING LOGIC FROM YOUR LOCAL FILE, ADAPTED FOR DEPLOYMENT ==
 // ===================================================================================
-async function collectGoogleMapsUrlsByScrolling(browser, searchQuery, socket, targetCount) {
-    socket.emit('log', '   -> Launching browser to search and scroll for results...');
+async function collectGoogleMapsUrlsContinuously(browser, searchQuery, socket, targetCount, processedUrlSet) {
+    const newlyDiscoveredUrls = [];
+    const resultsContainerSelector = 'div[role="main"]'; // Use a more generic and stable selector
     let page;
+
     try {
-        const urlToScrape = `https://www.google.com/maps/search/${encodeURIComponent(searchQuery)}`;
         page = await browser.newPage();
         if (useProxy) { await page.authenticate({ username: BRIGHTDATA_USERNAME, password: BRIGHTDATA_PASSWORD }); }
+
+        await page.goto('https://www.google.com/maps', { waitUntil: 'domcontentloaded', timeout: 60000 });
         
-        await page.goto(urlToScrape, { waitUntil: 'domcontentloaded', timeout: 120000 });
+        try { // Handle Cookie Consent
+            const acceptButtonSelector = 'form[action^="https://consent.google.com"] button';
+            await page.waitForSelector(acceptButtonSelector, { timeout: 15000 });
+            await page.click(acceptButtonSelector);
+            socket.emit('log', '   -> Accepted Google consent dialog.');
+        } catch (e) { 
+            socket.emit('log', '   -> No Google consent dialog found, proceeding.');
+        }
 
-        // This is the selector for the scrollable results panel on the left.
-        const scrollableListSelector = 'div[role="feed"]';
-        await page.waitForSelector(scrollableListSelector, { timeout: 30000 });
-        socket.emit('log', '   -> Results panel loaded. Starting scroll process.');
+        await page.type('#searchboxinput', searchQuery);
+        await page.click('#searchbox-searchbutton');
 
-        const urls = new Set();
-        let lastUrlCount = 0;
-        let noChangeCount = 0;
-        const MAX_NO_CHANGE = 3; // Stop after 3 scrolls with no new results
+        try { // Wait for results to load after search
+            await page.waitForSelector(resultsContainerSelector, { timeout: 45000 });
+            socket.emit('log', `   -> Initial search results loaded.`);
+        } catch (error) {
+            socket.emit('log', `Error: Google Maps results not found after search. This can happen with very specific or no-result queries.`, 'error');
+            await page.screenshot({ path: 'error_no_results.png' });
+            return [];
+        }
 
-        while (urls.size < targetCount) {
-            const newUrls = await page.$$eval('a[href*="/maps/place/"]', links => links.map(a => a.href));
-            newUrls.forEach(url => urls.add(url));
+        let consecutiveNoProgressAttempts = 0;
+        const MAX_NO_PROGRESS = 5;
 
-            if (urls.size === lastUrlCount) {
-                noChangeCount++;
+        while (processedUrlSet.size < targetCount && consecutiveNoProgressAttempts < MAX_NO_PROGRESS) {
+            const previousSize = processedUrlSet.size;
+
+            // This selector finds all business links inside the main area
+            const visibleUrls = await page.$$eval('a[href*="/maps/place/"]', links => links.map(link => link.href));
+            visibleUrls.forEach(url => {
+                if (!processedUrlSet.has(url)) {
+                    processedUrlSet.add(url);
+                    newlyDiscoveredUrls.push(url);
+                }
+            });
+
+            if (processedUrlSet.size > previousSize) {
+                consecutiveNoProgressAttempts = 0;
+                socket.emit('log', `   -> Scrolled and found new listings. Total unique discovered: ${processedUrlSet.size}`);
             } else {
-                lastUrlCount = urls.size;
-                noChangeCount = 0;
-                socket.emit('log', `   -> Scrolled and found ${urls.size} unique listings so far...`);
+                consecutiveNoProgressAttempts++;
+                socket.emit('log', `   -> No new URLs found on this scroll. Attempt ${consecutiveNoProgressAttempts}/${MAX_NO_PROGRESS}.`);
             }
+            
+            if (processedUrlSet.size >= targetCount) break;
+            
+            // This is a more robust way to scroll the correct panel
+            const scrollTargetSelector = 'div[role="feed"]';
+            const scrollableElement = await page.$(scrollTargetSelector);
 
-            if (noChangeCount >= MAX_NO_CHANGE) {
-                socket.emit('log', '   -> No new results found after multiple scrolls. Assuming end of list.');
+            if (scrollableElement) {
+                 await page.evaluate(el => { el.scrollTop = el.scrollHeight; }, scrollableElement);
+                 await new Promise(r => setTimeout(r, 2000)); // Wait for content to load
+            } else {
+                socket.emit('log', '   -> Scrollable feed element not found, assuming single page of results.');
                 break;
             }
-
-            // Scroll to the bottom of the feed
-            await page.evaluate((selector) => {
-                const element = document.querySelector(selector);
-                if (element) element.scrollTop = element.scrollHeight;
-            }, scrollableListSelector);
-
-            // Wait for new content to potentially load
-            await new Promise(resolve => setTimeout(resolve, 2000));
         }
-        
-        // Final check for the "end of results" message
-        const isEnd = await page.evaluate(() => document.body.innerText.includes("You've reached the end of the list."));
-        if (isEnd) socket.emit('log', '   -> Confirmed end of results from page text.');
 
-        return Array.from(urls);
+        if(consecutiveNoProgressAttempts >= MAX_NO_PROGRESS) {
+            socket.emit('log', `   -> Max attempts without finding new URLs reached. Ending scroll.`);
+        }
+
+        return newlyDiscoveredUrls; 
 
     } catch (error) {
         console.error('URL Collection via scrolling failed:', error);
         socket.emit('log', `CRITICAL ERROR: Failed to scroll and collect URLs. Details: ${error.message.split('\n')[0]}`, 'error');
-        // Let's take a screenshot for debugging if something goes wrong
         if (page) await page.screenshot({ path: 'error_screenshot.png' });
         return [];
     } finally {
         if (page) await page.close();
     }
 }
-// ===================================================================================
-// == END OF DEFINITIVE SOLUTION                                                    ==
-// ===================================================================================
+
 
 async function scrapeGoogleMapsDetails(page, url, socket, country) {
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 90000 });
-    await page.waitForSelector('h1', {timeout: 90000});
+    await page.goto(url, { waitUntil: 'networkidle2', timeout: 90000 });
+    await page.waitForSelector('h1', {timeout: 60000});
     
     return page.evaluate((countryCode) => {
         const cleanText = (text) => text?.replace(/^[^a-zA-Z0-9\s.,'#\-+/&_]+/u, '').replace(/\p{Z}/gu, ' ').replace(/[\u0000-\u001F\u007F-\u009F\uFEFF\n\r]/g, '').replace(/\s+/g, ' ').trim() || '';
@@ -258,7 +277,7 @@ async function scrapeGoogleMapsDetails(page, url, socket, country) {
 async function scrapeWebsiteForGoldData(page, websiteUrl, socket) {
     const data = { Email: '', InstagramURL: '', FacebookURL: '', OwnerName: '' };
     try {
-        await page.goto(websiteUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+        await page.goto(websiteUrl, { waitUntil: 'networkidle2', timeout: 30000 });
         const ownerTitleKeywords = ['owner', 'founder', 'director', 'principal', 'proprietor', 'ceo'];
         const pageText = await page.evaluate(() => document.body.innerText);
         const links = await page.$$eval('a', as => as.map(a => a.href));
@@ -293,5 +312,5 @@ async function scrapeWebsiteForGoldData(page, websiteUrl, socket) {
 
 server.listen(PORT, () => {
     console.log(`Scraping server running on http://localhost:${PORT}`);
-    //test58
+    //test59
 });
