@@ -107,7 +107,7 @@ io.on('connection', (socket) => {
                         if (useProxy) {
                             await detailPage.authenticate({ username: BRIGHTDATA_USERNAME, password: BRIGHTDATA_PASSWORD });
                         }
-                        await detailPage.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36');
+                        await detailPage.setUserAgent('Mozilla.5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36');
                         await detailPage.setRequestInterception(true);
                         detailPage.on('request', (req) => { if (['image', 'stylesheet', 'font', 'media'].includes(req.resourceType())) req.abort(); else req.continue(); });
 
@@ -155,7 +155,7 @@ io.on('connection', (socket) => {
 });
 
 // ===================================================================================
-// == THIS FUNCTION IS NOW CORRECTED FOR THE WEB UNLOCKER API                       ==
+// == THIS IS THE FINAL VERSION THAT MATCHES THE DOCUMENTATION YOU PROVIDED         ==
 // ===================================================================================
 async function collectGoogleMapsUrlsContinuously(searchQuery, socket) {
     socket.emit('log', '   -> Using Bright Data Web Unlocker API to collect URLs...');
@@ -163,10 +163,11 @@ async function collectGoogleMapsUrlsContinuously(searchQuery, socket) {
         const urlToScrape = `https://www.google.com/maps/search/${encodeURIComponent(searchQuery)}`;
 
         const response = await axios.post(
-            'https://api.brightdata.com/request', // <-- CORRECTED ENDPOINT
+            'https://api.brightdata.com/request',
             {
                 url: urlToScrape,
-                zone: 'web_unlocker1' // <-- CORRECTED: ADDED ZONE NAME
+                zone: 'web_unlocker1',
+                format: 'raw' // <-- THE MISSING PIECE OF THE PUZZLE
             },
             {
                 headers: {
@@ -260,5 +261,5 @@ async function scrapeWebsiteForGoldData(page, websiteUrl, socket) {
 
 server.listen(PORT, () => {
     console.log(`Scraping server running on http://localhost:${PORT}`);
-    //test47
+    //test48
 });
