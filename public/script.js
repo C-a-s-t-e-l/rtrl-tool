@@ -1,7 +1,5 @@
-// --- IMPORTANT: MAKE SURE THIS IS YOUR CURRENT, ACTIVE NGROK URL ---
-const BACKEND_URL = "https://a6991accaff7.ngrok-free.app"; 
 
-// This function will be called AFTER the CDN script has loaded successfully.
+const BACKEND_URL = "https://a6991accaff7.ngrok-free.app"; 
 function initializeMainApp() {
   async function loadGoogleMaps() {
     try {
@@ -27,7 +25,6 @@ function initializeMainApp() {
     }
   }
 
-  // The 'io' function now exists globally because the CDN script loaded.
   const socket = io(BACKEND_URL, {
     extraHeaders: {
         "ngrok-skip-browser-warning": "true"
@@ -308,16 +305,14 @@ function initializeMainApp() {
     const filterText = elements.filterInput.value.toLowerCase();
 
     let filteredData;
-    if (filterText) {
-      filteredData = allCollectedData.filter((item) => {
-        return (
-          item.BusinessName?.toLowerCase().includes(filterText) ||
-          item.Category?.toLowerCase().includes(filterText) ||
-          item.StreetAddress?.toLowerCase().includes(filterText) ||
-          item.SuburbArea?.toLowerCase().includes(filterText)
-        );
-      });
-    } else {
+if (filterText) {
+    filteredData = allCollectedData.filter(item => {
+        return (item.BusinessName?.toLowerCase().startsWith(filterText) ||
+                item.Category?.toLowerCase().startsWith(filterText) ||
+                item.StreetAddress?.toLowerCase().startsWith(filterText) ||
+                item.SuburbArea?.toLowerCase().startsWith(filterText));
+    });
+} else {
       filteredData = [...allCollectedData];
     }
 
@@ -791,16 +786,12 @@ function initializeMainApp() {
   initializeApp();
 }
 
-// --- THIS IS THE NEW, ROBUST WAY TO LOAD THE SCRIPT ---
-// 1. Create a script tag for the CDN version of Socket.IO
 const socketIoScript = document.createElement("script");
 socketIoScript.src =
   "https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js";
 
-// 2. When it successfully loads, THEN initialize our main application.
 socketIoScript.onload = initializeMainApp;
 
-// 3. If it fails (it won't, but this is good practice), show an error.
 socketIoScript.onerror = () => {
   console.error("Failed to load Socket.IO script from CDN.");
   const logEl = document.getElementById("log");
@@ -810,5 +801,4 @@ socketIoScript.onerror = () => {
   }
 };
 
-// 4. Add the script to the page to start the loading process.
 document.head.appendChild(socketIoScript);
