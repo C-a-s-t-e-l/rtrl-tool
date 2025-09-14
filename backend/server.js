@@ -6,6 +6,7 @@ const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
 const fs = require('fs');
+const axios = require('axios');
 require('dotenv').config();
 
 puppeteer.use(StealthPlugin());
@@ -23,12 +24,6 @@ const PORT = process.env.PORT || 3000;
 const GOOGLE_MAPS_API_KEY = process.env.MAPS_API_KEY;
 const PLACEHOLDER_KEY = '%%GOOGLE_MAPS_API_KEY%%';
 
-const BRIGHTDATA_HOST = process.env.BRIGHTDATA_HOST;
-const BRIGHTDATA_PORT = process.env.BRIGHTDATA_PORT;
-const BRIGHTDATA_USERNAME = process.env.BRIGHTDATA_USERNAME;
-const BRIGHTDATA_PASSWORD = process.env.BRIGHTDATA_PASSWORD;
-const useProxy = BRIGHTDATA_HOST && BRIGHTDATA_USERNAME && BRIGHTDATA_PASSWORD;
-
 if (!GOOGLE_MAPS_API_KEY) {
     console.error("ERROR: MAPS_API_KEY not found in .env file!");
     process.exit(1);
@@ -38,7 +33,7 @@ app.use(cors());
 app.use(express.json());
 app.get('/api/config', (req, res) => res.json({ googleMapsApiKey: GOOGLE_MAPS_API_KEY }));
 
-const containerPublicPath = path.join(__dirname, 'public');
+const containerPublicPath = path.join(__dirname, '..', 'public');
 app.use(express.static(containerPublicPath, { index: false }));
 app.get(/(.*)/, (req, res) => {
     const indexPath = path.join(containerPublicPath, 'index.html');
@@ -64,72 +59,75 @@ io.on('connection', (socket) => {
 
         if (!areaQuery || !country) return socket.emit('scrape_error', { error: `Missing location or country data.` });
         
-        const searchQuery = isIndividualSearch ? `${businessName}, ${areaQuery}, ${country}` : `${category} in ${areaQuery}, ${country}`;
-        socket.emit('log', `[Server] Starting search for "${searchQuery}"`);
+        const baseSearchQuery = isIndividualSearch ? `${businessName}, ${areaQuery}, ${country}` : `${category} in ${areaQuery}, ${country}`;
+        socket.emit('log', `[Server] Starting search for "${baseSearchQuery}"`);
         
         let browser;
         try {
             const puppeteerArgs = [
                 '--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage',
                 '--disable-gpu', '--no-zygote', '--lang=en-US,en', '--ignore-certificate-errors',
-                '--window-size=1920,1080'
+                '--window-size=1920,1080', '--disable-blink-features=AutomationControlled'
             ];
             
-            if (useProxy) {
-                const proxyServer = `http://${BRIGHTDATA_HOST}:${BRIGHTDATA_PORT}`;
-                puppeteerArgs.push(`--proxy-server=${proxyServer}`);
-                socket.emit('log', `[Server] Using Bright Data proxy server for detail scraping.`);
-            }
-
             browser = await puppeteer.launch({ 
                 headless: true, 
                 args: puppeteerArgs, 
                 protocolTimeout: 120000,
-                executablePath: '/usr/bin/google-chrome'
             });
             
             const allProcessedBusinesses = [];
             const processedUrlSet = new Set();
-            let totalRawUrlsAttemptedDetails = 0;
-
-            socket.emit('log', `[Server] Starting URL collection phase by simulating user behavior...`);
-            const newlyDiscoveredUrls = await collectGoogleMapsUrlsContinuously(browser, searchQuery, socket, targetCount, processedUrlSet);
             
-            socket.emit('log', `-> URL Collection complete. Discovered ${processedUrlSet.size} unique listings. Now processing...`);
+            const searchQueries = await getSearchQueriesForLocation(baseSearchQuery, areaQuery, country, socket);
             
-            if (processedUrlSet.size === 0) {
-                 socket.emit('log', 'No business URLs were found. This could be a "No results found" page on Google, or a change in page structure.', 'error');
+            // --- FIX #2: REMOVED THE PREMATURE BREAK CONDITION ---
+            // Let it search all grid areas to build a comprehensive list first.
+            for (const [index, query] of searchQueries.entries()) {
+                socket.emit('log', `\n--- Scraping search area ${index + 1} of ${searchQueries.length}: "${query}" ---`);
+                await collectGoogleMapsUrlsContinuously(browser, query, socket, targetCount, processedUrlSet);
             }
 
+            socket.emit('log', `\n-> All search areas scraped. Discovered ${processedUrlSet.size} total unique listings. Now processing details...`);
+            
             const CONCURRENCY = 4;
             const urlList = Array.from(processedUrlSet);
+            let totalRawUrlsAttemptedDetails = 0;
 
             for (let i = 0; i < urlList.length; i += CONCURRENCY) {
                 if (allProcessedBusinesses.length >= targetCount) break;
                 const batch = urlList.slice(i, i + CONCURRENCY);
+
                 const promises = batch.map(async (urlToProcess) => {
                     if (allProcessedBusinesses.length >= targetCount) return null;
-                    let detailPage;
-                    try {
-                        detailPage = await browser.newPage();
-                        if (useProxy) { await detailPage.authenticate({ username: BRIGHTDATA_USERNAME, password: BRIGHTDATA_PASSWORD }); }
-                        await detailPage.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36');
-                        await detailPage.setRequestInterception(true);
-                        detailPage.on('request', (req) => { if (['image', 'stylesheet', 'font', 'media'].includes(req.resourceType())) req.abort(); else req.continue(); });
-
-                        let googleData = await scrapeGoogleMapsDetails(detailPage, urlToProcess, socket, country);
-                        if (!googleData || !googleData.BusinessName) return null;
-                        let websiteData = {};
-                        if (googleData.Website) { websiteData = await scrapeWebsiteForGoldData(detailPage, googleData.Website, socket); }
-                        const fullBusinessData = { ...googleData, ...websiteData };
-                        fullBusinessData.Category = isIndividualSearch ? (googleData.ScrapedCategory || 'N/A') : category;
-                        return fullBusinessData;
-                    } catch (detailError) {
-                        socket.emit('log', `Error processing URL (${urlToProcess}): ${detailError.message.split('\n')[0]}. Skipping.`, 'error');
+                    
+                    return promiseWithTimeout(
+                        (async () => {
+                            let detailPage;
+                            try {
+                                detailPage = await browser.newPage();
+                                await detailPage.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36');
+                                await detailPage.setRequestInterception(true);
+                                detailPage.on('request', (req) => { if (['image', 'stylesheet', 'font', 'media'].includes(req.resourceType())) req.abort(); else req.continue(); });
+                                
+                                let googleData = await scrapeGoogleMapsDetails(detailPage, urlToProcess, socket, country);
+                                if (!googleData || !googleData.BusinessName) return null;
+                                
+                                let websiteData = {};
+                                if (googleData.Website) { websiteData = await scrapeWebsiteForGoldData(detailPage, googleData.Website, socket); }
+                                
+                                const fullBusinessData = { ...googleData, ...websiteData };
+                                fullBusinessData.Category = isIndividualSearch ? (googleData.ScrapedCategory || 'N/A') : category;
+                                return fullBusinessData;
+                            } finally {
+                                if (detailPage) await detailPage.close();
+                            }
+                        })(), 
+                        120000
+                    ).catch(err => {
+                        socket.emit('log', `A task for ${urlToProcess} failed or timed out: ${err.message}. Skipping.`, 'error');
                         return null;
-                    } finally {
-                        if (detailPage) await detailPage.close();
-                    }
+                    });
                 });
 
                 const results = await Promise.all(promises);
@@ -137,14 +135,18 @@ io.on('connection', (socket) => {
                     totalRawUrlsAttemptedDetails++;
                     if (businessData && allProcessedBusinesses.length < targetCount) {
                         allProcessedBusinesses.push(businessData);
-                        socket.emit('log', `-> ADDED: ${businessData.BusinessName}.`);
+                        const status = isSearchAll 
+                            ? `(Total Added: ${allProcessedBusinesses.length})` 
+                            : `(${allProcessedBusinesses.length}/${finalCount})`;
+                        socket.emit('log', `-> ADDED: ${businessData.BusinessName}. ${status}`);
+                        socket.emit('business_found', businessData);
                     }
                     socket.emit('progress_update', { processed: totalRawUrlsAttemptedDetails, discovered: processedUrlSet.size, added: allProcessedBusinesses.length, target: finalCount });
                 });
             }
 
             socket.emit('log', `Scraping completed. Found and processed a total of ${allProcessedBusinesses.length} businesses.`);
-            socket.emit('scrape_complete', allProcessedBusinesses);
+            socket.emit('scrape_complete');
 
         } catch (error) {
             console.error('A critical error occurred:', error);
@@ -157,103 +159,137 @@ io.on('connection', (socket) => {
     socket.on('disconnect', () => console.log(`Client disconnected: ${socket.id}`));
 });
 
+async function getSearchQueriesForLocation(searchQuery, areaQuery, country, socket) {
+    socket.emit('log', `   -> Geocoding "${areaQuery}, ${country}" to determine search area...`);
+    try {
+        const geocodeUrl = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(`${areaQuery}, ${country}`)}&key=${GOOGLE_MAPS_API_KEY}`;
+        const response = await axios.get(geocodeUrl);
+        
+        if (response.data.status !== 'OK') {
+            socket.emit('log', `   -> Geocoding failed with status: ${response.data.status}. Using a single search.`, 'error');
+            if (response.data.error_message) {
+                socket.emit('log', `   -> Google's reason: ${response.data.error_message}`, 'error');
+            }
+            return [searchQuery];
+        }
 
-// ===================================================================================
-// == THIS IS THE SUPERIOR, WORKING LOGIC FROM YOUR LOCAL FILE, ADAPTED FOR DEPLOYMENT ==
-// ===================================================================================
+        const { results } = response.data;
+        const location = results[0];
+        const { northeast, southwest } = location.geometry.viewport;
+        const lat_dist = northeast.lat - southwest.lat;
+        const lng_dist = northeast.lng - southwest.lng;
+        const diagonal_dist = Math.sqrt(lat_dist*lat_dist + lng_dist*lng_dist);
+
+        if (diagonal_dist < 0.05) {
+            socket.emit('log', `   -> Location is specific. Using a single search for "${areaQuery}".`);
+            return [searchQuery];
+        }
+
+        const GRID_SIZE = 5;
+        const searchQueries = [];
+        const categoryPart = searchQuery.split(' in ')[0];
+        socket.emit('log', `   -> Location is large. Generating a ${GRID_SIZE}x${GRID_SIZE} search grid.`);
+
+        for (let i = 0; i < GRID_SIZE; i++) {
+            for (let j = 0; j < GRID_SIZE; j++) {
+                const point_lat = southwest.lat + lat_dist * (i / (GRID_SIZE - 1));
+                const point_lng = southwest.lng + lng_dist * (j / (GRID_SIZE - 1));
+                const newQuery = `${categoryPart} near ${point_lat.toFixed(6)},${point_lng.toFixed(6)}`;
+                searchQueries.push(newQuery);
+            }
+        }
+        
+        socket.emit('log', `   -> Generated ${searchQueries.length} specific search queries to cover the area.`);
+        return searchQueries;
+
+    } catch (error) {
+        socket.emit('log', `   -> Geocoding API call itself failed: ${error.message}. Defaulting to single search.`, 'error');
+        return [searchQuery];
+    }
+}
+
 async function collectGoogleMapsUrlsContinuously(browser, searchQuery, socket, targetCount, processedUrlSet) {
-    const newlyDiscoveredUrls = [];
-    const resultsContainerSelector = 'div[role="main"]'; // Use a more generic and stable selector
     let page;
-
     try {
         page = await browser.newPage();
-        if (useProxy) { await page.authenticate({ username: BRIGHTDATA_USERNAME, password: BRIGHTDATA_PASSWORD }); }
-
         await page.goto('https://www.google.com/maps', { waitUntil: 'domcontentloaded', timeout: 60000 });
         
-        try { // Handle Cookie Consent
+        try {
             const acceptButtonSelector = 'form[action^="https://consent.google.com"] button';
-            await page.waitForSelector(acceptButtonSelector, { timeout: 15000 });
+            await page.waitForSelector(acceptButtonSelector, { timeout: 10000 });
             await page.click(acceptButtonSelector);
             socket.emit('log', '   -> Accepted Google consent dialog.');
         } catch (e) { 
             socket.emit('log', '   -> No Google consent dialog found, proceeding.');
         }
-
-        await page.type('#searchboxinput', searchQuery);
-        await page.click('#searchbox-searchbutton');
-
-        try { // Wait for results to load after search
-            await page.waitForSelector(resultsContainerSelector, { timeout: 45000 });
-            socket.emit('log', `   -> Initial search results loaded.`);
+        
+        try {
+            socket.emit('log', '   -> Trying hardened page selectors...');
+            await page.waitForSelector('input[aria-label="Search Google Maps"]', { timeout: 15000 });
+            await page.type('input[aria-label="Search Google Maps"]', searchQuery);
+            await page.click('button[aria-label="Search"]');
+            socket.emit('log', '   -> Hardened page selectors successful.');
         } catch (error) {
-            socket.emit('log', `Error: Google Maps results not found after search. This can happen with very specific or no-result queries.`, 'error');
-            await page.screenshot({ path: 'error_no_results.png' });
-            return [];
+            socket.emit('log', '   -> Hardened selectors failed. Trying friendly page selectors...');
+            await page.waitForSelector('#searchboxinput', { timeout: 15000 });
+            await page.type('#searchboxinput', searchQuery);
+            await page.click('#searchbox-searchbutton');
+            socket.emit('log', '   -> Friendly page selectors successful.');
         }
+
+        const feedSelector = 'div[role="feed"]';
+        await page.waitForSelector(feedSelector, { timeout: 45000 });
+        socket.emit('log', `   -> Initial search results loaded.`);
 
         let consecutiveNoProgressAttempts = 0;
         const MAX_NO_PROGRESS = 5;
+        const initialSize = processedUrlSet.size;
 
         while (processedUrlSet.size < targetCount && consecutiveNoProgressAttempts < MAX_NO_PROGRESS) {
             const previousSize = processedUrlSet.size;
-
-            // This selector finds all business links inside the main area
             const visibleUrls = await page.$$eval('a[href*="/maps/place/"]', links => links.map(link => link.href));
-            visibleUrls.forEach(url => {
-                if (!processedUrlSet.has(url)) {
-                    processedUrlSet.add(url);
-                    newlyDiscoveredUrls.push(url);
-                }
-            });
+            visibleUrls.forEach(url => processedUrlSet.add(url));
 
             if (processedUrlSet.size > previousSize) {
                 consecutiveNoProgressAttempts = 0;
-                socket.emit('log', `   -> Scrolled and found new listings. Total unique discovered: ${processedUrlSet.size}`);
+                socket.emit('log', `   -> Scrolled. Total unique discovered: ${processedUrlSet.size}`);
             } else {
                 consecutiveNoProgressAttempts++;
-                socket.emit('log', `   -> No new URLs found on this scroll. Attempt ${consecutiveNoProgressAttempts}/${MAX_NO_PROGRESS}.`);
+                socket.emit('log', `   -> No new URLs found. Attempt ${consecutiveNoProgressAttempts}/${MAX_NO_PROGRESS}.`);
             }
             
-            if (processedUrlSet.size >= targetCount) break;
+            // This check is now inside the detail processing loop, but we keep it here for URL collection
+            if (processedUrlSet.size >= targetCount && targetCount !== Infinity) break;
             
-            // This is a more robust way to scroll the correct panel
-            const scrollTargetSelector = 'div[role="feed"]';
-            const scrollableElement = await page.$(scrollTargetSelector);
-
-            if (scrollableElement) {
-                 await page.evaluate(el => { el.scrollTop = el.scrollHeight; }, scrollableElement);
-                 await new Promise(r => setTimeout(r, 2000)); // Wait for content to load
-            } else {
-                socket.emit('log', '   -> Scrollable feed element not found, assuming single page of results.');
-                break;
-            }
+            await page.evaluate((selector) => {
+                const feed = document.querySelector(selector);
+                if (feed) feed.scrollTop = feed.scrollHeight;
+            }, feedSelector);
+            await new Promise(r => setTimeout(r, 2000));
         }
-
-        if(consecutiveNoProgressAttempts >= MAX_NO_PROGRESS) {
-            socket.emit('log', `   -> Max attempts without finding new URLs reached. Ending scroll.`);
-        }
-
-        return newlyDiscoveredUrls; 
+        socket.emit('log', `   -> Finished this area. Found ${processedUrlSet.size - initialSize} new listings.`);
 
     } catch (error) {
         console.error('URL Collection via scrolling failed:', error);
-        socket.emit('log', `CRITICAL ERROR: Failed to scroll and collect URLs. Details: ${error.message.split('\n')[0]}`, 'error');
-        if (page) await page.screenshot({ path: 'error_screenshot.png' });
-        return [];
+        socket.emit('log', `CRITICAL ERROR: URL Collection failed. Details: ${error.message.split('\n')[0]}`, 'error');
+        if (page) await page.screenshot({ path: `error_${Date.now()}.png` });
     } finally {
         if (page) await page.close();
     }
 }
 
-
 async function scrapeGoogleMapsDetails(page, url, socket, country) {
-    await page.goto(url, { waitUntil: 'networkidle2', timeout: 90000 });
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 90000 });
     await page.waitForSelector('h1', {timeout: 60000});
     
     return page.evaluate((countryCode) => {
-        const cleanText = (text) => text?.replace(/^[^a-zA-Z0-9\s.,'#\-+/&_]+/u, '').replace(/\p{Z}/gu, ' ').replace(/[\u0000-\u001F\u007F-\u009F\uFEFF\n\r]/g, '').replace(/\s+/g, ' ').trim() || '';
+        // --- FIX #1: A SAFER, LESS AGGRESSIVE cleanText FUNCTION ---
+        const cleanText = (text) => {
+            if (!text) return '';
+            // Only remove non-printable characters and standardize whitespace.
+            return text.replace(/[\u0000-\u001F\u007F-\u009F\uFEFF\n\r]/g, '').replace(/\s+/g, ' ').trim();
+        };
+
         const cleanPhoneNumber = (num, country) => {
             if (!num) return '';
             let cleaned = String(num).trim().replace(/\D/g, '');
@@ -277,7 +313,7 @@ async function scrapeGoogleMapsDetails(page, url, socket, country) {
 async function scrapeWebsiteForGoldData(page, websiteUrl, socket) {
     const data = { Email: '', InstagramURL: '', FacebookURL: '', OwnerName: '' };
     try {
-        await page.goto(websiteUrl, { waitUntil: 'networkidle2', timeout: 30000 });
+        await page.goto(websiteUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
         const ownerTitleKeywords = ['owner', 'founder', 'director', 'principal', 'proprietor', 'ceo'];
         const pageText = await page.evaluate(() => document.body.innerText);
         const links = await page.$$eval('a', as => as.map(a => a.href));
@@ -296,7 +332,7 @@ async function scrapeWebsiteForGoldData(page, websiteUrl, socket) {
                 if (line.toLowerCase().includes(title)) {
                     let potentialName = line.split(new RegExp(title, 'i'))[0].trim().replace(/,$/, '');
                     const words = potentialName.split(' ').filter(Boolean);
-                    if (words.length >= 2 && words.length <= 4 && potentialName.length > 3) {
+                    if (words.length >= 2 && words.length <= 4 && words.length > 0) {
                         data.OwnerName = words.map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
                         break;
                     }
@@ -310,7 +346,16 @@ async function scrapeWebsiteForGoldData(page, websiteUrl, socket) {
     return data;
 }
 
+function promiseWithTimeout(promise, ms) {
+    let timeout = new Promise((_, reject) => {
+        let id = setTimeout(() => {
+            clearTimeout(id);
+            reject(new Error(`Promise timed out after ${ms} ms`));
+        }, ms);
+    });
+    return Promise.race([promise, timeout]);
+}
+
 server.listen(PORT, () => {
     console.log(`Scraping server running on http://localhost:${PORT}`);
-    //test59
 });
