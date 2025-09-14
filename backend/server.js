@@ -32,11 +32,11 @@ if (!GOOGLE_MAPS_API_KEY) {
 app.use(cors());
 app.use(express.json());
 
-// --- THIS IS THE CRITICAL FIX ---
-// Define the specific API route FIRST.
+// --- THIS IS THE CRITICAL FIX: ROUTE ORDER ---
+// 1. Define specific API routes FIRST.
 app.get('/api/config', (req, res) => res.json({ googleMapsApiKey: GOOGLE_MAPS_API_KEY }));
 
-// THEN, define the static file serving and the catch-all route.
+// 2. THEN, serve the static files and the catch-all HTML route.
 const containerPublicPath = path.join(__dirname, '..', 'public');
 app.use(express.static(containerPublicPath, { index: false }));
 app.get(/(.*)/, (req, res) => {
