@@ -1,13 +1,11 @@
-# Use the stable 'bullseye' version of Node.js 18
-FROM node:18-bullseye
+# Use the rock-solid Long-Term Support version of Node 16 on the lightweight "slim" base
+FROM node:16-slim
 
-# Set the working directory in the container
+# Set the working directory
 WORKDIR /usr/src/app
 
-#
-# --- THIS IS THE CORRECTED, ROBUST INSTALLATION BLOCK ---
-#
-# Install all known dependencies for headless Chrome on Debian Bullseye
+# --- SIMPLIFIED AND PROVEN INSTALLATION BLOCK ---
+# Install the minimal set of dependencies required for the latest Puppeteer
 RUN apt-get update \
     && apt-get install -y wget gnupg \
     && wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | gpg --dearmor > /etc/apt/trusted.gpg.d/google-archive.gpg \
@@ -15,33 +13,24 @@ RUN apt-get update \
     && apt-get update \
     && apt-get install -y \
       google-chrome-stable \
-      fonts-ipafont-gothic \
-      fonts-wqy-zenhei \
-      fonts-thai-tlwg \
-      fonts-kacst \
-      fonts-freefont-ttf \
-      libxss1 \
       --no-install-recommends \
-    # Clean up apt caches to reduce image size
     && rm -rf /var/lib/apt/lists/*
-#
-# --- END OF CORRECTED BLOCK ---
-#
+# --- END OF INSTALLATION BLOCK ---
 
-# Copy package files from the backend directory
+# Copy package files (including the new axios)
 COPY backend/package*.json ./
 
-# Install app dependencies, including axios
+# Install app dependencies
 RUN npm install
 
-# Copy the entire backend directory's contents into the container
+# Copy the rest of the backend code
 COPY backend/. .
 
-# Copy the public directory for serving the frontend
+# Copy the frontend code
 COPY public ./public
 
-# Make port 3000 available
+# Expose the application port
 EXPOSE 3000
 
-# Define the command to run the app
+# Run the application
 CMD [ "npm", "start" ]
