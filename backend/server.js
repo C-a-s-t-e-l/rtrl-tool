@@ -107,7 +107,7 @@ io.on('connection', (socket) => {
                         if (useProxy) {
                             await detailPage.authenticate({ username: BRIGHTDATA_USERNAME, password: BRIGHTDATA_PASSWORD });
                         }
-                        await detailPage.setUserAgent('Mozilla.5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36');
+                        await detailPage.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36');
                         await detailPage.setRequestInterception(true);
                         detailPage.on('request', (req) => { if (['image', 'stylesheet', 'font', 'media'].includes(req.resourceType())) req.abort(); else req.continue(); });
 
@@ -155,7 +155,7 @@ io.on('connection', (socket) => {
 });
 
 // ===================================================================================
-// == THIS IS THE FINAL VERSION THAT MATCHES THE DOCUMENTATION YOU PROVIDED         ==
+// == THIS IS THE FINAL VERSION WITH THE SMARTER PARSER                             ==
 // ===================================================================================
 async function collectGoogleMapsUrlsContinuously(searchQuery, socket) {
     socket.emit('log', '   -> Using Bright Data Web Unlocker API to collect URLs...');
@@ -164,11 +164,7 @@ async function collectGoogleMapsUrlsContinuously(searchQuery, socket) {
 
         const response = await axios.post(
             'https://api.brightdata.com/request',
-            {
-                url: urlToScrape,
-                zone: 'web_unlocker1',
-                format: 'raw' // <-- THE MISSING PIECE OF THE PUZZLE
-            },
+            { url: urlToScrape, zone: 'web_unlocker1', format: 'raw' },
             {
                 headers: {
                     'Authorization': `Bearer ${BRIGHTDATA_API_TOKEN}`,
@@ -179,8 +175,24 @@ async function collectGoogleMapsUrlsContinuously(searchQuery, socket) {
         );
 
         const htmlContent = response.data;
-        const googleMapsUrlPattern = /https:\/\/www.google.com\/maps\/place\/[^"]+/g;
-        const foundUrls = htmlContent.match(googleMapsUrlPattern) || [];
+        // --- ADDED FOR DEBUGGING ---
+        // This will save the exact HTML file we get back, so we can see what's wrong if it fails again.
+        fs.writeFileSync('api_response.html', htmlContent);
+        socket.emit('log', '   -> Saved API response to api_response.html for debugging.');
+        // --- END OF DEBUGGING ADDITION ---
+
+        // This NEW, smarter regex looks for both full URLs and the simpler relative URLs.
+        const googleMapsUrlPattern = /(https:\/\/www\.google\.com)?\/maps\/place\/[^\/\"']+/g;
+        let foundUrls = htmlContent.match(googleMapsUrlPattern) || [];
+        
+        // This makes sure all URLs are complete.
+        foundUrls = foundUrls.map(url => {
+            if (url.startsWith('/maps')) {
+                return `https://www.google.com${url}`;
+            }
+            return url;
+        });
+
         const uniqueUrls = [...new Set(foundUrls)]; 
         
         socket.emit('log', `   -> Bright Data API returned ${uniqueUrls.length} unique URLs.`);
@@ -194,12 +206,13 @@ async function collectGoogleMapsUrlsContinuously(searchQuery, socket) {
     }
 }
 // ===================================================================================
-// == END OF CORRECTED FUNCTION                                                     ==
+// == END OF FINAL FUNCTION                                                         ==
 // ===================================================================================
 
 async function scrapeGoogleMapsDetails(page, url, socket, country) {
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
-    await page.waitForSelector('h1', {timeout: 60000});
+    // Increased timeout for this specific page load as it can be slow
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 90000 });
+    await page.waitForSelector('h1', {timeout: 90000});
     
     return page.evaluate((countryCode) => {
         const cleanText = (text) => text?.replace(/^[^a-zA-Z0-9\s.,'#\-+/&_]+/u, '').replace(/\p{Z}/gu, ' ').replace(/[\u0000-\u001F\u007F-\u009F\uFEFF\n\r]/g, '').replace(/\s+/g, ' ').trim() || '';
@@ -261,5 +274,5 @@ async function scrapeWebsiteForGoldData(page, websiteUrl, socket) {
 
 server.listen(PORT, () => {
     console.log(`Scraping server running on http://localhost:${PORT}`);
-    //test48
+    //test49
 });
