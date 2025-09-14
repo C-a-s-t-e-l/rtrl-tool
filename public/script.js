@@ -1,5 +1,5 @@
 // --- IMPORTANT: MAKE SURE THIS IS YOUR CURRENT, ACTIVE NGROK URL ---
-const BACKEND_URL = 'https://2e51e6002e2d.ngrok-free.app'; // <--- PASTE YOUR NEW NGROK URL HERE
+const BACKEND_URL = 'https://a6991accaff7.ngrok-free.app '; // <--- PASTE YOUR NEW NGROK URL HERE
 
 // This function will be called AFTER the CDN script has loaded successfully.
 function initializeMainApp() {
@@ -319,4 +319,5 @@ socketIoScript.onerror = () => {
 
 // 4. Add the script to the page to start the loading process.
 document.head.appendChild(socketIoScript);
+
 
