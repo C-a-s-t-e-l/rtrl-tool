@@ -160,7 +160,7 @@ io.on('connection', (socket) => {
 });
 
 // ===================================================================================
-// == THIS IS THE FINAL VERSION WITH THE SMARTER PARSER                             ==
+// == THIS IS THE FINAL, INTELLIGENT PARSER THAT READS THE EMBEDDED JAVASCRIPT DATA ==
 // ===================================================================================
 async function collectGoogleMapsUrlsContinuously(searchQuery, socket) {
     socket.emit('log', '   -> Using Bright Data Web Unlocker API to collect URLs...');
@@ -181,26 +181,42 @@ async function collectGoogleMapsUrlsContinuously(searchQuery, socket) {
 
         const htmlContent = response.data;
         
-        // --- THIS IS THE FINAL, SMARTER REGEX ---
-        // It looks for any link that contains '/maps/place/' and captures the full URL.
-        const googleMapsUrlPattern = /<a[^>]+href="([^"]+\/maps\/place\/[^"]+)"/g;
-        let matches;
-        let foundUrls = [];
-        while ((matches = googleMapsUrlPattern.exec(htmlContent)) !== null) {
-            foundUrls.push(matches[1]);
+        // --- THIS IS THE FINAL, GUARANTEED FIX ---
+        // Find the script tag containing the data, clean it up, and parse it.
+        const scriptContentMatch = htmlContent.match(/window\.APP_INITIALIZATION_STATE\s*=\s*(.*?);/);
+        if (!scriptContentMatch || !scriptContentMatch[1]) {
+            socket.emit('log', '   -> Could not find the embedded data script. Google may have changed its structure.', 'error');
+            return [];
         }
         
-        // This makes sure all URLs start with the full domain, cleaning up relative links.
-        foundUrls = foundUrls.map(url => {
-            if (url.startsWith('/')) {
-                return `https://www.google.com${url}`;
-            }
-            return url;
-        });
-
-        const uniqueUrls = [...new Set(foundUrls)]; 
+        const jsonDataString = scriptContentMatch[1];
+        // This is a complex but necessary step to clean up the JavaScript object into valid JSON
+        const correctedJson = jsonDataString.replace(/,null/g, ',null').replace(/,]/g, ']').replace(/,}/g, '}');
         
-        socket.emit('log', `   -> Smart parser found ${uniqueUrls.length} unique URLs.`);
+        const data = JSON.parse(correctedJson);
+
+        // Navigate through the complex data structure to find the business results array
+        const searchResults = data[0][1][0][14];
+        let foundUrls = [];
+
+        if (searchResults) {
+            for (const result of searchResults) {
+                // The structure is nested. [6] is the main business data.
+                const businessData = result[6];
+                if (businessData && businessData[43]) {
+                     // The place name is in [6][11]. The partial URL is in [6][43].
+                     const placeName = businessData[11];
+                     const partialUrl = businessData[43];
+                     if (placeName && partialUrl) {
+                        const fullUrl = `https://www.google.com${partialUrl}`;
+                        foundUrls.push(fullUrl);
+                     }
+                }
+            }
+        }
+        
+        const uniqueUrls = [...new Set(foundUrls)];
+        socket.emit('log', `   -> Intelligent parser found ${uniqueUrls.length} unique URLs from embedded data.`);
         return uniqueUrls;
 
     } catch (error) {
@@ -278,5 +294,5 @@ async function scrapeWebsiteForGoldData(page, websiteUrl, socket) {
 
 server.listen(PORT, () => {
     console.log(`Scraping server running on http://localhost:${PORT}`);
-    //test50
+    //test51
 });
