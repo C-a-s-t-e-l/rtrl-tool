@@ -1,34 +1,46 @@
-# Use an official Node.js runtime as a parent image
+# Use the stable 'bullseye' version of Node.js 18
 FROM node:18-bullseye
 
 # Set the working directory in the container
 WORKDIR /usr/src/app
 
-# Install dependencies required for Puppeteer and Chrome
-# This block is for installing the Chrome browser inside the container
+#
+# --- THIS IS THE CORRECTED, ROBUST INSTALLATION BLOCK ---
+#
+# Install all known dependencies for headless Chrome on Debian Bullseye
 RUN apt-get update \
     && apt-get install -y wget gnupg \
-    && wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - \
+    && wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | gpg --dearmor > /etc/apt/trusted.gpg.d/google-archive.gpg \
     && sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list' \
     && apt-get update \
-    && apt-get install -y google-chrome-stable fonts-ipafont-gothic fonts-wqy-zenhei fonts-thai-tlwg fonts-kacst fonts-freefont-ttf libxss1 \
+    && apt-get install -y \
+      google-chrome-stable \
+      fonts-ipafont-gothic \
+      fonts-wqy-zenhei \
+      fonts-thai-tlwg \
+      fonts-kacst \
+      fonts-freefont-ttf \
+      libxss1 \
       --no-install-recommends \
+    # Clean up apt caches to reduce image size
     && rm -rf /var/lib/apt/lists/*
+#
+# --- END OF CORRECTED BLOCK ---
+#
 
-# CORRECTED: Copy package.json and package-lock.json from the 'backend' subfolder
-# The source path 'backend/' is relative to the build context (your project root)
+# Copy package files from the backend directory
 COPY backend/package*.json ./
 
-# Install app dependencies
+# Install app dependencies, including axios
 RUN npm install
 
-# CORRECTED: Copy the rest of the backend application source code
+# Copy the entire backend directory's contents into the container
 COPY backend/. .
 
-# CORRECTED: Copy the public directory so the server can serve the frontend
+# Copy the public directory for serving the frontend
 COPY public ./public
 
-# Make port 3000 available to the world outside this container
+# Make port 3000 available
 EXPOSE 3000
 
 # Define the command to run the app
