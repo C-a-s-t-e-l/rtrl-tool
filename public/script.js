@@ -1,8 +1,5 @@
-const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-const BACKEND_URL = isLocal 
-    ? 'http://localhost:3000' 
-    : 'https://rtrl-prospector.ddnsfree.com'; 
-
+// --- IMPORTANT: REPLACE THIS URL WITH YOUR PUBLIC CODESPACE URL ---
+const BACKEND_URL = 'https://7ab1fb932871.ngrok-free.app';
 
 function initializeMainApp() {
     async function loadGoogleMaps() {
@@ -36,6 +33,19 @@ function initializeMainApp() {
     function initializeApp() { 
         document.getElementById('currentYear').textContent = new Date().getFullYear(); 
         if (elements.researchStatusIcon) elements.researchStatusIcon.className = 'fas fa-check-circle'; 
+        
+        const savedData = localStorage.getItem('rtrl_collected_data');
+        if (savedData) {
+            logMessage(elements.logEl, 'Found and loaded previous results from local storage.', 'success');
+            allCollectedData = JSON.parse(savedData);
+            if (allCollectedData.length > 0) {
+                elements.collectedDataCard.classList.add('has-results');
+            }
+            applyFilterAndSort();
+            elements.selectAllCheckbox.checked = true;
+            setUiState(false, getUiElementsForStateChange());
+        }
+
         populatePrimaryCategories(elements.primaryCategorySelect, categories, ""); 
         handleCategoryChange("", elements.subCategoryGroup, elements.subCategorySelect, elements.customCategoryGroup, elements.customCategoryInput, categories); 
         setupEventListeners(); 
@@ -174,8 +184,27 @@ function initializeMainApp() {
         });
     }
     
-    function updateProgressBar(isComplete = false) { if (isComplete) { elements.progressBar.style.width = '100%'; elements.progressPercentage.textContent = '100%'; elements.researchStatusIcon.className = 'fas fa-check-circle'; } }
-    socket.on('progress_update', ({ added, target }) => { const isSearchAll = target === -1; if (!isSearchAll && target > 0) { let percentage = (added / target) * 100; if (percentage > 100) percentage = 100; const roundedPercentage = Math.round(percentage); elements.progressBar.style.width = `${roundedPercentage}%`; elements.progressPercentage.textContent = `${roundedPercentage}%`; } });
+    socket.on('progress_update', ({ processed, discovered, added, target }) => {
+        let percentage = 0;
+        const isSearchAll = target === -1;
+
+        if (isSearchAll) {
+            if (discovered > 0) {
+                percentage = (processed / discovered) * 100;
+            }
+        } else {
+            if (target > 0) {
+                percentage = (added / target) * 100;
+            }
+        }
+        
+        if (percentage > 100) percentage = 100;
+
+        const roundedPercentage = Math.round(percentage);
+        elements.progressBar.style.width = `${roundedPercentage}%`;
+        elements.progressPercentage.textContent = `${roundedPercentage}%`;
+    });
+
     window.rtrlApp.initializeMapServices = () => { if (window.google && google.maps && google.maps.places) { service = new google.maps.places.AutocompleteService(); geocoder = new google.maps.Geocoder(); console.log("Google Places Autocomplete Service initialized."); } else { console.warn("Google Maps Places API not fully loaded. Autocomplete may not function."); } };
     if (window.google && google.maps && google.maps.places && !service) { window.rtrlApp.initializeMapServices(); }
     function fetchPlaceSuggestions(inputEl, suggestionsEl, types, onSelect) { if (!service || inputEl.value.trim().length < 2) { suggestionsEl.style.display = 'none'; return; } const countryIsoCode = countries.find(c => c.text.toLowerCase() === elements.countryInput.value.toLowerCase())?.value; const request = { input: inputEl.value, types }; if (countryIsoCode) request.componentRestrictions = { country: countryIsoCode }; service.getPlacePredictions(request, (predictions, status) => { if (status === google.maps.places.PlacesServiceStatus.OK && predictions) { const items = predictions.map(p => ({ description: p.description, place_id: p.place_id })); renderSuggestions(inputEl, suggestionsEl, items, 'description', 'place_id', onSelect); } else { suggestionsEl.style.display = 'none'; } }); }
@@ -185,33 +214,45 @@ function initializeMainApp() {
     socket.on('log', (message) => logMessage(elements.logEl, message, 'info'));
     socket.on('scrape_error', (error) => handleScrapeError(error));
 
-    socket.on('scrape_complete', (businesses) => {
-        logMessage(elements.logEl, `Scraping process finished. Received ${businesses.length} total businesses.`, 'success');
+    // --- NEW: REAL-TIME DATA HANDLER ---
+    socket.on('business_found', (business) => {
+        // Show the results card if it's the first result
+        if (allCollectedData.length === 0) {
+            elements.collectedDataCard.classList.add('has-results');
+        }
         
-        allCollectedData = businesses.map(business => ({
+        const newBusiness = {
             OwnerName: '',
             ...business,
             SuburbArea: elements.locationInput.value.split(',')[0].trim(),
             LastVerifiedDate: new Date().toISOString().split('T')[0]
-        }));
+        };
         
-        elements.filterInput.value = '';
-        currentSort = { key: 'BusinessName', direction: 'asc' };
+        allCollectedData.push(newBusiness);
+        // Re-run the filter and sort to place the new item correctly
         applyFilterAndSort();
+    });
+
+    socket.on('scrape_complete', () => {
+        logMessage(elements.logEl, `Scraping process finished.`, 'success');
         
-        if (allCollectedData.length > 0) {
-            elements.collectedDataCard.classList.add('has-results');
-        } else {
-            elements.collectedDataCard.classList.remove('has-results');
+        try {
+            localStorage.setItem('rtrl_collected_data', JSON.stringify(allCollectedData));
+            logMessage(elements.logEl, `Saved ${allCollectedData.length} records to local storage.`, 'info');
+        } catch (e) {
+            logMessage(elements.logEl, `Could not save to local storage: ${e.message}`, 'error');
         }
         
         elements.selectAllCheckbox.checked = true;
-        updateProgressBar(true);
-        logMessage(elements.logEl, `Displaying all ${allCollectedData.length} businesses found.`, 'success');
+        elements.progressBar.style.width = '100%';
+        elements.progressPercentage.textContent = '100%';
+        if (elements.researchStatusIcon) elements.researchStatusIcon.className = 'fas fa-check-circle';
+
         setUiState(false, getUiElementsForStateChange());
     });
 
     function startResearch() {
+        localStorage.removeItem('rtrl_collected_data');
         setUiState(true, getUiElementsForStateChange());
         allCollectedData = [];
         displayedData = [];
@@ -263,7 +304,13 @@ function initializeMainApp() {
 const socketIoScript = document.createElement('script');
 socketIoScript.src = `${BACKEND_URL}/socket.io/socket.io.js`;
 
-
 socketIoScript.onload = initializeMainApp;
+socketIoScript.onerror = () => {
+    console.error("Failed to load Socket.IO script. Is the backend server running?");
+    const logEl = document.getElementById('log');
+    if (logEl) {
+        logEl.innerHTML = "FATAL ERROR: Could not connect to the backend server. Please check the server status and refresh the page.";
+    }
+};
 
 document.head.appendChild(socketIoScript);
