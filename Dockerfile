@@ -1,36 +1,19 @@
-# Use the rock-solid Long-Term Support version of Node 16 on the lightweight "slim" base
-FROM node:16-slim
+# Use the official Puppeteer image. It includes Node.js and a compatible Chromium.
+# This completely avoids all apt-get installation problems we've been fighting.
+FROM ghcr.io/puppeteer/puppeteer:22.6.3
 
-# Set the working directory
-WORKDIR /usr/src/app
+# The image's default working directory is /home/pptruser. We will put our app there.
+# This is also more secure because it doesn't run as the root user.
+WORKDIR /home/pptruser
 
-# --- SIMPLIFIED AND PROVEN INSTALLATION BLOCK ---
-# Install the minimal set of dependencies required for the latest Puppeteer
-RUN apt-get update \
-    && apt-get install -y wget gnupg \
-    && wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | gpg --dearmor > /etc/apt/trusted.gpg.d/google-archive.gpg \
-    && sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list' \
-    && apt-get update \
-    && apt-get install -y \
-      google-chrome-stable \
-      --no-install-recommends \
-    && rm -rf /var/lib/apt/lists/*
-# --- END OF INSTALLATION BLOCK ---
-
-# Copy package files (including the new axios)
+# Copy package files first for better layer caching
 COPY backend/package*.json ./
-
-# Install app dependencies
 RUN npm install
 
-# Copy the rest of the backend code
+# Copy the rest of our application code
 COPY backend/. .
-
-# Copy the frontend code
 COPY public ./public
 
-# Expose the application port
 EXPOSE 3000
 
-# Run the application
 CMD [ "npm", "start" ]
