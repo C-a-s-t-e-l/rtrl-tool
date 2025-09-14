@@ -286,13 +286,9 @@ async function scrapeGoogleMapsDetails(page, url, socket, country) {
     await page.waitForSelector('h1', {timeout: 60000});
     
     return page.evaluate((countryCode) => {
-const cleanText = (text) => {
+        const cleanText = (text) => {
             if (!text) return '';
-            return text
-                .replace(/[\u0000-\u001F\u007F-\u009F\uFEFF\n\r]/g, '')
-                .replace(/\s+/g, ' ')
-                .replace(/^[^a-zA-Z0-9]+/, '')
-                .trim();
+            return text.replace(/[\u0000-\u001F\u007F-\u009F\uFEFF\n\r]/g, '').replace(/\s+/g, ' ').trim();
         };
 
         const cleanPhoneNumber = (num, country) => {
