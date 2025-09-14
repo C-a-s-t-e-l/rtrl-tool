@@ -1,6 +1,7 @@
-// --- IMPORTANT: REPLACE THIS URL WITH YOUR PUBLIC CODESPACE URL ---
-const BACKEND_URL = 'https://a4b083eaf85b.ngrok-free.app';
+// --- IMPORTANT: MAKE SURE THIS IS YOUR CURRENT, ACTIVE NGROK URL ---
+const BACKEND_URL = 'https://a4b083eaf85b.ngrok-free.app'; // <--- PASTE YOUR NEW NGROK URL HERE
 
+// This function will be called AFTER the CDN script has loaded successfully.
 function initializeMainApp() {
     async function loadGoogleMaps() {
         try {
@@ -22,6 +23,7 @@ function initializeMainApp() {
         }
     }
 
+    // The 'io' function now exists globally because the CDN script loaded.
     const socket = io(BACKEND_URL);
     
     const elements = { startButton: document.getElementById('startButton'), downloadFullExcelButton: document.getElementById('downloadFullExcelButton'), downloadNotifyreCSVButton: document.getElementById('downloadNotifyreCSVButton'), downloadGoogleWorkspaceCSVButton: document.getElementById('downloadGoogleWorkspaceCSVButton'), primaryCategorySelect: document.getElementById('primaryCategorySelect'), subCategoryGroup: document.getElementById('subCategoryGroup'), subCategorySelect: document.getElementById('subCategorySelect'), customCategoryGroup: document.getElementById('customCategoryGroup'), customCategoryInput: document.getElementById('customCategoryInput'), locationInput: document.getElementById('locationInput'), locationSuggestionsEl: document.getElementById('locationSuggestions'), postalCodeInput: document.getElementById('postalCodeInput'), postalCodeSuggestionsEl: document.getElementById('postalCodeSuggestions'), countryInput: document.getElementById('countryInput'), countrySuggestionsEl: document.getElementById('countrySuggestions'), countInput: document.getElementById('count'), findAllBusinessesCheckbox: document.getElementById('findAllBusinesses'), businessNameInput: document.getElementById('businessNameInput'), bulkSearchContainer: document.getElementById('bulkSearchContainer'), progressBar: document.getElementById('progressBar'), logEl: document.getElementById('log'), resultsTableBody: document.getElementById('resultsTableBody'), resultsTableHeader: document.getElementById('resultsTableHeader'), selectAllCheckbox: document.getElementById('selectAllCheckbox'), researchStatusIcon: document.getElementById('researchStatusIcon'), progressPercentage: document.getElementById('progressPercentage'), collectedDataCard: document.getElementById('collectedDataCard'), filterInput: document.getElementById('filterInput') };
@@ -214,9 +216,7 @@ function initializeMainApp() {
     socket.on('log', (message) => logMessage(elements.logEl, message, 'info'));
     socket.on('scrape_error', (error) => handleScrapeError(error));
 
-    // --- NEW: REAL-TIME DATA HANDLER ---
     socket.on('business_found', (business) => {
-        // Show the results card if it's the first result
         if (allCollectedData.length === 0) {
             elements.collectedDataCard.classList.add('has-results');
         }
@@ -229,7 +229,6 @@ function initializeMainApp() {
         };
         
         allCollectedData.push(newBusiness);
-        // Re-run the filter and sort to place the new item correctly
         applyFilterAndSort();
     });
 
@@ -301,20 +300,22 @@ function initializeMainApp() {
     initializeApp();
 }
 
+// --- THIS IS THE NEW, ROBUST WAY TO LOAD THE SCRIPT ---
+// 1. Create a script tag for the CDN version of Socket.IO
 const socketIoScript = document.createElement('script');
-socketIoScript.src = `${BACKEND_URL}/socket.io/socket.io.js`;
+socketIoScript.src = 'https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js';
 
+// 2. When it successfully loads, THEN initialize our main application.
 socketIoScript.onload = initializeMainApp;
+
+// 3. If it fails (it won't, but this is good practice), show an error.
 socketIoScript.onerror = () => {
-    console.error("Failed to load Socket.IO script. Is the backend server running?1");
+    console.error("Failed to load Socket.IO script from CDN.");
     const logEl = document.getElementById('log');
     if (logEl) {
-        logEl.innerHTML = "FATAL ERROR: Could not connect to the backend server. Please check the server status and refresh the page.";
+        logEl.innerHTML = "FATAL ERROR: Could not load core networking library. Please check your internet connection and refresh the page.";
     }
 };
 
-
+// 4. Add the script to the page to start the loading process.
 document.head.appendChild(socketIoScript);
-
-
-
