@@ -7,6 +7,7 @@ const { Server } = require('socket.io');
 const path = require('path');
 const fs = require('fs');
 const axios = require('axios');
+const vm = require('vm');
 require('dotenv').config();
 
 puppeteer.use(StealthPlugin());
@@ -175,59 +176,50 @@ async function collectGoogleMapsUrlsContinuously(searchQuery, socket) {
                     'Authorization': `Bearer ${BRIGHTDATA_API_TOKEN}`,
                     'Content-Type': 'application/json'
                 },
-                timeout: 120000 
+                timeout: 120000
             }
         );
 
         const htmlContent = response.data;
-        
-        // --- THIS IS THE FINAL, GUARANTEED FIX ---
-        // Find the script tag containing the data, clean it up, and parse it.
-        const scriptContentMatch = htmlContent.match(/window\.APP_INITIALIZATION_STATE\s*=\s*(.*?);/);
+
+        // Find the script tag containing the data.
+        const scriptContentMatch = htmlContent.match(/window\.APP_INITIALIZATION_STATE\s*=\s*(\[.*\]);/);
         if (!scriptContentMatch || !scriptContentMatch[1]) {
             socket.emit('log', '   -> Could not find the embedded data script. Google may have changed its structure.', 'error');
             return [];
         }
-        
-        const jsonDataString = scriptContentMatch[1];
-        // This is a complex but necessary step to clean up the JavaScript object into valid JSON
-        const correctedJson = jsonDataString.replace(/,null/g, ',null').replace(/,]/g, ']').replace(/,}/g, '}');
-        
-        const data = JSON.parse(correctedJson);
 
-        // --- START OF THE FIX ---
-        // OLD (BRITTLE) WAY: const searchResults = data[0][1][0][14];
-        
-        // NEW (ROBUST) WAY:
-        // The results list is nested deeply. Instead of a fixed path, we search for an array
-        // that looks like a list of results based on its contents.
+        const objectLiteralString = scriptContentMatch[1];
+        let data;
+        try {
+            // We use Node's VM module to safely evaluate the JavaScript object literal.
+            // The parentheses are crucial to ensure it's treated as an expression.
+            // This is robust and avoids all the problems of trying to parse JS with a JSON parser.
+            data = vm.runInNewContext(`(${objectLiteralString})`);
+        } catch (e) {
+            socket.emit('log', `   -> Failed to parse embedded JavaScript object: ${e.message}`, 'error');
+            return [];
+        }
+
+        // The rest of the logic is the same as before, using the now-perfectly-parsed 'data' object.
         let searchResults = [];
         if (data?.[0]?.[1]) {
-            // data[0][1] contains an array of the page's components. We loop through them.
             for (const component of data[0][1]) {
-                // The results list is usually at index [14] of one of these components.
                 const potentialResults = component?.[14];
-
-                // Heuristic check: A valid results list is an array where items have a specific nested structure.
-                // We check if at least one item has the business data structure we expect (e.g., a URL at [6][43]).
                 if (potentialResults && Array.isArray(potentialResults) && potentialResults.some(r => r?.[6]?.[43])) {
                     searchResults = potentialResults;
-                    break; // We found the list, no need to search further.
+                    break;
                 }
             }
         }
-        
-        let foundUrls = [];
 
+        let foundUrls = [];
         if (searchResults.length > 0) {
             for (const result of searchResults) {
                 const businessData = result?.[6];
                 if (businessData) {
-                    // The business name is at index [11], partial URL is at [43].
                     const placeName = businessData[11];
                     const partialUrl = businessData[43];
-
-                    // We only add the URL if both name and URL are present, to ensure it's a valid business listing.
                     if (placeName && partialUrl && typeof partialUrl === 'string') {
                         const fullUrl = `https://www.google.com${partialUrl}`;
                         foundUrls.push(fullUrl);
@@ -235,14 +227,15 @@ async function collectGoogleMapsUrlsContinuously(searchQuery, socket) {
                 }
             }
         }
-                const uniqueUrls = [...new Set(foundUrls)];
+
+        const uniqueUrls = [...new Set(foundUrls)];
         socket.emit('log', `   -> Intelligent parser found ${uniqueUrls.length} unique URLs from embedded data.`);
         return uniqueUrls;
 
     } catch (error) {
-        const errorDetails = error.response ? JSON.stringify(error.response.data) : error.message;
+        const errorDetails = error.response ? JSON.stringify(error.response.data, null, 2) : error.message;
         console.error('Bright Data Web Unlocker API failed:', errorDetails);
-        socket.emit('log', `CRITICAL ERROR: Bright Data API call failed. Details: ${errorDetails}`, 'error');
+        socket.emit('log', `CRITICAL ERROR: Bright Data API call failed. Details: ${error.message}`, 'error');
         throw new Error(`Bright Data API call failed`);
     }
 }
@@ -314,5 +307,5 @@ async function scrapeWebsiteForGoldData(page, websiteUrl, socket) {
 
 server.listen(PORT, () => {
     console.log(`Scraping server running on http://localhost:${PORT}`);
-    //test52
+    //test53
 });
