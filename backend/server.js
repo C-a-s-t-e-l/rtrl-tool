@@ -182,8 +182,12 @@ async function collectGoogleMapsUrlsContinuously(searchQuery, socket) {
 
         const htmlContent = response.data;
 
-        // Find the script tag containing the data.
-        const scriptContentMatch = htmlContent.match(/window\.APP_INITIALIZATION_STATE\s*=\s*(\[.*\]);/);
+        // --- START OF THE FIX ---
+        // OLD REGEX: /(\[.*\]);/
+        // NEW REGEX: The semicolon is now OUTSIDE the capture group's parenthesis.
+        const scriptContentMatch = htmlContent.match(/window\.APP_INITIALIZATION_STATE\s*=\s*(\[.*\])\s*;/);
+        // --- END OF THE FIX ---
+
         if (!scriptContentMatch || !scriptContentMatch[1]) {
             socket.emit('log', '   -> Could not find the embedded data script. Google may have changed its structure.', 'error');
             return [];
@@ -192,16 +196,12 @@ async function collectGoogleMapsUrlsContinuously(searchQuery, socket) {
         const objectLiteralString = scriptContentMatch[1];
         let data;
         try {
-            // We use Node's VM module to safely evaluate the JavaScript object literal.
-            // The parentheses are crucial to ensure it's treated as an expression.
-            // This is robust and avoids all the problems of trying to parse JS with a JSON parser.
             data = vm.runInNewContext(`(${objectLiteralString})`);
         } catch (e) {
             socket.emit('log', `   -> Failed to parse embedded JavaScript object: ${e.message}`, 'error');
             return [];
         }
 
-        // The rest of the logic is the same as before, using the now-perfectly-parsed 'data' object.
         let searchResults = [];
         if (data?.[0]?.[1]) {
             for (const component of data[0][1]) {
@@ -307,5 +307,5 @@ async function scrapeWebsiteForGoldData(page, websiteUrl, socket) {
 
 server.listen(PORT, () => {
     console.log(`Scraping server running on http://localhost:${PORT}`);
-    //test53
+    //test54
 });
