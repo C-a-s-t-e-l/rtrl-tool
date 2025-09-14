@@ -5,13 +5,19 @@ FROM ghcr.io/puppeteer/puppeteer:22.6.3
 WORKDIR /home/pptruser
 
 #
-# --- THIS IS THE PERMISSION FIX ---
+# --- THIS IS THE FIX ---
 #
+# Set this environment variable to tell Puppeteer's install script
+# NOT to download a browser, because one is already included in this image.
+ENV PUPPETEER_SKIP_DOWNLOAD=true
+#
+# --- END OF FIX ---
+#
+
 # When copying files, immediately change their ownership to the 'pptruser'.
-# This allows the 'npm install' command (which runs as pptruser) to work correctly.
 COPY --chown=pptruser:pptruser backend/package*.json ./
 
-# This command will now succeed.
+# This command will now succeed because the problematic script is skipped.
 RUN npm install
 
 # Copy the rest of our application code, also changing ownership.
