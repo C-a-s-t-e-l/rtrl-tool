@@ -1,5 +1,5 @@
 // --- IMPORTANT: REPLACE THIS URL WITH YOUR PUBLIC CODESPACE URL ---
-const BACKEND_URL = 'https://7ab1fb932871.ngrok-free.app';
+const BACKEND_URL = 'https://d9ded86f472e.ngrok-free.app';
 
 function initializeMainApp() {
     async function loadGoogleMaps() {
@@ -315,4 +315,5 @@ socketIoScript.onerror = () => {
 
 
 document.head.appendChild(socketIoScript);
+
 
