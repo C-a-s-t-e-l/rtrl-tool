@@ -195,27 +195,47 @@ async function collectGoogleMapsUrlsContinuously(searchQuery, socket) {
         
         const data = JSON.parse(correctedJson);
 
-        // Navigate through the complex data structure to find the business results array
-        const searchResults = data[0][1][0][14];
-        let foundUrls = [];
+        // --- START OF THE FIX ---
+        // OLD (BRITTLE) WAY: const searchResults = data[0][1][0][14];
+        
+        // NEW (ROBUST) WAY:
+        // The results list is nested deeply. Instead of a fixed path, we search for an array
+        // that looks like a list of results based on its contents.
+        let searchResults = [];
+        if (data?.[0]?.[1]) {
+            // data[0][1] contains an array of the page's components. We loop through them.
+            for (const component of data[0][1]) {
+                // The results list is usually at index [14] of one of these components.
+                const potentialResults = component?.[14];
 
-        if (searchResults) {
-            for (const result of searchResults) {
-                // The structure is nested. [6] is the main business data.
-                const businessData = result[6];
-                if (businessData && businessData[43]) {
-                     // The place name is in [6][11]. The partial URL is in [6][43].
-                     const placeName = businessData[11];
-                     const partialUrl = businessData[43];
-                     if (placeName && partialUrl) {
-                        const fullUrl = `https://www.google.com${partialUrl}`;
-                        foundUrls.push(fullUrl);
-                     }
+                // Heuristic check: A valid results list is an array where items have a specific nested structure.
+                // We check if at least one item has the business data structure we expect (e.g., a URL at [6][43]).
+                if (potentialResults && Array.isArray(potentialResults) && potentialResults.some(r => r?.[6]?.[43])) {
+                    searchResults = potentialResults;
+                    break; // We found the list, no need to search further.
                 }
             }
         }
         
-        const uniqueUrls = [...new Set(foundUrls)];
+        let foundUrls = [];
+
+        if (searchResults.length > 0) {
+            for (const result of searchResults) {
+                const businessData = result?.[6];
+                if (businessData) {
+                    // The business name is at index [11], partial URL is at [43].
+                    const placeName = businessData[11];
+                    const partialUrl = businessData[43];
+
+                    // We only add the URL if both name and URL are present, to ensure it's a valid business listing.
+                    if (placeName && partialUrl && typeof partialUrl === 'string') {
+                        const fullUrl = `https://www.google.com${partialUrl}`;
+                        foundUrls.push(fullUrl);
+                    }
+                }
+            }
+        }
+                const uniqueUrls = [...new Set(foundUrls)];
         socket.emit('log', `   -> Intelligent parser found ${uniqueUrls.length} unique URLs from embedded data.`);
         return uniqueUrls;
 
@@ -294,5 +314,5 @@ async function scrapeWebsiteForGoldData(page, websiteUrl, socket) {
 
 server.listen(PORT, () => {
     console.log(`Scraping server running on http://localhost:${PORT}`);
-    //test51
+    //test52
 });
