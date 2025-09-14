@@ -1,18 +1,22 @@
 # Use the official Puppeteer image. It includes Node.js and a compatible Chromium.
-# This completely avoids all apt-get installation problems we've been fighting.
 FROM ghcr.io/puppeteer/puppeteer:22.6.3
 
 # The image's default working directory is /home/pptruser. We will put our app there.
-# This is also more secure because it doesn't run as the root user.
 WORKDIR /home/pptruser
 
-# Copy package files first for better layer caching
-COPY backend/package*.json ./
+#
+# --- THIS IS THE PERMISSION FIX ---
+#
+# When copying files, immediately change their ownership to the 'pptruser'.
+# This allows the 'npm install' command (which runs as pptruser) to work correctly.
+COPY --chown=pptruser:pptruser backend/package*.json ./
+
+# This command will now succeed.
 RUN npm install
 
-# Copy the rest of our application code
-COPY backend/. .
-COPY public ./public
+# Copy the rest of our application code, also changing ownership.
+COPY --chown=pptruser:pptruser backend/. .
+COPY --chown=pptruser:pptruser public ./public
 
 EXPOSE 3000
 
