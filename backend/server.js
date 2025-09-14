@@ -74,7 +74,7 @@ io.on('connection', (socket) => {
         
         let browser;
         try {
-            const puppeteerArgs = ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--no-zygote', '--lang=en-US,en', '--ignore-certificate-errors'];
+            const puppeteerArgs = ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu', '--no-zygote', '--lang=en-US,en', '--ignore-certificate-errors'];
             
             if (useProxy) {
                 const proxyServer = `http://${BRIGHTDATA_HOST}:${BRIGHTDATA_PORT}`;
