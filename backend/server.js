@@ -74,7 +74,7 @@ io.on('connection', (socket) => {
         
         let browser;
         try {
-            const puppeteerArgs = ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--  single-process', '--no-zygote', '--lang=en-US,en', '--ignore-certificate-errors'];
+            const puppeteerArgs = ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--no-zygote', '--lang=en-US,en', '--ignore-certificate-errors'];
             
             if (useProxy) {
                 const proxyServer = `http://${BRIGHTDATA_HOST}:${BRIGHTDATA_PORT}`;
@@ -283,5 +283,5 @@ async function scrapeWebsiteForGoldData(page, websiteUrl, socket) {
 
 server.listen(PORT, () => {
     console.log(`Scraping server running on http://localhost:${PORT}`);
-    //test45
+    //test46
 });
