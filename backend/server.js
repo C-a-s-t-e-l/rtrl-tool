@@ -31,8 +31,8 @@ const BRIGHTDATA_PASSWORD = process.env.BRIGHTDATA_PASSWORD;
 const BRIGHTDATA_API_TOKEN = process.env.BRIGHTDATA_API_TOKEN;
 const useProxy = BRIGHTDATA_HOST && BRIGHTDATA_USERNAME && BRIGHTDATA_PASSWORD;
 
-if (!GOOGLE_MAPS_API_KEY || !BRIGHTDATA_API_TOKEN) {
-    console.error("ERROR: MAPS_API_KEY or BRIGHTDATA_API_TOKEN not found in .env file!");
+if (!GOOGLE_MAPS_API_KEY) {
+    console.error("ERROR: MAPS_API_KEY not found in .env file!");
     process.exit(1);
 }
 
@@ -73,7 +73,8 @@ io.on('connection', (socket) => {
         try {
             const puppeteerArgs = [
                 '--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage',
-                '--disable-gpu', '--no-zygote', '--lang=en-US,en', '--ignore-certificate-errors'
+                '--disable-gpu', '--no-zygote', '--lang=en-US,en', '--ignore-certificate-errors',
+                '--window-size=1920,1080'
             ];
             
             if (useProxy) {
@@ -82,7 +83,6 @@ io.on('connection', (socket) => {
                 socket.emit('log', `[Server] Using Bright Data proxy server for detail scraping.`);
             }
 
-            // --- KEY CHANGE #1: Pointing to the pre-installed browser in the Docker image ---
             browser = await puppeteer.launch({ 
                 headless: true, 
                 args: puppeteerArgs, 
@@ -91,18 +91,15 @@ io.on('connection', (socket) => {
             });
             
             const allProcessedBusinesses = [];
-            let allDiscoveredUrls = new Set();
-
-            socket.emit('log', `[Server] Starting URL collection phase via Puppeteer...`);
-            // --- KEY CHANGE #2: Passing the browser instance to the collection function ---
-            const newlyDiscoveredUrls = await collectGoogleMapsUrlsContinuously(browser, searchQuery, socket);
             
-            allDiscoveredUrls = new Set(newlyDiscoveredUrls);
+            socket.emit('log', `[Server] Starting URL collection phase by simulating user behavior...`);
+            const newlyDiscoveredUrls = await collectGoogleMapsUrlsByScrolling(browser, searchQuery, socket, targetCount);
+            const allDiscoveredUrls = new Set(newlyDiscoveredUrls);
 
             socket.emit('log', `-> URL Collection complete. Discovered ${allDiscoveredUrls.size} unique listings. Now processing...`);
             
             if (allDiscoveredUrls.size === 0) {
-                 socket.emit('log', 'No business URLs were found. The scrape cannot proceed. This might be due to a change in Google Maps page structure.', 'error');
+                 socket.emit('log', 'No business URLs were found. This could be a "No results found" page on Google, or a change in page structure.', 'error');
             }
 
             let totalRawUrlsAttemptedDetails = 0;
@@ -113,12 +110,11 @@ io.on('connection', (socket) => {
                 if (allProcessedBusinesses.length >= targetCount) break;
                 const batch = urlList.slice(i, i + CONCURRENCY);
                 const promises = batch.map(async (urlToProcess) => {
+                    if (allProcessedBusinesses.length >= targetCount) return null;
                     let detailPage;
                     try {
                         detailPage = await browser.newPage();
-                        if (useProxy) {
-                            await detailPage.authenticate({ username: BRIGHTDATA_USERNAME, password: BRIGHTDATA_PASSWORD });
-                        }
+                        if (useProxy) { await detailPage.authenticate({ username: BRIGHTDATA_USERNAME, password: BRIGHTDATA_PASSWORD }); }
                         await detailPage.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36');
                         await detailPage.setRequestInterception(true);
                         detailPage.on('request', (req) => { if (['image', 'stylesheet', 'font', 'media'].includes(req.resourceType())) req.abort(); else req.continue(); });
@@ -126,9 +122,7 @@ io.on('connection', (socket) => {
                         let googleData = await scrapeGoogleMapsDetails(detailPage, urlToProcess, socket, country);
                         if (!googleData || !googleData.BusinessName) return null;
                         let websiteData = {};
-                        if (googleData.Website) {
-                           websiteData = await scrapeWebsiteForGoldData(detailPage, googleData.Website, socket);
-                        }
+                        if (googleData.Website) { websiteData = await scrapeWebsiteForGoldData(detailPage, googleData.Website, socket); }
                         const fullBusinessData = { ...googleData, ...websiteData };
                         fullBusinessData.Category = isIndividualSearch ? (googleData.ScrapedCategory || 'N/A') : category;
                         return fullBusinessData;
@@ -141,7 +135,6 @@ io.on('connection', (socket) => {
                 });
 
                 const results = await Promise.all(promises);
-
                 results.forEach(businessData => {
                     totalRawUrlsAttemptedDetails++;
                     if (businessData && allProcessedBusinesses.length < targetCount) {
@@ -167,69 +160,69 @@ io.on('connection', (socket) => {
 });
 
 // ===================================================================================
-// == KEY CHANGE #3: THE DEFINITIVE SOLUTION USING PUPPETEER TO PARSE JAVASCRIPT    ==
+// == THE DEFINITIVE SOLUTION: SCROLLING AND SCRAPING VISIBLE HTML ELEMENTS         ==
 // ===================================================================================
-async function collectGoogleMapsUrlsContinuously(browser, searchQuery, socket) {
-    socket.emit('log', '   -> Using a headless browser to collect URLs...');
+async function collectGoogleMapsUrlsByScrolling(browser, searchQuery, socket, targetCount) {
+    socket.emit('log', '   -> Launching browser to search and scroll for results...');
     let page;
     try {
         const urlToScrape = `https://www.google.com/maps/search/${encodeURIComponent(searchQuery)}`;
-        
         page = await browser.newPage();
-        
-        // This page instance will inherit the proxy settings from the browser,
-        // but we still need to authenticate for this specific page's requests.
-        if (useProxy) {
-            await page.authenticate({ username: BRIGHTDATA_USERNAME, password: BRIGHTDATA_PASSWORD });
-        }
+        if (useProxy) { await page.authenticate({ username: BRIGHTDATA_USERNAME, password: BRIGHTDATA_PASSWORD }); }
         
         await page.goto(urlToScrape, { waitUntil: 'domcontentloaded', timeout: 120000 });
 
-        // Wait until the data object we need actually exists on the page.
-        await page.waitForFunction('window.APP_INITIALIZATION_STATE', { timeout: 30000 });
+        // This is the selector for the scrollable results panel on the left.
+        const scrollableListSelector = 'div[role="feed"]';
+        await page.waitForSelector(scrollableListSelector, { timeout: 30000 });
+        socket.emit('log', '   -> Results panel loaded. Starting scroll process.');
+
+        const urls = new Set();
+        let lastUrlCount = 0;
+        let noChangeCount = 0;
+        const MAX_NO_CHANGE = 3; // Stop after 3 scrolls with no new results
+
+        while (urls.size < targetCount) {
+            const newUrls = await page.$$eval('a[href*="/maps/place/"]', links => links.map(a => a.href));
+            newUrls.forEach(url => urls.add(url));
+
+            if (urls.size === lastUrlCount) {
+                noChangeCount++;
+            } else {
+                lastUrlCount = urls.size;
+                noChangeCount = 0;
+                socket.emit('log', `   -> Scrolled and found ${urls.size} unique listings so far...`);
+            }
+
+            if (noChangeCount >= MAX_NO_CHANGE) {
+                socket.emit('log', '   -> No new results found after multiple scrolls. Assuming end of list.');
+                break;
+            }
+
+            // Scroll to the bottom of the feed
+            await page.evaluate((selector) => {
+                const element = document.querySelector(selector);
+                if (element) element.scrollTop = element.scrollHeight;
+            }, scrollableListSelector);
+
+            // Wait for new content to potentially load
+            await new Promise(resolve => setTimeout(resolve, 2000));
+        }
         
-        // Directly evaluate the JavaScript on the page and get the fully-formed object.
-        const data = await page.evaluate(() => window.APP_INITIALIZATION_STATE);
+        // Final check for the "end of results" message
+        const isEnd = await page.evaluate(() => document.body.innerText.includes("You've reached the end of the list."));
+        if (isEnd) socket.emit('log', '   -> Confirmed end of results from page text.');
 
-        let searchResults = [];
-        if (data?.[0]?.[1]) {
-            for (const component of data[0][1]) {
-                const potentialResults = component?.[14];
-                if (potentialResults && Array.isArray(potentialResults) && potentialResults.some(r => r?.[6]?.[43])) {
-                    searchResults = potentialResults;
-                    break;
-                }
-            }
-        }
-
-        let foundUrls = [];
-        if (searchResults.length > 0) {
-            for (const result of searchResults) {
-                const businessData = result?.[6];
-                if (businessData) {
-                    const placeName = businessData[11];
-                    const partialUrl = businessData[43];
-                    if (placeName && partialUrl && typeof partialUrl === 'string') {
-                        const fullUrl = `https://www.google.com${partialUrl}`;
-                        foundUrls.push(fullUrl);
-                    }
-                }
-            }
-        }
-
-        const uniqueUrls = [...new Set(foundUrls)];
-        socket.emit('log', `   -> Browser-based parser found ${uniqueUrls.length} unique URLs from embedded data.`);
-        return uniqueUrls;
+        return Array.from(urls);
 
     } catch (error) {
-        console.error('URL Collection via Puppeteer failed:', error);
-        socket.emit('log', `CRITICAL ERROR: Failed to collect URLs with browser. Details: ${error.message.split('\n')[0]}`, 'error');
-        return []; // Return an empty array on failure
+        console.error('URL Collection via scrolling failed:', error);
+        socket.emit('log', `CRITICAL ERROR: Failed to scroll and collect URLs. Details: ${error.message.split('\n')[0]}`, 'error');
+        // Let's take a screenshot for debugging if something goes wrong
+        if (page) await page.screenshot({ path: 'error_screenshot.png' });
+        return [];
     } finally {
-        // IMPORTANT: Close the temporary page to free up memory.
-        if (page) {
-            await page.close();
-        }
+        if (page) await page.close();
     }
 }
 // ===================================================================================
@@ -300,5 +293,5 @@ async function scrapeWebsiteForGoldData(page, websiteUrl, socket) {
 
 server.listen(PORT, () => {
     console.log(`Scraping server running on http://localhost:${PORT}`);
-    //test57
+    //test58
 });
