@@ -6,6 +6,7 @@ const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
 const fs = require('fs');
+const axios = require('axios'); // <-- NEW DEPENDENCY FOR THE FIX
 require('dotenv').config();
 
 puppeteer.use(StealthPlugin());
@@ -27,10 +28,13 @@ const BRIGHTDATA_HOST = process.env.BRIGHTDATA_HOST;
 const BRIGHTDATA_PORT = process.env.BRIGHTDATA_PORT;
 const BRIGHTDATA_USERNAME = process.env.BRIGHTDATA_USERNAME;
 const BRIGHTDATA_PASSWORD = process.env.BRIGHTDATA_PASSWORD;
+// --- NEW, CRITICAL VARIABLE FOR THE FIX ---
+// You must get this from your Bright Data dashboard (Account Settings -> API Tokens)
+const BRIGHTDATA_API_TOKEN = process.env.BRIGHTDATA_API_TOKEN; 
 const useProxy = BRIGHTDATA_HOST && BRIGHTDATA_USERNAME && BRIGHTDATA_PASSWORD;
 
-if (!GOOGLE_MAPS_API_KEY) {
-    console.error("ERROR: MAPS_API_KEY not found in .env file!");
+if (!GOOGLE_MAPS_API_KEY || !BRIGHTDATA_API_TOKEN) {
+    console.error("ERROR: MAPS_API_KEY or BRIGHTDATA_API_TOKEN not found in .env file!");
     process.exit(1);
 }
 
@@ -38,13 +42,8 @@ app.use(cors());
 app.use(express.json());
 app.get('/api/config', (req, res) => res.json({ googleMapsApiKey: GOOGLE_MAPS_API_KEY }));
 
-// CORRECTED FILE PATH LOGIC
-const publicPath = path.join(__dirname, '..', 'public');
-// This logic is now tricky because of Docker's new structure. We will correct the path inside the container.
 const containerPublicPath = path.join(__dirname, 'public');
-
 app.use(express.static(containerPublicPath, { index: false }));
-
 app.get(/(.*)/, (req, res) => {
     const indexPath = path.join(containerPublicPath, 'index.html');
     fs.readFile(indexPath, 'utf8', (err, data) => {
@@ -74,31 +73,35 @@ io.on('connection', (socket) => {
         
         let browser;
         try {
-            const puppeteerArgs = ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--no-zygote', '--lang=en-US,en', '--ignore-certificate-errors'];
+            // NOTE: We keep puppeteer configured here because it is still used for the DETAIL scraping step.
+            const puppeteerArgs = [
+                '--no-sandbox', 
+                '--disable-setuid-sandbox', 
+                '--disable-dev-shm-usage', // Restored for stability as per last attempt
+                '--disable-gpu', 
+                '--no-zygote', 
+                '--lang=en-US,en', 
+                '--ignore-certificate-errors'
+            ];
             
             if (useProxy) {
                 const proxyServer = `http://${BRIGHTDATA_HOST}:${BRIGHTDATA_PORT}`;
                 puppeteerArgs.push(`--proxy-server=${proxyServer}`);
-                socket.emit('log', `[Server] Using Bright Data proxy server.`);
+                socket.emit('log', `[Server] Using Bright Data proxy server for detail scraping.`);
             }
 
             browser = await puppeteer.launch({ headless: true, args: puppeteerArgs, protocolTimeout: 120000 });
             
             const allProcessedBusinesses = [];
             const allDiscoveredUrls = new Set();
-            const MAX_TOTAL_RAW_URLS_TO_PROCESS = isSearchAll ? 750 : Math.max(count * 5, 50);
 
-            socket.emit('log', `[Server] Starting URL collection phase...`);
-            let collectionPage = await browser.newPage();
+            // --- THIS IS THE MAJOR CHANGE ---
+            // The URL collection phase now uses the new Bright Data API function instead of our own Puppeteer instance.
+            socket.emit('log', `[Server] Starting URL collection phase via Bright Data API...`);
+            const newlyDiscoveredUrls = await collectGoogleMapsUrlsContinuously(null, searchQuery, socket, 0, allDiscoveredUrls); // page and maxUrls are no longer used
             
-            if (useProxy) {
-                await collectionPage.authenticate({ username: BRIGHTDATA_USERNAME, password: BRIGHTDATA_PASSWORD });
-            }
-
-            await collectionPage.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36');
-            const newlyDiscoveredUrls = await collectGoogleMapsUrlsContinuously(collectionPage, searchQuery, socket, MAX_TOTAL_RAW_URLS_TO_PROCESS, allDiscoveredUrls);
             newlyDiscoveredUrls.forEach(url => allDiscoveredUrls.add(url));
-            await collectionPage.close();
+            // --- END OF MAJOR CHANGE ---
 
             socket.emit('log', `-> URL Collection complete. Discovered ${allDiscoveredUrls.size} unique listings. Now processing...`);
             let totalRawUrlsAttemptedDetails = 0;
@@ -162,62 +165,54 @@ io.on('connection', (socket) => {
     socket.on('disconnect', () => console.log(`Client disconnected: ${socket.id}`));
 });
 
-// ... The rest of the helper functions (collectGoogleMapsUrlsContinuously, etc.) are omitted for brevity but are unchanged from the last working version.
+
+// ===================================================================================
+// == THIS ENTIRE FUNCTION HAS BEEN REPLACED TO BYPASS THE PUPPETEER BUG             ==
+// ===================================================================================
 async function collectGoogleMapsUrlsContinuously(page, searchQuery, socket, maxUrlsToCollect, processedUrlSet) {
-    const newlyDiscoveredUrls = [];
-    const resultsContainerSelector = 'div[role="feed"]';
-    
-    await page.goto('https://www.google.com/maps', { waitUntil: 'domcontentloaded', timeout: 60000 });
+    socket.emit('log', '   -> Using Bright Data Scraping Browser to collect URLs...');
     try {
-        await page.waitForSelector('form[action^="https://consent.google.com"] button[aria-label="Accept all"]', { timeout: 10000 });
-        await page.click('form[action^="https://consent.google.com"] button[aria-label="Accept all"]');
-        socket.emit('log', '   -> Accepted Google consent dialog.');
-    } catch (e) { 
-        socket.emit('log', '   -> No consent dialog found or it timed out. Continuing...');
-    }
+        const urlToScrape = `https://www.google.com/maps/search/${encodeURIComponent(searchQuery)}`;
 
-    try {
-        await page.waitForSelector('#searchboxinput', { timeout: 10000 });
-        await page.type('#searchboxinput', searchQuery);
-        await page.click('#searchbox-searchbutton');
-        await page.waitForSelector(resultsContainerSelector, { timeout: 60000 });
-        socket.emit('log', `   -> Initial search results container loaded.`);
-    } catch (error) {
-        socket.emit('log', `CRITICAL ERROR: Could not find or interact with the search page. Saving a screenshot...`, 'error');
-        await page.screenshot({ path: 'error_screenshot.png', fullPage: true });
-        socket.emit('log', `Screenshot saved to 'error_screenshot.png' inside the container.`, 'info');
-        throw new Error(`Critical failure during URL collection: ${error.message}`);
-    }
-    
-    let lastScrollHeight = 0;
-    let consecutiveNoProgressAttempts = 0;
-    const MAX_CONSECUTIVE_NO_PROGRESS = 7; 
-
-    while (processedUrlSet.size < maxUrlsToCollect && consecutiveNoProgressAttempts < MAX_CONSECUTIVE_NO_PROGRESS) {
-        const currentVisibleUrls = await page.$$eval(`${resultsContainerSelector} a[href*="https://www.google.com/maps/place/"]`, links => links.map(link => link.href));
-        let newUrlsFoundInIteration = 0;
-        currentVisibleUrls.forEach(url => {
-            if (!processedUrlSet.has(url)) {
-                processedUrlSet.add(url);
-                newlyDiscoveredUrls.push(url);
-                newUrlsFoundInIteration++;
+        const response = await axios.post(
+            'https://api.brightdata.com/scraping-browser/request',
+            { url: urlToScrape },
+            {
+                headers: {
+                    'Authorization': `Bearer ${BRIGHTDATA_API_TOKEN}`,
+                    'Content-Type': 'application/json'
+                },
+                timeout: 120000 // 2 minute timeout for the API call
             }
-        });
-        if (newUrlsFoundInIteration > 0) {
-            socket.emit('log', `   -> Discovered ${newUrlsFoundInIteration} new URLs. Total found: ${processedUrlSet.size}.`);
-            consecutiveNoProgressAttempts = 0;
-        } else {
-            consecutiveNoProgressAttempts++;
-            socket.emit('log', `   -> No new URLs on this scroll. Attempt ${consecutiveNoProgressAttempts}/${MAX_CONSECUTIVE_NO_PROGRESS}.`);
-        }
-        await page.evaluate(sel => {
-            const el = document.querySelector(sel);
-            if (el) el.scrollTop = el.scrollHeight;
-        }, resultsContainerSelector);
-        await new Promise(r => setTimeout(r, 2000));
+        );
+
+        // The response.data will be the raw HTML of the page
+        const htmlContent = response.data;
+        
+        // Use a regular expression to find all Google Maps place URLs in the HTML
+        const googleMapsUrlPattern = /https:\/\/www.google.com\/maps\/place\/[^"]+/g;
+        const foundUrls = htmlContent.match(googleMapsUrlPattern) || [];
+        
+        // Remove duplicates using a Set
+        const uniqueUrls = [...new Set(foundUrls)]; 
+        
+        socket.emit('log', `   -> Bright Data API returned ${uniqueUrls.length} unique URLs.`);
+
+        // Return the array of URLs for the next processing step
+        return uniqueUrls;
+
+    } catch (error) {
+        // Log the detailed error from the API for better debugging
+        const errorDetails = error.response ? JSON.stringify(error.response.data) : error.message;
+        console.error('Bright Data Scraping Browser API failed:', errorDetails);
+        socket.emit('log', `CRITICAL ERROR: Bright Data API call failed. Details: ${errorDetails}`, 'error');
+        throw new Error(`Bright Data API call failed`);
     }
-    return newlyDiscoveredUrls; 
 }
+// ===================================================================================
+// == END OF REPLACED FUNCTION                                                      ==
+// ===================================================================================
+
 
 async function scrapeGoogleMapsDetails(page, url, socket, country) {
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
@@ -283,5 +278,4 @@ async function scrapeWebsiteForGoldData(page, websiteUrl, socket) {
 
 server.listen(PORT, () => {
     console.log(`Scraping server running on http://localhost:${PORT}`);
-    //test46
 });
