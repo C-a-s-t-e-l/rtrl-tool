@@ -31,8 +31,12 @@ if (!GOOGLE_MAPS_API_KEY) {
 
 app.use(cors());
 app.use(express.json());
+
+// --- THIS IS THE CRITICAL FIX ---
+// Define the specific API route FIRST.
 app.get('/api/config', (req, res) => res.json({ googleMapsApiKey: GOOGLE_MAPS_API_KEY }));
 
+// THEN, define the static file serving and the catch-all route.
 const containerPublicPath = path.join(__dirname, '..', 'public');
 app.use(express.static(containerPublicPath, { index: false }));
 app.get(/(.*)/, (req, res) => {
@@ -45,6 +49,7 @@ app.get(/(.*)/, (req, res) => {
         res.send(data.replace(PLACEHOLDER_KEY, GOOGLE_MAPS_API_KEY));
     });
 });
+// --- END OF FIX ---
 
 io.on('connection', (socket) => {
     console.log(`Client connected: ${socket.id}`);
@@ -81,9 +86,8 @@ io.on('connection', (socket) => {
             
             const searchQueries = await getSearchQueriesForLocation(baseSearchQuery, areaQuery, country, socket);
             
-            // --- FIX #2: REMOVED THE PREMATURE BREAK CONDITION ---
-            // Let it search all grid areas to build a comprehensive list first.
             for (const [index, query] of searchQueries.entries()) {
+                if (processedUrlSet.size >= targetCount && !isSearchAll) break;
                 socket.emit('log', `\n--- Scraping search area ${index + 1} of ${searchQueries.length}: "${query}" ---`);
                 await collectGoogleMapsUrlsContinuously(browser, query, socket, targetCount, processedUrlSet);
             }
@@ -258,7 +262,6 @@ async function collectGoogleMapsUrlsContinuously(browser, searchQuery, socket, t
                 socket.emit('log', `   -> No new URLs found. Attempt ${consecutiveNoProgressAttempts}/${MAX_NO_PROGRESS}.`);
             }
             
-            // This check is now inside the detail processing loop, but we keep it here for URL collection
             if (processedUrlSet.size >= targetCount && targetCount !== Infinity) break;
             
             await page.evaluate((selector) => {
@@ -283,10 +286,8 @@ async function scrapeGoogleMapsDetails(page, url, socket, country) {
     await page.waitForSelector('h1', {timeout: 60000});
     
     return page.evaluate((countryCode) => {
-        // --- FIX #1: A SAFER, LESS AGGRESSIVE cleanText FUNCTION ---
         const cleanText = (text) => {
             if (!text) return '';
-            // Only remove non-printable characters and standardize whitespace.
             return text.replace(/[\u0000-\u001F\u007F-\u009F\uFEFF\n\r]/g, '').replace(/\s+/g, ' ').trim();
         };
 
