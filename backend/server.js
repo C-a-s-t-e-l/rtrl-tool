@@ -93,6 +93,11 @@ io.on('connection', (socket) => {
             allDiscoveredUrls = new Set(newlyDiscoveredUrls);
 
             socket.emit('log', `-> URL Collection complete. Discovered ${allDiscoveredUrls.size} unique listings. Now processing...`);
+            
+            if (allDiscoveredUrls.size === 0) {
+                 socket.emit('log', 'No business URLs were found. The scrape cannot proceed. This might be due to a change in Google Maps page structure.', 'error');
+            }
+
             let totalRawUrlsAttemptedDetails = 0;
             const urlList = Array.from(allDiscoveredUrls);
             const CONCURRENCY = 4;
@@ -175,19 +180,19 @@ async function collectGoogleMapsUrlsContinuously(searchQuery, socket) {
         );
 
         const htmlContent = response.data;
-        // --- ADDED FOR DEBUGGING ---
-        // This will save the exact HTML file we get back, so we can see what's wrong if it fails again.
-        fs.writeFileSync('api_response.html', htmlContent);
-        socket.emit('log', '   -> Saved API response to api_response.html for debugging.');
-        // --- END OF DEBUGGING ADDITION ---
-
-        // This NEW, smarter regex looks for both full URLs and the simpler relative URLs.
-        const googleMapsUrlPattern = /(https:\/\/www\.google\.com)?\/maps\/place\/[^\/\"']+/g;
-        let foundUrls = htmlContent.match(googleMapsUrlPattern) || [];
         
-        // This makes sure all URLs are complete.
+        // --- THIS IS THE FINAL, SMARTER REGEX ---
+        // It looks for any link that contains '/maps/place/' and captures the full URL.
+        const googleMapsUrlPattern = /<a[^>]+href="([^"]+\/maps\/place\/[^"]+)"/g;
+        let matches;
+        let foundUrls = [];
+        while ((matches = googleMapsUrlPattern.exec(htmlContent)) !== null) {
+            foundUrls.push(matches[1]);
+        }
+        
+        // This makes sure all URLs start with the full domain, cleaning up relative links.
         foundUrls = foundUrls.map(url => {
-            if (url.startsWith('/maps')) {
+            if (url.startsWith('/')) {
                 return `https://www.google.com${url}`;
             }
             return url;
@@ -195,7 +200,7 @@ async function collectGoogleMapsUrlsContinuously(searchQuery, socket) {
 
         const uniqueUrls = [...new Set(foundUrls)]; 
         
-        socket.emit('log', `   -> Bright Data API returned ${uniqueUrls.length} unique URLs.`);
+        socket.emit('log', `   -> Smart parser found ${uniqueUrls.length} unique URLs.`);
         return uniqueUrls;
 
     } catch (error) {
@@ -210,7 +215,6 @@ async function collectGoogleMapsUrlsContinuously(searchQuery, socket) {
 // ===================================================================================
 
 async function scrapeGoogleMapsDetails(page, url, socket, country) {
-    // Increased timeout for this specific page load as it can be slow
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 90000 });
     await page.waitForSelector('h1', {timeout: 90000});
     
@@ -274,5 +278,5 @@ async function scrapeWebsiteForGoldData(page, websiteUrl, socket) {
 
 server.listen(PORT, () => {
     console.log(`Scraping server running on http://localhost:${PORT}`);
-    //test49
+    //test50
 });
