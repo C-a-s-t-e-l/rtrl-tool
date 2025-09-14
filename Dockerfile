@@ -9,14 +9,13 @@ WORKDIR /home/pptruser
 ENV PUPPETEER_SKIP_DOWNLOAD=true
 
 # When copying files, immediately change their ownership to the 'pptruser'.
+# We only copy package.json first to leverage Docker cache for dependencies.
 COPY --chown=pptruser:pptruser backend/package*.json ./
 
 # --- THIS IS THE FIX ---
-# Clean the npm cache to prevent errors from previous failed builds.
-RUN npm cache clean --force
-
-# This command will now run with a clean slate.
-RUN npm install
+# Combine cache clean and install into a single RUN command.
+# This is more robust and creates a smaller Docker layer.
+RUN npm cache clean --force && npm install
 
 # Copy the rest of our application code, also changing ownership.
 COPY --chown=pptruser:pptruser backend/. .
