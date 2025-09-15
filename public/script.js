@@ -691,6 +691,33 @@ if (filterText) {
     const postalCode = elements.postalCodeInput.value.trim();
     const country = elements.countryInput.value;
     const countInputVal = elements.countInput.value.trim();
+    
+    let categorySearchTerm = elements.primaryCategorySelect.value === "Other/Custom"
+        ? elements.customCategoryInput.value
+        : elements.subCategorySelect.value || elements.primaryCategorySelect.value;
+    
+    const searchCategoryKey = (businessName || categorySearchTerm).replace(/[\s/]/g, '_').toLowerCase();
+    const searchAreaKey = (postalCode || location).split(',')[0].replace(/[\s/,]/g, '_').toLowerCase();
+    const searchDate = new Date().toISOString().split('T')[0];
+    const searchKey = `${searchDate}-${searchCategoryKey}-${searchAreaKey}`;
+
+    let searchLog = JSON.parse(localStorage.getItem('rtrl_search_log')) || {};
+    if (searchLog.date !== searchDate) {
+      searchLog = { date: searchDate };
+    }
+    
+    const currentCount = searchLog[searchKey] || 0;
+    const newCount = currentCount + 1;
+    searchLog[searchKey] = newCount;
+    localStorage.setItem('rtrl_search_log', JSON.stringify(searchLog));
+    
+    const currentSearchVersion = newCount;
+
+    currentSearchParameters = {
+      category: searchCategoryKey,
+      area: searchAreaKey,
+      version: currentSearchVersion
+    };
 
     if (businessName) {
       if (!location && !postalCode) {
@@ -707,10 +734,6 @@ if (filterText) {
         `Sending request to find individual business: '${businessName}'...`,
         "info"
       );
-      currentSearchParameters = { 
-        category: businessName.replace(/[\s/]/g, '_').toLowerCase(), 
-        area: (location || postalCode).replace(/[\s/,]/g, '_').toLowerCase() 
-      };
       socket.emit("start_scrape", {
         businessName,
         location,
@@ -719,11 +742,6 @@ if (filterText) {
         count: -1,
       });
     } else {
-      let categorySearchTerm =
-        elements.primaryCategorySelect.value === "Other/Custom"
-          ? elements.customCategoryInput.value
-          : elements.subCategorySelect.value ||
-            elements.primaryCategorySelect.value;
       const countValue = parseInt(countInputVal, 10);
       const find_all =
         elements.findAllBusinessesCheckbox.checked ||
@@ -746,10 +764,6 @@ if (filterText) {
         `Sending request to server to find ${targetDisplay} '${categorySearchTerm}' businesses...`,
         "info"
       );
-       currentSearchParameters = { 
-        category: categorySearchTerm.replace(/[\s/]/g, '_').toLowerCase(), 
-        area: (location || postalCode).replace(/[\s/,]/g, '_').toLowerCase() 
-      };
       const payload = {
         category: categorySearchTerm,
         location,
