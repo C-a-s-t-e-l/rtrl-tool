@@ -264,10 +264,11 @@ function downloadExcel(data, searchParams, fileSuffix, fileType, logEl, specific
     XLSX.utils.book_append_sheet(wb, ws, "Business List");
 
     const date = new Date().toISOString().split('T')[0].replace(/-/g, '');
-    const category = (searchParams.category || 'search').replace(/[\s/]/g, '_').toLowerCase();
-    const area = (searchParams.area || 'area').replace(/[\s/]/g, '_').toLowerCase();
+    const category = searchParams.category || 'search';
+    const area = searchParams.area || 'area';
+    const versionString = (searchParams.version > 1) ? `_v${searchParams.version}` : '';
     const fileExtension = fileType === 'xlsx' ? 'xlsx' : 'csv';
-    const fullFilename = `${date}_rtrl_${category}_${area}_${fileSuffix}.${fileExtension}`;
+    const fullFilename = `${date}_rtrl_${category}_${area}_${fileSuffix}${versionString}.${fileExtension}`;
 
     XLSX.writeFile(wb, fullFilename);
     logMessage(logEl, `${data.length} records exported to '${fullFilename}' successfully!`, 'success');
