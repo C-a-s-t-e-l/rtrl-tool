@@ -29,7 +29,6 @@ if (!GOOGLE_MAPS_API_KEY) {
     process.exit(1);
 }
 
-// --- NEW: Bounding boxes for geographic filtering ---
 const countryBoundingBoxes = {
     'australia': { minLat: -44.0, maxLat: -10.0, minLng: 112.0, maxLng: 154.0 },
     'philippines': { minLat: 4.0, maxLat: 21.0, minLng: 116.0, maxLng: 127.0 },
@@ -37,19 +36,27 @@ const countryBoundingBoxes = {
     'united states': { minLat: 24.4, maxLat: 49.4, minLng: -125.0, maxLng: -66.9 }, // Contiguous US
     'united kingdom': { minLat: 49.9, maxLat: 58.7, minLng: -7.5, maxLng: 1.8 },
     'canada': { minLat: 41.6, maxLat: 83.1, minLng: -141.0, maxLng: -52.6 }
-    // Add other relevant countries here
 };
 
+// --- THIS IS THE CORRECTED FUNCTION ---
 function isUrlInBoundingBox(url, box) {
-    const match = url.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
-    if (!match) return false; // If no coords in URL, discard to be safe
+    // This robust regex looks for coordinates in two common formats:
+    // 1. In a data block, e.g., !3d-38.1465225!4d144.3629161
+    // 2. After an @ symbol, e.g., @-38.1465225,144.3629161
+    const match = url.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)|@(-?\d+\.\d+),(-?\d+\.\d+)/);
+    
+    if (!match) {
+        return false; // No coordinates found in a recognizable format.
+    }
 
-    const lat = parseFloat(match[1]);
-    const lng = parseFloat(match[2]);
+    // If the first pattern matches, lat/lng are in groups 1 and 2.
+    // If the second pattern matches, lat/lng are in groups 3 and 4.
+    const lat = parseFloat(match[1] || match[3]);
+    const lng = parseFloat(match[2] || match[4]);
 
     return lat >= box.minLat && lat <= box.maxLat && lng >= box.minLng && lng <= box.maxLng;
 }
-// --- END OF NEW CODE ---
+// --- END OF FIX ---
 
 app.use(cors());
 app.use(express.json());
@@ -117,7 +124,6 @@ io.on('connection', (socket) => {
                 
                 let newUniqueUrls = Array.from(discoveredUrlsForThisArea).filter(url => !processedUrlSet.has(url));
                 
-                // --- MODIFICATION: Apply geographic filter ---
                 const boundingBox = countryBoundingBoxes[country.toLowerCase()];
                 if (boundingBox) {
                     const originalCount = newUniqueUrls.length;
@@ -128,7 +134,6 @@ io.on('connection', (socket) => {
                         socket.emit('log', `   -> Geographic filter discarded ${removedCount} out-of-bounds listings.`);
                     }
                 }
-                // --- END OF MODIFICATION ---
                 
                 if (newUniqueUrls.length === 0) {
                     socket.emit('log', `   -> No new unique businesses found in this area. Moving to next.`);
@@ -140,7 +145,7 @@ io.on('connection', (socket) => {
 
                 socket.emit('log', `   -> Discovered ${newUniqueUrls.length} new listings. Total unique: ${totalDiscoveredUrls}. Now processing details...`);
 
-                const urlList = newUniqueUrls; // This now uses the filtered list
+                const urlList = newUniqueUrls;
 
                 for (let i = 0; i < urlList.length; i += CONCURRENCY) {
                     if (allProcessedBusinesses.length >= targetCount) break;
