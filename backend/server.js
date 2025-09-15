@@ -29,7 +29,29 @@ if (!GOOGLE_MAPS_API_KEY) {
     process.exit(1);
 }
 
-app.use(cors({ origin: FRONTEND_URL }));
+// --- NEW: Bounding boxes for geographic filtering ---
+const countryBoundingBoxes = {
+    'australia': { minLat: -44.0, maxLat: -10.0, minLng: 112.0, maxLng: 154.0 },
+    'philippines': { minLat: 4.0, maxLat: 21.0, minLng: 116.0, maxLng: 127.0 },
+    'new zealand': { minLat: -47.3, maxLat: -34.4, minLng: 166.4, maxLng: 178.6 },
+    'united states': { minLat: 24.4, maxLat: 49.4, minLng: -125.0, maxLng: -66.9 }, // Contiguous US
+    'united kingdom': { minLat: 49.9, maxLat: 58.7, minLng: -7.5, maxLng: 1.8 },
+    'canada': { minLat: 41.6, maxLat: 83.1, minLng: -141.0, maxLng: -52.6 }
+    // Add other relevant countries here
+};
+
+function isUrlInBoundingBox(url, box) {
+    const match = url.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
+    if (!match) return false; // If no coords in URL, discard to be safe
+
+    const lat = parseFloat(match[1]);
+    const lng = parseFloat(match[2]);
+
+    return lat >= box.minLat && lat <= box.maxLat && lng >= box.minLng && lng <= box.maxLng;
+}
+// --- END OF NEW CODE ---
+
+app.use(cors());
 app.use(express.json());
 
 app.get('/api/config', (req, res) => res.json({ googleMapsApiKey: GOOGLE_MAPS_API_KEY }));
@@ -93,7 +115,20 @@ io.on('connection', (socket) => {
                 const discoveredUrlsForThisArea = new Set();
                 await collectGoogleMapsUrlsContinuously(browser, query, socket, Infinity, discoveredUrlsForThisArea, country);
                 
-                const newUniqueUrls = Array.from(discoveredUrlsForThisArea).filter(url => !processedUrlSet.has(url));
+                let newUniqueUrls = Array.from(discoveredUrlsForThisArea).filter(url => !processedUrlSet.has(url));
+                
+                // --- MODIFICATION: Apply geographic filter ---
+                const boundingBox = countryBoundingBoxes[country.toLowerCase()];
+                if (boundingBox) {
+                    const originalCount = newUniqueUrls.length;
+                    socket.emit('log', `   -> Applying geographic filter for ${country}.`);
+                    newUniqueUrls = newUniqueUrls.filter(url => isUrlInBoundingBox(url, boundingBox));
+                    const removedCount = originalCount - newUniqueUrls.length;
+                    if (removedCount > 0) {
+                        socket.emit('log', `   -> Geographic filter discarded ${removedCount} out-of-bounds listings.`);
+                    }
+                }
+                // --- END OF MODIFICATION ---
                 
                 if (newUniqueUrls.length === 0) {
                     socket.emit('log', `   -> No new unique businesses found in this area. Moving to next.`);
@@ -105,7 +140,7 @@ io.on('connection', (socket) => {
 
                 socket.emit('log', `   -> Discovered ${newUniqueUrls.length} new listings. Total unique: ${totalDiscoveredUrls}. Now processing details...`);
 
-                const urlList = newUniqueUrls;
+                const urlList = newUniqueUrls; // This now uses the filtered list
 
                 for (let i = 0; i < urlList.length; i += CONCURRENCY) {
                     if (allProcessedBusinesses.length >= targetCount) break;
