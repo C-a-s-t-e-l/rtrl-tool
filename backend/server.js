@@ -82,71 +82,90 @@ io.on('connection', (socket) => {
             });
             
             const allProcessedBusinesses = [];
-            const processedUrlSet = new Set();
+            const processedUrlSet = new Set(); // Still used to prevent re-processing duplicates across areas
             
             const searchQueries = await getSearchQueriesForLocation(baseSearchQuery, areaQuery, country, socket);
             
-            for (const [index, query] of searchQueries.entries()) {
-                if (processedUrlSet.size >= targetCount && !isSearchAll) break;
-                socket.emit('log', `\n--- Scraping search area ${index + 1} of ${searchQueries.length}: "${query}" ---`);
-                await collectGoogleMapsUrlsContinuously(browser, query, socket, targetCount, processedUrlSet);
-            }
-
-            socket.emit('log', `\n-> All search areas scraped. Discovered ${processedUrlSet.size} total unique listings. Now processing details...`);
-            
+            // --- START OF THE NEW LOGIC ---
             const CONCURRENCY = 4;
-            const urlList = Array.from(processedUrlSet);
-            let totalRawUrlsAttemptedDetails = 0;
+            let totalDiscoveredUrls = 0;
 
-            for (let i = 0; i < urlList.length; i += CONCURRENCY) {
+            // This is now the main loop that interleaves discovery and processing
+            for (const [index, query] of searchQueries.entries()) {
                 if (allProcessedBusinesses.length >= targetCount) break;
-                const batch = urlList.slice(i, i + CONCURRENCY);
 
-                const promises = batch.map(async (urlToProcess) => {
-                    if (allProcessedBusinesses.length >= targetCount) return null;
+                socket.emit('log', `\n--- Scraping search area ${index + 1} of ${searchQueries.length}: "${query}" ---`);
+                
+                const discoveredUrlsForThisArea = new Set();
+                // Pass a temporary Set to the collector to only get URLs for this area
+                await collectGoogleMapsUrlsContinuously(browser, query, socket, Infinity, discoveredUrlsForThisArea);
+                
+                const newUniqueUrls = Array.from(discoveredUrlsForThisArea).filter(url => !processedUrlSet.has(url));
+                
+                if (newUniqueUrls.length === 0) {
+                    socket.emit('log', `   -> No new unique businesses found in this area. Moving to next.`);
+                    continue;
+                }
+
+                newUniqueUrls.forEach(url => processedUrlSet.add(url));
+                totalDiscoveredUrls = processedUrlSet.size;
+
+                socket.emit('log', `   -> Discovered ${newUniqueUrls.length} new listings. Total unique: ${totalDiscoveredUrls}. Now processing details...`);
+
+                const urlList = newUniqueUrls; // Process only the new URLs
+
+                for (let i = 0; i < urlList.length; i += CONCURRENCY) {
+                    if (allProcessedBusinesses.length >= targetCount) break;
+                    const batch = urlList.slice(i, i + CONCURRENCY);
+
+                    const promises = batch.map(async (urlToProcess) => {
+                        // ... [The entire 'promises' block for scraping details is IDENTICAL to the old code]
+                        // ... [No changes needed inside this inner part]
+                        if (allProcessedBusinesses.length >= targetCount) return null;
                     
-                    return promiseWithTimeout(
-                        (async () => {
-                            let detailPage;
-                            try {
-                                detailPage = await browser.newPage();
-                                await detailPage.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36');
-                                await detailPage.setRequestInterception(true);
-                                detailPage.on('request', (req) => { if (['image', 'stylesheet', 'font', 'media'].includes(req.resourceType())) req.abort(); else req.continue(); });
-                                
-                                let googleData = await scrapeGoogleMapsDetails(detailPage, urlToProcess, socket, country);
-                                if (!googleData || !googleData.BusinessName) return null;
-                                
-                                let websiteData = {};
-                                if (googleData.Website) { websiteData = await scrapeWebsiteForGoldData(detailPage, googleData.Website, socket); }
-                                
-                                const fullBusinessData = { ...googleData, ...websiteData };
-                                fullBusinessData.Category = isIndividualSearch ? (googleData.ScrapedCategory || 'N/A') : category;
-                                return fullBusinessData;
-                            } finally {
-                                if (detailPage) await detailPage.close();
-                            }
-                        })(), 
-                        120000
-                    ).catch(err => {
-                        socket.emit('log', `A task for ${urlToProcess} failed or timed out: ${err.message}. Skipping.`, 'error');
-                        return null;
+                        return promiseWithTimeout(
+                            (async () => {
+                                let detailPage;
+                                try {
+                                    detailPage = await browser.newPage();
+                                    await detailPage.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36');
+                                    await detailPage.setRequestInterception(true);
+                                    detailPage.on('request', (req) => { if (['image', 'stylesheet', 'font', 'media'].includes(req.resourceType())) req.abort(); else req.continue(); });
+                                    
+                                    let googleData = await scrapeGoogleMapsDetails(detailPage, urlToProcess, socket, country);
+                                    if (!googleData || !googleData.BusinessName) return null;
+                                    
+                                    let websiteData = {};
+                                    if (googleData.Website) { websiteData = await scrapeWebsiteForGoldData(detailPage, googleData.Website, socket); }
+                                    
+                                    const fullBusinessData = { ...googleData, ...websiteData };
+                                    fullBusinessData.Category = isIndividualSearch ? (googleData.ScrapedCategory || 'N/A') : category;
+                                    return fullBusinessData;
+                                } finally {
+                                    if (detailPage) await detailPage.close();
+                                }
+                            })(), 
+                            120000
+                        ).catch(err => {
+                            socket.emit('log', `A task for ${urlToProcess} failed or timed out: ${err.message}. Skipping.`, 'error');
+                            return null;
+                        });
                     });
-                });
 
-                const results = await Promise.all(promises);
-                results.forEach(businessData => {
-                    totalRawUrlsAttemptedDetails++;
-                    if (businessData && allProcessedBusinesses.length < targetCount) {
-                        allProcessedBusinesses.push(businessData);
-                        const status = isSearchAll 
-                            ? `(Total Added: ${allProcessedBusinesses.length})` 
-                            : `(${allProcessedBusinesses.length}/${finalCount})`;
-                        socket.emit('log', `-> ADDED: ${businessData.BusinessName}. ${status}`);
-                        socket.emit('business_found', businessData);
-                    }
-                    socket.emit('progress_update', { processed: totalRawUrlsAttemptedDetails, discovered: processedUrlSet.size, added: allProcessedBusinesses.length, target: finalCount });
-                });
+                    const results = await Promise.all(promises);
+                    results.forEach(businessData => {
+                        if (businessData && allProcessedBusinesses.length < targetCount) {
+                            allProcessedBusinesses.push(businessData);
+                            const status = isSearchAll 
+                                ? `(Total Added: ${allProcessedBusinesses.length})` 
+                                : `(${allProcessedBusinesses.length}/${finalCount})`;
+                            socket.emit('log', `-> ADDED: ${businessData.BusinessName}. ${status}`);
+                            socket.emit('business_found', businessData);
+                        }
+                        // Note: The progress bar logic might need adjustment based on this new flow
+                        socket.emit('progress_update', { processed: allProcessedBusinesses.length, discovered: totalDiscoveredUrls, added: allProcessedBusinesses.length, target: finalCount });
+                    });
+                }
             }
 
             socket.emit('log', `Scraping completed. Found and processed a total of ${allProcessedBusinesses.length} businesses.`);
@@ -215,9 +234,27 @@ async function getSearchQueriesForLocation(searchQuery, areaQuery, country, sock
 async function collectGoogleMapsUrlsContinuously(browser, searchQuery, socket, targetCount, processedUrlSet) {
     let page;
     try {
-        page = await browser.newPage();
-        await page.goto('https://www.google.com/maps', { waitUntil: 'domcontentloaded', timeout: 60000 });
+        // --- START OF THE FIX ---
+        // 1. Construct a direct search URL instead of going to the homepage.
+        let searchUrl;
+        if (searchQuery.includes(' near ')) {
+            // This handles the grid searches with coordinates
+            const parts = searchQuery.split(' near ');
+            const categoryPart = parts[0];
+            const coordsPart = parts[1];
+            searchUrl = `https://www.google.com/maps/search/${encodeURIComponent(categoryPart)}/@${coordsPart},12z`;
+        } else {
+            // This handles the initial, non-grid search
+            searchUrl = `https://www.google.com/maps/search/${encodeURIComponent(searchQuery)}`;
+        }
+
+        socket.emit('log', `   -> Navigating directly to search: ${searchQuery}`);
         
+        page = await browser.newPage();
+        // 2. Go DIRECTLY to the constructed search URL.
+        await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
+        
+        // 3. The consent dialog might still appear on the results page.
         try {
             const acceptButtonSelector = 'form[action^="https://consent.google.com"] button';
             await page.waitForSelector(acceptButtonSelector, { timeout: 10000 });
@@ -226,20 +263,10 @@ async function collectGoogleMapsUrlsContinuously(browser, searchQuery, socket, t
         } catch (e) { 
             socket.emit('log', '   -> No Google consent dialog found, proceeding.');
         }
-        
-        try {
-            socket.emit('log', '   -> Trying hardened page selectors...');
-            await page.waitForSelector('input[aria-label="Search Google Maps"]', { timeout: 15000 });
-            await page.type('input[aria-label="Search Google Maps"]', searchQuery);
-            await page.click('button[aria-label="Search"]');
-            socket.emit('log', '   -> Hardened page selectors successful.');
-        } catch (error) {
-            socket.emit('log', '   -> Hardened selectors failed. Trying friendly page selectors...');
-            await page.waitForSelector('#searchboxinput', { timeout: 15000 });
-            await page.type('#searchboxinput', searchQuery);
-            await page.click('#searchbox-searchbutton');
-            socket.emit('log', '   -> Friendly page selectors successful.');
-        }
+
+        // 4. We no longer need to type or click search, as we landed on the results page directly.
+        // The old 'try/catch' block for typing into the search bar has been removed.
+        // --- END OF THE FIX ---
 
         const feedSelector = 'div[role="feed"]';
         await page.waitForSelector(feedSelector, { timeout: 45000 });
@@ -286,9 +313,14 @@ async function scrapeGoogleMapsDetails(page, url, socket, country) {
     await page.waitForSelector('h1', {timeout: 60000});
     
     return page.evaluate((countryCode) => {
-        const cleanText = (text) => {
+const cleanText = (text) => {
             if (!text) return '';
-            return text.replace(/[\u0000-\u001F\u007F-\u009F\uFEFF\n\r]/g, '').replace(/\s+/g, ' ').trim();
+            // This is the critical part: It removes any leading characters that aren't letters, numbers, or basic whitespace.
+            // This will specifically target that leading map pin icon or any other graphical character.
+            let cleaned = String(text).replace(/^[^a-zA-Z0-9\s]+/, '');
+            
+            // Then, we perform the rest of the cleanup for newlines and extra spaces.
+            return cleaned.replace(/[\u0000-\u001F\u007F-\u009F\uFEFF\n\r]/g, '').replace(/\s+/g, ' ').trim();
         };
 
         const cleanPhoneNumber = (num, country) => {
