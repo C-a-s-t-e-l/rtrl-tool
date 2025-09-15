@@ -214,12 +214,22 @@ io.on('connection', (socket) => {
 
 async function getSearchQueriesForLocation(searchQuery, areaQuery, country, socket) {
     socket.emit('log', `   -> Geocoding "${areaQuery}, ${country}" to determine search area...`);
+
+    // --- NEW: Check if the user entered a postcode directly ---
+    // This regex is for a typical 4-digit Australian postcode.
+    const isPostcodeSearch = /^\d{4}$/.test(areaQuery.trim());
+    if (isPostcodeSearch) {
+        socket.emit('log', `   -> Postcode search detected. Forcing a single, specific search.`);
+        return [searchQuery];
+    }
+    // --- END OF NEW CODE ---
+
     try {
         const geocodeUrl = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(`${areaQuery}, ${country}`)}&key=${GOOGLE_MAPS_API_KEY}`;
         const response = await axios.get(geocodeUrl);
         
         if (response.data.status !== 'OK') {
-            socket.emit('log', `   -> Geocoding failed with status: ${response.data.status}. Using a single search.`, 'error');
+            socket.emit('log', `   -> Geocoding failed: ${response.data.status}. Using a single search.`, 'error');
             if (response.data.error_message) {
                 socket.emit('log', `   -> Google's reason: ${response.data.error_message}`, 'error');
             }
@@ -228,20 +238,33 @@ async function getSearchQueriesForLocation(searchQuery, areaQuery, country, sock
 
         const { results } = response.data;
         const location = results[0];
+
+        // --- NEW: Check if the result is a specific postcode area ---
+        const isPostcodeResult = location.types.includes('postal_code');
+        if (isPostcodeResult) {
+            socket.emit('log', `   -> Search term resolved to a specific postcode. Forcing a single search.`);
+            return [searchQuery];
+        }
+        // --- END OF NEW CODE ---
+
         const { northeast, southwest } = location.geometry.viewport;
         const lat_dist = northeast.lat - southwest.lat;
         const lng_dist = northeast.lng - southwest.lng;
         const diagonal_dist = Math.sqrt(lat_dist*lat_dist + lng_dist*lng_dist);
 
-        if (diagonal_dist < 0.05) {
-            socket.emit('log', `   -> Location is specific. Using a single search for "${areaQuery}".`);
+        // --- MODIFICATION: Tightened threshold for grid generation ---
+        // The old value was 0.05. A larger value like 0.2 covers a typical large suburb
+        // but prevents a huge metropolitan area like "Melbourne" from being gridded.
+        if (diagonal_dist < 0.2) {
+            socket.emit('log', `   -> Location is specific enough. Using a single search for "${areaQuery}".`);
             return [searchQuery];
         }
+        // --- END OF MODIFICATION ---
 
         const GRID_SIZE = 5;
         const searchQueries = [];
         const categoryPart = searchQuery.split(' in ')[0];
-        socket.emit('log', `   -> Location is large. Generating a ${GRID_SIZE}x${GRID_SIZE} search grid.`);
+        socket.emit('log', `   -> Location is a large region. Generating a ${GRID_SIZE}x${GRID_SIZE} search grid.`);
 
         for (let i = 0; i < GRID_SIZE; i++) {
             for (let j = 0; j < GRID_SIZE; j++) {
@@ -256,7 +279,7 @@ async function getSearchQueriesForLocation(searchQuery, areaQuery, country, sock
         return searchQueries;
 
     } catch (error) {
-        socket.emit('log', `   -> Geocoding API call itself failed: ${error.message}. Defaulting to single search.`, 'error');
+        socket.emit('log', `   -> Geocoding API call failed: ${error.message}. Defaulting to single search.`, 'error');
         return [searchQuery];
     }
 }
