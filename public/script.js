@@ -215,6 +215,7 @@ function initializeMainApp() {
     { value: "JP", text: "Japan" },
     { value: "SG", text: "Singapore" },
     { value: "HK", text: "Hong Kong" },
+    { value: "PH", text: "Philippines" },
   ];
 
   function initializeApp() {

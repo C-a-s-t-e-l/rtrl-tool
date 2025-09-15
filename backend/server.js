@@ -91,7 +91,7 @@ io.on('connection', (socket) => {
                 socket.emit('log', `\n--- Scraping search area ${index + 1} of ${searchQueries.length}: "${query}" ---`);
                 
                 const discoveredUrlsForThisArea = new Set();
-                await collectGoogleMapsUrlsContinuously(browser, query, socket, Infinity, discoveredUrlsForThisArea);
+                await collectGoogleMapsUrlsContinuously(browser, query, socket, Infinity, discoveredUrlsForThisArea, country);
                 
                 const newUniqueUrls = Array.from(discoveredUrlsForThisArea).filter(url => !processedUrlSet.has(url));
                 
@@ -221,17 +221,36 @@ async function getSearchQueriesForLocation(searchQuery, areaQuery, country, sock
     }
 }
 
-async function collectGoogleMapsUrlsContinuously(browser, searchQuery, socket, targetCount, processedUrlSet) {
+async function collectGoogleMapsUrlsContinuously(browser, searchQuery, socket, targetCount, processedUrlSet, country) {
     let page;
     try {
+        const countryNameToCode = {
+            'australia': 'AU',
+            'new zealand': 'NZ',
+            'united states': 'US',
+            'united kingdom': 'GB',
+            'canada': 'CA',
+            'germany': 'DE',
+            'france': 'FR',
+            'spain': 'ES',
+            'italy': 'IT',
+            'japan': 'JP',
+            'singapore': 'SG',
+            'hong kong': 'HK',
+            'philippines': 'PH'
+        };
+
+        const countryCode = countryNameToCode[country.toLowerCase()];
+        const countryParam = countryCode ? `?cr=country${countryCode}` : '';
+
         let searchUrl;
         if (searchQuery.includes(' near ')) {
             const parts = searchQuery.split(' near ');
             const categoryPart = parts[0];
             const coordsPart = parts[1];
-            searchUrl = `https://www.google.com/maps/search/${encodeURIComponent(categoryPart)}/@${coordsPart},12z`;
+            searchUrl = `https://www.google.com/maps/search/${encodeURIComponent(categoryPart)}/@${coordsPart},12z${countryParam}`;
         } else {
-            searchUrl = `https://www.google.com/maps/search/${encodeURIComponent(searchQuery)}`;
+            searchUrl = `https://www.google.com/maps/search/${encodeURIComponent(searchQuery)}${countryParam}`;
         }
 
         socket.emit('log', `   -> Navigating directly to search: ${searchQuery}`);
