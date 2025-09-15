@@ -29,7 +29,7 @@ if (!GOOGLE_MAPS_API_KEY) {
     process.exit(1);
 }
 
-app.use(cors());
+app.use(cors({ origin: FRONTEND_URL }));
 app.use(express.json());
 
 app.get('/api/config', (req, res) => res.json({ googleMapsApiKey: GOOGLE_MAPS_API_KEY }));
