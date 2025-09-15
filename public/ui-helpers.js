@@ -230,7 +230,7 @@ function getColumnWidths(data, headers) {
     return widths.map(w => ({ wch: Math.max(w.wch, 10) }));
 }
 
-function downloadExcel(data, filenamePrefix, fileType, logEl, specificHeaders = null) {
+function downloadExcel(data, searchParams, fileSuffix, fileType, logEl, specificHeaders = null) {
     if (data.length === 0) {
         logMessage(logEl, 'No data to download for this format!', 'error');
         return;
@@ -263,8 +263,11 @@ function downloadExcel(data, filenamePrefix, fileType, logEl, specificHeaders = 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Business List");
 
+    const date = new Date().toISOString().split('T')[0].replace(/-/g, '');
+    const category = (searchParams.category || 'search').replace(/[\s/]/g, '_').toLowerCase();
+    const area = (searchParams.area || 'area').replace(/[\s/]/g, '_').toLowerCase();
     const fileExtension = fileType === 'xlsx' ? 'xlsx' : 'csv';
-    const fullFilename = `${filenamePrefix}_${new Date().toISOString().split('T')[0]}.${fileExtension}`;
+    const fullFilename = `${date}_rtrl_${category}_${area}_${fileSuffix}.${fileExtension}`;
 
     XLSX.writeFile(wb, fullFilename);
     logMessage(logEl, `${data.length} records exported to '${fullFilename}' successfully!`, 'success');

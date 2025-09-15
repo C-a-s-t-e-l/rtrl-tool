@@ -32,11 +32,8 @@ if (!GOOGLE_MAPS_API_KEY) {
 app.use(cors());
 app.use(express.json());
 
-// --- THIS IS THE CRITICAL FIX: ROUTE ORDER ---
-// 1. Define specific API routes FIRST.
 app.get('/api/config', (req, res) => res.json({ googleMapsApiKey: GOOGLE_MAPS_API_KEY }));
 
-// 2. THEN, serve the static files and the catch-all HTML route.
 const containerPublicPath = path.join(__dirname, '..', 'public');
 app.use(express.static(containerPublicPath, { index: false }));
 app.get(/(.*)/, (req, res) => {
@@ -49,7 +46,6 @@ app.get(/(.*)/, (req, res) => {
         res.send(data.replace(PLACEHOLDER_KEY, GOOGLE_MAPS_API_KEY));
     });
 });
-// --- END OF FIX ---
 
 io.on('connection', (socket) => {
     console.log(`Client connected: ${socket.id}`);
@@ -82,22 +78,19 @@ io.on('connection', (socket) => {
             });
             
             const allProcessedBusinesses = [];
-            const processedUrlSet = new Set(); // Still used to prevent re-processing duplicates across areas
+            const processedUrlSet = new Set();
             
             const searchQueries = await getSearchQueriesForLocation(baseSearchQuery, areaQuery, country, socket);
             
-            // --- START OF THE NEW LOGIC ---
             const CONCURRENCY = 4;
             let totalDiscoveredUrls = 0;
 
-            // This is now the main loop that interleaves discovery and processing
             for (const [index, query] of searchQueries.entries()) {
                 if (allProcessedBusinesses.length >= targetCount) break;
 
                 socket.emit('log', `\n--- Scraping search area ${index + 1} of ${searchQueries.length}: "${query}" ---`);
                 
                 const discoveredUrlsForThisArea = new Set();
-                // Pass a temporary Set to the collector to only get URLs for this area
                 await collectGoogleMapsUrlsContinuously(browser, query, socket, Infinity, discoveredUrlsForThisArea);
                 
                 const newUniqueUrls = Array.from(discoveredUrlsForThisArea).filter(url => !processedUrlSet.has(url));
@@ -112,15 +105,13 @@ io.on('connection', (socket) => {
 
                 socket.emit('log', `   -> Discovered ${newUniqueUrls.length} new listings. Total unique: ${totalDiscoveredUrls}. Now processing details...`);
 
-                const urlList = newUniqueUrls; // Process only the new URLs
+                const urlList = newUniqueUrls;
 
                 for (let i = 0; i < urlList.length; i += CONCURRENCY) {
                     if (allProcessedBusinesses.length >= targetCount) break;
                     const batch = urlList.slice(i, i + CONCURRENCY);
 
                     const promises = batch.map(async (urlToProcess) => {
-                        // ... [The entire 'promises' block for scraping details is IDENTICAL to the old code]
-                        // ... [No changes needed inside this inner part]
                         if (allProcessedBusinesses.length >= targetCount) return null;
                     
                         return promiseWithTimeout(
@@ -162,7 +153,6 @@ io.on('connection', (socket) => {
                             socket.emit('log', `-> ADDED: ${businessData.BusinessName}. ${status}`);
                             socket.emit('business_found', businessData);
                         }
-                        // Note: The progress bar logic might need adjustment based on this new flow
                         socket.emit('progress_update', { processed: allProcessedBusinesses.length, discovered: totalDiscoveredUrls, added: allProcessedBusinesses.length, target: finalCount });
                     });
                 }
@@ -234,27 +224,21 @@ async function getSearchQueriesForLocation(searchQuery, areaQuery, country, sock
 async function collectGoogleMapsUrlsContinuously(browser, searchQuery, socket, targetCount, processedUrlSet) {
     let page;
     try {
-        // --- START OF THE FIX ---
-        // 1. Construct a direct search URL instead of going to the homepage.
         let searchUrl;
         if (searchQuery.includes(' near ')) {
-            // This handles the grid searches with coordinates
             const parts = searchQuery.split(' near ');
             const categoryPart = parts[0];
             const coordsPart = parts[1];
             searchUrl = `https://www.google.com/maps/search/${encodeURIComponent(categoryPart)}/@${coordsPart},12z`;
         } else {
-            // This handles the initial, non-grid search
             searchUrl = `https://www.google.com/maps/search/${encodeURIComponent(searchQuery)}`;
         }
 
         socket.emit('log', `   -> Navigating directly to search: ${searchQuery}`);
         
         page = await browser.newPage();
-        // 2. Go DIRECTLY to the constructed search URL.
         await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
         
-        // 3. The consent dialog might still appear on the results page.
         try {
             const acceptButtonSelector = 'form[action^="https://consent.google.com"] button';
             await page.waitForSelector(acceptButtonSelector, { timeout: 10000 });
@@ -263,10 +247,6 @@ async function collectGoogleMapsUrlsContinuously(browser, searchQuery, socket, t
         } catch (e) { 
             socket.emit('log', '   -> No Google consent dialog found, proceeding.');
         }
-
-        // 4. We no longer need to type or click search, as we landed on the results page directly.
-        // The old 'try/catch' block for typing into the search bar has been removed.
-        // --- END OF THE FIX ---
 
         const feedSelector = 'div[role="feed"]';
         await page.waitForSelector(feedSelector, { timeout: 45000 });
@@ -313,13 +293,9 @@ async function scrapeGoogleMapsDetails(page, url, socket, country) {
     await page.waitForSelector('h1', {timeout: 60000});
     
     return page.evaluate((countryCode) => {
-const cleanText = (text) => {
+        const cleanText = (text) => {
             if (!text) return '';
-            // This is the critical part: It removes any leading characters that aren't letters, numbers, or basic whitespace.
-            // This will specifically target that leading map pin icon or any other graphical character.
             let cleaned = String(text).replace(/^[^a-zA-Z0-9\s]+/, '');
-            
-            // Then, we perform the rest of the cleanup for newlines and extra spaces.
             return cleaned.replace(/[\u0000-\u001F\u007F-\u009F\uFEFF\n\r]/g, '').replace(/\s+/g, ' ').trim();
         };
 
@@ -332,14 +308,28 @@ const cleanText = (text) => {
             }
             return cleaned.startsWith('+') ? cleaned.substring(1) : cleaned; 
         };
-        return {
+        
+        const data = {
             BusinessName: cleanText(document.querySelector('h1')?.innerText),
             ScrapedCategory: cleanText(document.querySelector('[jsaction*="category"]')?.innerText),
             StreetAddress: cleanText(document.querySelector('button[data-item-id="address"]')?.innerText),
             Website: document.querySelector('a[data-item-id="authority"]')?.href || '',
             Phone: cleanPhoneNumber(document.querySelector('button[data-item-id*="phone"]')?.innerText, countryCode),
             GoogleMapsURL: window.location.href,
+            Suburb: ''
         };
+
+        if (data.StreetAddress) {
+            const parts = data.StreetAddress.split(',');
+            if (parts.length >= 3) {
+                const suburbPart = parts[parts.length - 2].trim();
+                const suburb = suburbPart.replace(/\s[A-Z]{2,3}\s\d{4,}/, '').trim();
+                data.Suburb = suburb;
+            } else if (parts.length === 2) {
+                data.Suburb = parts[0].trim();
+            }
+        }
+        return data;
     }, country);
 }
 
@@ -391,5 +381,4 @@ function promiseWithTimeout(promise, ms) {
 
 server.listen(PORT, () => {
     console.log(`Scraping server running on http://localhost:${PORT}`);
-    //test60
 });

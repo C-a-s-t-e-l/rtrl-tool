@@ -1,5 +1,4 @@
-
-const BACKEND_URL = 'https://brieflessly-unlovely-constance.ngrok-free.app';
+const BACKEND_URL = "https://brieflessly-unlovely-constance.ngrok-free.app"; 
 function initializeMainApp() {
   async function loadGoogleMaps() {
     try {
@@ -71,7 +70,8 @@ function initializeMainApp() {
     geocoder,
     locationAutocompleteTimer,
     postalCodeAutocompleteTimer,
-    countryAutocompleteTimer;
+    countryAutocompleteTimer,
+    currentSearchParameters = {};
   let currentSort = { key: "BusinessName", direction: "asc" };
   const categories = {
     "Select Category": [],
@@ -479,7 +479,8 @@ if (filterText) {
       const selectedData = getSelectedData();
       downloadExcel(
         selectedData,
-        "rtrl_full_prospect_list",
+        currentSearchParameters,
+        "full",
         "xlsx",
         elements.logEl
       );
@@ -487,8 +488,9 @@ if (filterText) {
     elements.downloadNotifyreCSVButton.addEventListener("click", () => {
       const selectedData = getSelectedData();
       downloadExcel(
-        selectedData.filter((d) => d.Phone),
-        "notifyre_sms_list",
+        selectedData.filter(d => d.Phone && d.Phone.startsWith('614')),
+        currentSearchParameters,
+        "notifyre_sms",
         "csv",
         elements.logEl,
         [
@@ -505,7 +507,8 @@ if (filterText) {
       const selectedData = getSelectedData();
       downloadExcel(
         selectedData.filter((d) => d.Email),
-        "google_workspace_email_list",
+        currentSearchParameters,
+        "google_workspace_email",
         "csv",
         elements.logEl,
         [
@@ -632,7 +635,7 @@ if (filterText) {
     const newBusiness = {
       OwnerName: "",
       ...business,
-      SuburbArea: elements.locationInput.value.split(",")[0].trim(),
+      SuburbArea: business.Suburb || elements.locationInput.value.split(",")[0].trim(),
       LastVerifiedDate: new Date().toISOString().split("T")[0],
     };
 
@@ -704,6 +707,10 @@ if (filterText) {
         `Sending request to find individual business: '${businessName}'...`,
         "info"
       );
+      currentSearchParameters = { 
+        category: businessName.replace(/[\s/]/g, '_').toLowerCase(), 
+        area: (location || postalCode).replace(/[\s/,]/g, '_').toLowerCase() 
+      };
       socket.emit("start_scrape", {
         businessName,
         location,
@@ -739,6 +746,10 @@ if (filterText) {
         `Sending request to server to find ${targetDisplay} '${categorySearchTerm}' businesses...`,
         "info"
       );
+       currentSearchParameters = { 
+        category: categorySearchTerm.replace(/[\s/]/g, '_').toLowerCase(), 
+        area: (location || postalCode).replace(/[\s/,]/g, '_').toLowerCase() 
+      };
       const payload = {
         category: categorySearchTerm,
         location,
