@@ -35,7 +35,6 @@ body {
 .app-container {
   max-width: 1400px;
   margin: 0 auto;
-  /* CHANGED: Swapped margin-top for padding-top for better consistency */
   padding: 2rem;
 }
 
@@ -70,10 +69,8 @@ header {
   margin: 0;
 }
 
-/* --- MAJOR RESPONSIVENESS FIX --- */
 .main-layout {
   display: grid;
-  /* Use a more flexible grid that can wrap */
   grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
   gap: 2rem;
 }
@@ -171,7 +168,6 @@ header {
   display: flex;
   flex-direction: column;
   gap: 2rem;
-  /* ADDED: ensures it doesn't cause overflow */
   min-width: 0;
 }
 .research-progress label {
@@ -206,7 +202,6 @@ header {
   white-space: nowrap;
 }
 
-/* --- RESPONSIVENESS FIX --- */
 .log-console {
   background-color: var(--log-bg);
   color: var(--log-text);
@@ -218,7 +213,6 @@ header {
   font-size: 0.85rem;
   white-space: pre-wrap;
   line-height: 1.5;
-  /* CHANGED: removed fixed max-width */
   max-width: 100%;
 }
 .log-entry {
@@ -234,13 +228,11 @@ header {
   color: #6cb6f5;
 }
 
-/* --- RESPONSIVENESS FIX --- */
 .collected-data {
   display: flex;
   flex-direction: column;
   flex-grow: 1;
   min-height: 0;
-  /* CHANGED: removed fixed max-width and added width 100% */
   max-width: 100%;
   width: 100%;
   overflow: hidden;
@@ -511,25 +503,18 @@ footer {
 }
 
 
-/* --- RESPONSIVENESS MEDIA QUERIES --- */
-
-/* For smaller laptops and tablets */
 @media (max-width: 1200px) {
   .app-container {
       padding: 1.5rem;
   }
 }
 
-/* DELETED: The new main-layout grid handles stacking automatically, so the 992px breakpoint is no longer needed for that. */
 
-/* For mobile devices */
 @media (max-width: 576px) {
   .app-container {
-      /* CHANGED: reduce padding instead of removing it */
       padding: 1rem;
   }
   .card {
-    /* Optional: make cards go edge-to-edge on mobile */
     margin: 0 -1rem;
   }
   header {
