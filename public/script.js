@@ -1,4 +1,4 @@
-const BACKEND_URL = "https://a6991accaff7.ngrok-free.app"; 
+const BACKEND_URL = "https://brieflessly-unlovely-constance.ngrok-free.app"; 
 function initializeMainApp() {
   async function loadGoogleMaps() {
     try {
