@@ -77,7 +77,8 @@ app.get(/(.*)/, (req, res) => {
 });
 
 io.on('connection', (socket) => {
-    console.log(`Client connected: ${socket.id}`);
+    console.log(`Client connected: ${socket.id} at ${new Date().toLocaleTimeString()}`);
+
     socket.emit('log', `[Server] Connected to Real-time Scraper.`);
 
     socket.on('start_scrape', async ({ category, location, postalCode, country, count, businessName }) => {
