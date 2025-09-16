@@ -48,7 +48,6 @@ function initializeMainApp() {
     locationSuggestionsEl: document.getElementById("locationSuggestions"),
     postalCodeInput: document.getElementById("postalCodeInput"),
     postalCodeContainer: document.getElementById("postalCodeContainer"),
-    postalCodeSuggestionsEl: document.getElementById("postalCodeSuggestions"),
     countryInput: document.getElementById("countryInput"),
     countrySuggestionsEl: document.getElementById("countrySuggestions"),
     countInput: document.getElementById("count"),
@@ -253,45 +252,6 @@ function initializeMainApp() {
     loadGoogleMaps();
   }
 
-  async function getPlaceDetails(placeId) {
-    return new Promise((resolve, reject) => {
-      if (!geocoder)
-        return reject(new Error("Geocoder service not initialized."));
-      geocoder.geocode({ placeId }, (results, status) => {
-        if (status === google.maps.GeocoderStatus.OK && results[0])
-          resolve(results[0]);
-        else reject(new Error(`Geocoder failed with status: ${status}`));
-      });
-    });
-  }
-  async function populateFieldsFromPlaceDetails(details, source = "") {
-    const components = {};
-    details.address_components.forEach((component) => {
-      components[component.types[0]] = {
-        long_name: component.long_name,
-        short_name: component.short_name,
-      };
-    });
-    const suburbName =
-      (
-        components.locality ||
-        components.sublocality_level_1 ||
-        components.administrative_area_level_2 ||
-        {}
-      ).long_name || details.formatted_address.split(",")[0];
-    const stateName = (components.administrative_area_level_1 || {}).short_name;
-    const postalCode = (components.postal_code || {}).long_name || "";
-    const countryName = (components.country || {}).long_name || "";
-
-    elements.locationInput.value = [suburbName, stateName]
-      .filter(Boolean)
-      .join(", ");
-    elements.countryInput.value = countryName;
-    if (source !== "location" && postalCode) {
-        addTag(postalCode);
-    }
-  }
-
   function renderTable() {
     elements.resultsTableBody.innerHTML = "";
     if (displayedData.length > 0) {
@@ -343,16 +303,81 @@ if (filterText) {
     });
   }
 
+    async function validateAndAddTag(postcode) {
+        const cleanedValue = postcode.trim();
+        if (!cleanedValue || isNaN(cleanedValue) || postalCodes.includes(cleanedValue)) {
+            return;
+        }
+
+        const countryName = elements.countryInput.value.trim();
+        const countryIsoCode = countries.find(c => c.text.toLowerCase() === countryName.toLowerCase())?.value;
+        if (!countryIsoCode) {
+            logMessage(elements.logEl, "Please select a country before adding a postcode.", "error");
+            triggerTagError();
+            return;
+        }
+
+        if (!geocoder) {
+            logMessage(elements.logEl, "Geocoder not ready. Please wait a moment.", "error");
+            triggerTagError();
+            return;
+        }
+
+        try {
+            const request = {
+                componentRestrictions: {
+                    country: countryIsoCode,
+                    postalCode: cleanedValue
+                }
+            };
+            geocoder.geocode(request, (results, status) => {
+                if (status === google.maps.GeocoderStatus.OK && results[0]) {
+                    const result = results[0];
+                    const components = result.address_components;
+                    const suburbComponent = components.find(c => c.types.includes('locality'));
+                    const postcodeComponent = components.find(c => c.types.includes('postal_code'));
+
+                    if (postcodeComponent && postcodeComponent.long_name === cleanedValue) {
+                        const suburbName = suburbComponent ? suburbComponent.long_name : '';
+                        addTagElement(cleanedValue, suburbName);
+                        elements.postalCodeInput.value = '';
+                    } else {
+                        triggerTagError();
+                    }
+                } else {
+                    triggerTagError();
+                }
+            });
+        } catch (error) {
+            triggerTagError();
+        }
+    }
+
+    function triggerTagError() {
+        elements.postalCodeContainer.classList.add('error');
+        setTimeout(() => {
+            elements.postalCodeContainer.classList.remove('error');
+        }, 500);
+    }
+    
+    function addTagElement(postcode, suburb = '') {
+        postalCodes.push(postcode);
+        const tagText = suburb ? `${suburb} ${postcode}` : postcode;
+        const tagEl = document.createElement('span');
+        tagEl.className = 'tag';
+        tagEl.innerHTML = `<span>${tagText}</span> <span class="tag-close-btn" data-value="${postcode}">&times;</span>`;
+        elements.postalCodeContainer.insertBefore(tagEl, elements.postalCodeInput);
+    }
+
     function setupTagInput() {
         elements.postalCodeContainer.addEventListener('click', (e) => {
             if (e.target.classList.contains('tag-close-btn')) {
-                const tagEl = e.target.parentElement;
-                const value = tagEl.firstChild.textContent.trim();
-                const index = postalCodes.indexOf(value);
+                const postcode = e.target.dataset.value;
+                const index = postalCodes.indexOf(postcode);
                 if (index > -1) {
                     postalCodes.splice(index, 1);
                 }
-                tagEl.remove();
+                e.target.parentElement.remove();
             } else {
                 elements.postalCodeInput.focus();
             }
@@ -363,15 +388,16 @@ if (filterText) {
                 e.preventDefault();
                 const value = elements.postalCodeInput.value.trim();
                 if (value) {
-                    addTag(value);
+                    validateAndAddTag(value);
                 }
                 elements.postalCodeInput.value = '';
             } else if (e.key === 'Backspace' && elements.postalCodeInput.value === '') {
                 if (postalCodes.length > 0) {
                     const lastTag = elements.postalCodeContainer.querySelector('.tag:last-of-type');
                     if (lastTag) {
-                         const value = lastTag.firstChild.textContent.trim();
-                         const index = postalCodes.indexOf(value);
+                         const closeBtn = lastTag.querySelector('.tag-close-btn');
+                         const postcode = closeBtn.dataset.value;
+                         const index = postalCodes.indexOf(postcode);
                          if (index > -1) {
                              postalCodes.splice(index, 1);
                          }
@@ -380,19 +406,6 @@ if (filterText) {
                 }
             }
         });
-    }
-    
-    function addTag(value) {
-        const cleanedValue = value.trim();
-        if (!cleanedValue || isNaN(cleanedValue) || postalCodes.includes(cleanedValue)) {
-            return;
-        }
-        postalCodes.push(cleanedValue);
-
-        const tagEl = document.createElement('span');
-        tagEl.className = 'tag';
-        tagEl.innerHTML = `${cleanedValue} <span class="tag-close-btn">&times;</span>`;
-        elements.postalCodeContainer.insertBefore(tagEl, elements.postalCodeInput);
     }
 
   function setupEventListeners() {
@@ -438,7 +451,12 @@ if (filterText) {
     const handleLocationSelection = async (item) => {
       try {
         const details = await getPlaceDetails(item.place_id);
-        await populateFieldsFromPlaceDetails(details, "location");
+        const postalCodeComponent = details.address_components.find(c => c.types.includes('postal_code'));
+        if (postalCodeComponent) {
+            validateAndAddTag(postalCodeComponent.long_name);
+        }
+        elements.locationInput.value = item.description;
+
       } catch (error) {
         console.error("Could not get place details:", error);
         elements.locationInput.value = item.description.split(",")[0];
