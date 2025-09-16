@@ -16,7 +16,7 @@
                 window.rtrlApp.initializeMapServices();
             }
         };
-    </script>
+    </script>->
 </head>
 <body>
     <div class="app-container">
@@ -58,8 +58,11 @@
                             <div id="locationSuggestions" class="autocomplete-suggestions"></div>
                         </div>
                         <div class="form-group">
-                            <label for="postalCodeInput"><i class="fas fa-hashtag"></i> Postal Code</label>
-                            <input type="text" id="postalCodeInput" placeholder="e.g. 3000" autocomplete="off">
+                            <label for="postalCodeInput"><i class="fas fa-hashtag"></i> Postal Code(s)</label>
+                            <div id="postalCodeContainer" class="tag-container">
+                                <!-- Tags will be dynamically inserted here -->
+                                <input type="text" id="postalCodeInput" placeholder="Enter postcodes...">
+                            </div>
                             <div id="postalCodeSuggestions" class="autocomplete-suggestions"></div>
                         </div>
                     </div>

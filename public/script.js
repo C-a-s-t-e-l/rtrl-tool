@@ -47,6 +47,7 @@ function initializeMainApp() {
     locationInput: document.getElementById("locationInput"),
     locationSuggestionsEl: document.getElementById("locationSuggestions"),
     postalCodeInput: document.getElementById("postalCodeInput"),
+    postalCodeContainer: document.getElementById("postalCodeContainer"),
     postalCodeSuggestionsEl: document.getElementById("postalCodeSuggestions"),
     countryInput: document.getElementById("countryInput"),
     countrySuggestionsEl: document.getElementById("countrySuggestions"),
@@ -69,9 +70,9 @@ function initializeMainApp() {
     service,
     geocoder,
     locationAutocompleteTimer,
-    postalCodeAutocompleteTimer,
     countryAutocompleteTimer,
-    currentSearchParameters = {};
+    currentSearchParameters = {},
+    postalCodes = [];
   let currentSort = { key: "BusinessName", direction: "asc" };
   const categories = {
     "Select Category": [],
@@ -215,7 +216,6 @@ function initializeMainApp() {
     { value: "JP", text: "Japan" },
     { value: "SG", text: "Singapore" },
     { value: "HK", text: "Hong Kong" },
-    { value: "PH", text: "Philippines" },
   ];
 
   function initializeApp() {
@@ -287,8 +287,8 @@ function initializeMainApp() {
       .filter(Boolean)
       .join(", ");
     elements.countryInput.value = countryName;
-    if (source !== "location") {
-      elements.postalCodeInput.value = postalCode;
+    if (source !== "location" && postalCode) {
+        addTag(postalCode);
     }
   }
 
@@ -343,7 +343,60 @@ if (filterText) {
     });
   }
 
+    function setupTagInput() {
+        elements.postalCodeContainer.addEventListener('click', (e) => {
+            if (e.target.classList.contains('tag-close-btn')) {
+                const tagEl = e.target.parentElement;
+                const value = tagEl.firstChild.textContent.trim();
+                const index = postalCodes.indexOf(value);
+                if (index > -1) {
+                    postalCodes.splice(index, 1);
+                }
+                tagEl.remove();
+            } else {
+                elements.postalCodeInput.focus();
+            }
+        });
+
+        elements.postalCodeInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ',') {
+                e.preventDefault();
+                const value = elements.postalCodeInput.value.trim();
+                if (value) {
+                    addTag(value);
+                }
+                elements.postalCodeInput.value = '';
+            } else if (e.key === 'Backspace' && elements.postalCodeInput.value === '') {
+                if (postalCodes.length > 0) {
+                    const lastTag = elements.postalCodeContainer.querySelector('.tag:last-of-type');
+                    if (lastTag) {
+                         const value = lastTag.firstChild.textContent.trim();
+                         const index = postalCodes.indexOf(value);
+                         if (index > -1) {
+                             postalCodes.splice(index, 1);
+                         }
+                         lastTag.remove();
+                    }
+                }
+            }
+        });
+    }
+    
+    function addTag(value) {
+        const cleanedValue = value.trim();
+        if (!cleanedValue || isNaN(cleanedValue) || postalCodes.includes(cleanedValue)) {
+            return;
+        }
+        postalCodes.push(cleanedValue);
+
+        const tagEl = document.createElement('span');
+        tagEl.className = 'tag';
+        tagEl.innerHTML = `${cleanedValue} <span class="tag-close-btn">&times;</span>`;
+        elements.postalCodeContainer.insertBefore(tagEl, elements.postalCodeInput);
+    }
+
   function setupEventListeners() {
+    setupTagInput();
     elements.primaryCategorySelect.addEventListener("change", (event) => {
       handleCategoryChange(
         event.target.value,
@@ -391,15 +444,7 @@ if (filterText) {
         elements.locationInput.value = item.description.split(",")[0];
       }
     };
-    const handlePostalCodeSelection = async (item) => {
-      try {
-        const details = await getPlaceDetails(item.place_id);
-        await populateFieldsFromPlaceDetails(details, "postalCode");
-      } catch (error) {
-        console.error("Could not get place details:", error);
-      }
-    };
-
+    
     elements.locationInput.addEventListener("input", () => {
       clearTimeout(locationAutocompleteTimer);
       locationAutocompleteTimer = setTimeout(
@@ -413,25 +458,10 @@ if (filterText) {
         300
       );
     });
-    elements.postalCodeInput.addEventListener("input", () => {
-      clearTimeout(postalCodeAutocompleteTimer);
-      postalCodeAutocompleteTimer = setTimeout(
-        () =>
-          fetchPlaceSuggestions(
-            elements.postalCodeInput,
-            elements.postalCodeSuggestionsEl,
-            ["(regions)"],
-            handlePostalCodeSelection
-          ),
-        300
-      );
-    });
-
+    
     document.addEventListener("click", (event) => {
       if (!elements.locationInput.contains(event.target))
         elements.locationSuggestionsEl.style.display = "none";
-      if (!elements.postalCodeInput.contains(event.target))
-        elements.postalCodeSuggestionsEl.style.display = "none";
       if (!elements.countryInput.contains(event.target))
         elements.countrySuggestionsEl.style.display = "none";
     });
@@ -689,7 +719,6 @@ if (filterText) {
 
     const businessName = elements.businessNameInput.value.trim();
     const location = elements.locationInput.value.trim();
-    const postalCode = elements.postalCodeInput.value.trim();
     const country = elements.countryInput.value;
     const countInputVal = elements.countInput.value.trim();
     
@@ -698,7 +727,7 @@ if (filterText) {
         : elements.subCategorySelect.value || elements.primaryCategorySelect.value;
     
     const searchCategoryKey = (businessName || categorySearchTerm).replace(/[\s/]/g, '_').toLowerCase();
-    const searchAreaKey = (postalCode || location).split(',')[0].replace(/[\s/,]/g, '_').toLowerCase();
+    const searchAreaKey = (postalCodes.length > 0 ? postalCodes.join('_') : location.split(',')[0].replace(/[\s/,]/g, '_')).toLowerCase();
     const searchDate = new Date().toISOString().split('T')[0];
     const searchKey = `${searchDate}-${searchCategoryKey}-${searchAreaKey}`;
 
@@ -721,10 +750,10 @@ if (filterText) {
     };
 
     if (businessName) {
-      if (!location && !postalCode) {
+      if (!location && postalCodes.length === 0) {
         logMessage(
           elements.logEl,
-          `Input Error: Please provide a location/postal code for the individual business search.`,
+          `Input Error: Please provide a location or postal code for the individual business search.`,
           "error"
         );
         handleScrapeError({ error: "Invalid input" });
@@ -738,7 +767,7 @@ if (filterText) {
       socket.emit("start_scrape", {
         businessName,
         location,
-        postalCode,
+        postalCode: postalCodes,
         country,
         count: -1,
       });
@@ -750,7 +779,7 @@ if (filterText) {
         countValue <= 0;
       const count = find_all ? -1 : countValue;
 
-      if (!categorySearchTerm || (!location && !postalCode) || !country) {
+      if (!categorySearchTerm || (!location && postalCodes.length === 0) || !country) {
         logMessage(
           elements.logEl,
           `Input Error: Please provide a category, location/postal code, and country for bulk search.`,
@@ -768,7 +797,7 @@ if (filterText) {
       const payload = {
         category: categorySearchTerm,
         location,
-        postalCode,
+        postalCode: postalCodes,
         country,
         count,
       };

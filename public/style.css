@@ -164,6 +164,62 @@ header {
   gap: 1rem;
 }
 
+/* --- NEW TAG INPUT STYLES --- */
+.tag-container {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border: 1px solid #ced4da;
+    border-radius: 6px;
+    background-color: #fff;
+    cursor: text;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.tag-container:focus-within {
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 3px rgba(32, 201, 151, 0.25);
+}
+
+.tag-container input {
+    flex-grow: 1;
+    border: none;
+    outline: none;
+    padding: 6px 2px;
+    font-size: 1rem;
+    background-color: transparent;
+    min-width: 150px;
+}
+
+.tag {
+    display: inline-flex;
+    align-items: center;
+    background-color: #e9ecef;
+    color: var(--primary-text);
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+.tag-close-btn {
+    margin-left: 6px;
+    cursor: pointer;
+    font-size: 1.1rem;
+    line-height: 1;
+    font-weight: 700;
+    color: var(--secondary-text);
+    transition: color 0.2s;
+}
+
+.tag-close-btn:hover {
+    color: var(--primary-text);
+}
+/* --- END TAG INPUT STYLES --- */
+
+
 .results-display {
   display: flex;
   flex-direction: column;
