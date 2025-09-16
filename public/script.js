@@ -1,4 +1,4 @@
-const BACKEND_URL = "https://brieflessly-unlovely-constance.ngrok-free.app"; 
+const BACKEND_URL = "https://a6991accaff7.ngrok-free.app"; 
 function initializeMainApp() {
   async function loadGoogleMaps() {
     try {
@@ -48,6 +48,7 @@ function initializeMainApp() {
     locationSuggestionsEl: document.getElementById("locationSuggestions"),
     postalCodeInput: document.getElementById("postalCodeInput"),
     postalCodeContainer: document.getElementById("postalCodeContainer"),
+    postalCodeSuggestionsEl: document.getElementById("postalCodeSuggestions"),
     countryInput: document.getElementById("countryInput"),
     countrySuggestionsEl: document.getElementById("countrySuggestions"),
     countInput: document.getElementById("count"),
@@ -69,6 +70,7 @@ function initializeMainApp() {
     service,
     geocoder,
     locationAutocompleteTimer,
+    postalCodeAutocompleteTimer,
     countryAutocompleteTimer,
     currentSearchParameters = {},
     postalCodes = [];
@@ -217,6 +219,67 @@ function initializeMainApp() {
     { value: "HK", text: "Hong Kong" },
   ];
 
+    // --- FIX: Converted helper functions to standard declarations ---
+    // This solves the "ReferenceError" by making them available everywhere.
+    async function getPlaceDetails(placeId) {
+        return new Promise((resolve, reject) => {
+            if (!geocoder) return reject(new Error("Geocoder service not initialized."));
+            geocoder.geocode({ placeId }, (results, status) => {
+                if (status === google.maps.GeocoderStatus.OK && results[0]) {
+                    resolve(results[0]);
+                } else {
+                    reject(new Error(`Geocoder failed with status: ${status}`));
+                }
+            });
+        });
+    }
+
+    async function populateFieldsFromPlaceDetails(details) {
+        const components = {};
+        details.address_components.forEach((component) => {
+            components[component.types[0]] = {
+                long_name: component.long_name,
+                short_name: component.short_name,
+            };
+        });
+        const countryName = (components.country || {}).long_name || "";
+        if (countryName) {
+             elements.countryInput.value = countryName;
+        }
+    }
+
+    async function handleLocationSelection(item) {
+        try {
+            const details = await getPlaceDetails(item.place_id);
+            await populateFieldsFromPlaceDetails(details);
+            
+            const postalCodeComponent = details.address_components.find(c => c.types.includes('postal_code'));
+            if (postalCodeComponent) {
+                validateAndAddTag(postalCodeComponent.long_name);
+            }
+            elements.locationInput.value = item.description;
+
+        } catch (error) {
+            console.error("Could not get place details:", error);
+            elements.locationInput.value = item.description.split(",")[0];
+        }
+    }
+
+    async function handlePostalCodeSelection(item) {
+        try {
+            const details = await getPlaceDetails(item.place_id);
+            await populateFieldsFromPlaceDetails(details);
+            const postalCodeComponent = details.address_components.find(c => c.types.includes('postal_code'));
+            if (postalCodeComponent) {
+                validateAndAddTag(postalCodeComponent.long_name);
+                 elements.postalCodeInput.value = '';
+            }
+        } catch (error) {
+             console.error("Could not get place details for postcode:", error);
+        }
+    }
+    // --- END OF FIX ---
+
   function initializeApp() {
     document.getElementById("currentYear").textContent =
       new Date().getFullYear();
@@ -306,6 +369,7 @@ if (filterText) {
     async function validateAndAddTag(postcode) {
         const cleanedValue = postcode.trim();
         if (!cleanedValue || isNaN(cleanedValue) || postalCodes.includes(cleanedValue)) {
+            elements.postalCodeInput.value = '';
             return;
         }
 
@@ -383,14 +447,13 @@ if (filterText) {
             }
         });
 
-        elements.postalCodeInput.addEventListener('keydown', (e) => {
+        elements.postalCodeInput.addEventListener('keydown', async (e) => {
             if (e.key === 'Enter' || e.key === ',') {
                 e.preventDefault();
                 const value = elements.postalCodeInput.value.trim();
                 if (value) {
-                    validateAndAddTag(value);
+                    await validateAndAddTag(value);
                 }
-                elements.postalCodeInput.value = '';
             } else if (e.key === 'Backspace' && elements.postalCodeInput.value === '') {
                 if (postalCodes.length > 0) {
                     const lastTag = elements.postalCodeContainer.querySelector('.tag:last-of-type');
@@ -447,21 +510,6 @@ if (filterText) {
         );
       }, 300);
     });
-
-    const handleLocationSelection = async (item) => {
-      try {
-        const details = await getPlaceDetails(item.place_id);
-        const postalCodeComponent = details.address_components.find(c => c.types.includes('postal_code'));
-        if (postalCodeComponent) {
-            validateAndAddTag(postalCodeComponent.long_name);
-        }
-        elements.locationInput.value = item.description;
-
-      } catch (error) {
-        console.error("Could not get place details:", error);
-        elements.locationInput.value = item.description.split(",")[0];
-      }
-    };
     
     elements.locationInput.addEventListener("input", () => {
       clearTimeout(locationAutocompleteTimer);
@@ -476,13 +524,32 @@ if (filterText) {
         300
       );
     });
+
+    // --- FIX: Added autocomplete listener for postal codes ---
+    elements.postalCodeInput.addEventListener("input", () => {
+      clearTimeout(postalCodeAutocompleteTimer);
+      postalCodeAutocompleteTimer = setTimeout(
+        () =>
+          fetchPlaceSuggestions(
+            elements.postalCodeInput,
+            elements.postalCodeSuggestionsEl,
+            ["(regions)"],
+            handlePostalCodeSelection
+          ),
+        300
+      );
+    });
     
+    // --- FIX: Added postal code suggestions to the click listener ---
     document.addEventListener("click", (event) => {
       if (!elements.locationInput.contains(event.target))
         elements.locationSuggestionsEl.style.display = "none";
+      if (!elements.postalCodeContainer.contains(event.target))
+        elements.postalCodeSuggestionsEl.style.display = "none";
       if (!elements.countryInput.contains(event.target))
         elements.countrySuggestionsEl.style.display = "none";
     });
+
     elements.startButton.addEventListener("click", startResearch);
 
     elements.businessNameInput.addEventListener("input", (e) => {
@@ -797,7 +864,7 @@ if (filterText) {
         countValue <= 0;
       const count = find_all ? -1 : countValue;
 
-      if (!categorySearchTerm || (!location && postalCodes.length === 0) || !country) {
+      if (!categorySearchTerm || (postalCodes.length === 0 && !location) || !country) {
         logMessage(
           elements.logEl,
           `Input Error: Please provide a category, location/postal code, and country for bulk search.`,
