@@ -213,7 +213,10 @@ io.on('connection', (socket) => {
         }
     });
 
-    socket.on('disconnect', () => console.log(`Client disconnected: ${socket.id}`));
+    socket.on('disconnect', () => 
+  console.log(`Client disconnected: ${socket.id} at ${new Date().toLocaleString()}`)
+);
+
 });
 
 async function getSearchQueriesForLocation(searchQuery, areaQuery, country, socket) {
