@@ -253,10 +253,10 @@ function initializeMainApp() {
             const details = await getPlaceDetails(item.place_id);
             await populateFieldsFromPlaceDetails(details);
             
-            const postalCodeComponent = details.address_components.find(c => c.types.includes('postal_code'));
-            if (postalCodeComponent) {
-                validateAndAddTag(postalCodeComponent.long_name);
-            }
+            // const postalCodeComponent = details.address_components.find(c => c.types.includes('postal_code'));
+            // if (postalCodeComponent) {
+            //     validateAndAddTag(postalCodeComponent.long_name);
+            // }
             elements.locationInput.value = item.description;
 
         } catch (error) {
