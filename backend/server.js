@@ -33,7 +33,7 @@ const countryBoundingBoxes = {
     'australia': { minLat: -44.0, maxLat: -10.0, minLng: 112.0, maxLng: 154.0 },
     'philippines': { minLat: 4.0, maxLat: 21.0, minLng: 116.0, maxLng: 127.0 },
     'new zealand': { minLat: -47.3, maxLat: -34.4, minLng: 166.4, maxLng: 178.6 },
-    'united states': { minLat: 24.4, maxLat: 49.4, minLng: -125.0, maxLng: -66.9 }, // Contiguous US
+    'united states': { minLat: 24.4, maxLat: 49.4, minLng: -125.0, maxLng: -66.9 },
     'united kingdom': { minLat: 49.9, maxLat: 58.7, minLng: -7.5, maxLng: 1.8 },
     'canada': { minLat: 41.6, maxLat: 83.1, minLng: -141.0, maxLng: -52.6 }
 };
@@ -80,7 +80,7 @@ io.on('connection', (socket) => {
         
         let searchAreas = [];
         if (postalCode && postalCode.length > 0) {
-            searchAreas = postalCode; // It's already an array of postcodes
+            searchAreas = postalCode; 
         } else if (location) {
             searchAreas = [location];
         }
@@ -413,41 +413,110 @@ async function scrapeGoogleMapsDetails(page, url, socket, country) {
     }, country);
 }
 
+
+async function scrapePageContent(page) {
+    const ownerTitleKeywords = ['owner', 'founder', 'director', 'principal', 'proprietor', 'ceo', 'manager'];
+    const pageText = await page.evaluate(() => document.body.innerText);
+    const links = await page.$$eval('a', as => as.map(a => a.href));
+    
+    const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
+    const mailtoEmails = links.filter(href => href.startsWith('mailto:')).map(href => href.replace('mailto:', '').split('?')[0]);
+    const textEmails = pageText.match(emailRegex) || [];
+    const emails = [...new Set([...mailtoEmails, ...textEmails])];
+    
+    let ownerName = '';
+    const textLines = pageText.split(/[\n\r]+/).map(line => line.trim());
+    for (const line of textLines) {
+        for (const title of ownerTitleKeywords) {
+            if (line.toLowerCase().includes(title)) {
+                let potentialName = line.split(new RegExp(title, 'i'))[0].trim().replace(/,$/, '');
+                const words = potentialName.split(' ').filter(Boolean);
+                if (words.length >= 2 && words.length <= 4 && words.length > 0) {
+                    ownerName = words.map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+                    break; 
+                }
+            }
+        }
+        if (ownerName) break;
+    }
+    
+    return { emails, ownerName };
+}
+
 async function scrapeWebsiteForGoldData(page, websiteUrl, socket) {
     const data = { Email: '', InstagramURL: '', FacebookURL: '', OwnerName: '' };
     try {
-        await page.goto(websiteUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
-        const ownerTitleKeywords = ['owner', 'founder', 'director', 'principal', 'proprietor', 'ceo'];
-        const pageText = await page.evaluate(() => document.body.innerText);
-        const links = await page.$$eval('a', as => as.map(a => a.href));
-        data.InstagramURL = links.find(href => href.includes('instagram.com')) || '';
-        data.FacebookURL = links.find(href => href.includes('facebook.com')) || '';
-        const mailto = links.find(href => href.startsWith('mailto:'));
-        data.Email = mailto ? mailto.replace('mailto:', '').split('?')[0] : '';
-        if (!data.Email) {
-            const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
-            const emails = pageText.match(emailRegex) || [];
-            data.Email = emails[0] || '';
+        await page.goto(websiteUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
+        
+        const initialLinks = await page.$$eval('a', as => as.map(a => ({ href: a.href, text: a.innerText })));
+        data.InstagramURL = initialLinks.find(l => l.href.includes('instagram.com'))?.href || '';
+        data.FacebookURL = initialLinks.find(l => l.href.includes('facebook.com'))?.href || '';
+
+        const allFoundEmails = new Set();
+        let finalOwnerName = '';
+
+        const landingPageData = await scrapePageContent(page);
+        landingPageData.emails.forEach(e => allFoundEmails.add(e));
+        if (landingPageData.ownerName) {
+            finalOwnerName = landingPageData.ownerName;
         }
-        const textLines = pageText.split(/[\n\r]+/).map(line => line.trim());
-        for (const line of textLines) {
-            for (const title of ownerTitleKeywords) {
-                if (line.toLowerCase().includes(title)) {
-                    let potentialName = line.split(new RegExp(title, 'i'))[0].trim().replace(/,$/, '');
-                    const words = potentialName.split(' ').filter(Boolean);
-                    if (words.length >= 2 && words.length <= 4 && words.length > 0) {
-                        data.OwnerName = words.map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-                        break;
-                    }
+
+        const pageKeywords = ['contact', 'about', 'team', 'meet', 'staff', 'our-people'];
+        const keyPageLinks = initialLinks.filter(link => 
+            pageKeywords.some(keyword => link.href.toLowerCase().includes(keyword) || link.text.toLowerCase().includes(keyword))
+        ).map(link => link.href);
+
+        const uniqueKeyPages = [...new Set(keyPageLinks)].slice(0, 3); 
+
+        for (const linkUrl of uniqueKeyPages) {
+            try {
+                socket.emit('log', `   -> Checking sub-page: ${linkUrl.substring(0, 50)}...`);
+                await page.goto(linkUrl, { waitUntil: 'domcontentloaded', timeout: 20000 });
+                const subsequentPageData = await scrapePageContent(page);
+                subsequentPageData.emails.forEach(e => allFoundEmails.add(e));
+                if (subsequentPageData.ownerName) { 
+                    finalOwnerName = subsequentPageData.ownerName;
                 }
+            } catch (e) {
+                socket.emit('log', `   -> Could not load sub-page ${linkUrl.substring(0, 50)}. Skipping.`);
             }
-            if (data.OwnerName) break;
         }
+
+        data.OwnerName = finalOwnerName;
+        const emailsArray = Array.from(allFoundEmails);
+        
+        if (emailsArray.length > 0) {
+            const genericEmailPrefixes = ['info@', 'contact@', 'support@', 'sales@', 'admin@', 'hello@', 'enquiries@'];
+            const personalEmails = emailsArray.filter(email => 
+                !genericEmailPrefixes.some(prefix => email.toLowerCase().startsWith(prefix))
+            );
+
+            let bestEmail = '';
+
+            if (finalOwnerName) {
+                const nameParts = finalOwnerName.toLowerCase().split(' ');
+                const firstName = nameParts[0];
+                const lastName = nameParts[nameParts.length - 1];
+                bestEmail = personalEmails.find(email => email.toLowerCase().includes(firstName) || email.toLowerCase().includes(lastName));
+            }
+            
+            if (!bestEmail && personalEmails.length > 0) {
+                bestEmail = personalEmails[0];
+            }
+            
+            if (!bestEmail) {
+                bestEmail = emailsArray[0];
+            }
+            data.Email = bestEmail;
+        }
+
     } catch (error) {
         socket.emit('log', `   -> Could not scrape ${websiteUrl}. Error: ${error.message.split('\n')[0]}`);
     }
     return data;
 }
+
+
 
 function promiseWithTimeout(promise, ms) {
     let timeout = new Promise((_, reject) => {
