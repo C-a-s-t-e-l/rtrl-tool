@@ -33,7 +33,7 @@ const countryBoundingBoxes = {
     'australia': { minLat: -44.0, maxLat: -10.0, minLng: 112.0, maxLng: 154.0 },
     'philippines': { minLat: 4.0, maxLat: 21.0, minLng: 116.0, maxLng: 127.0 },
     'new zealand': { minLat: -47.3, maxLat: -34.4, minLng: 166.4, maxLng: 178.6 },
-    'united states': { minLat: 24.4, maxLat: 49.4, minLng: -125.0, maxLng: -66.9 },
+    'united states': { minLat: 24.4, maxLat: 49.4, minLng: -125.0, maxLng: -66.9 }, // Contiguous US
     'united kingdom': { minLat: 49.9, maxLat: 58.7, minLng: -7.5, maxLng: 1.8 },
     'canada': { minLat: 41.6, maxLat: 83.1, minLng: -141.0, maxLng: -52.6 }
 };
@@ -80,7 +80,7 @@ io.on('connection', (socket) => {
         
         let searchAreas = [];
         if (postalCode && postalCode.length > 0) {
-            searchAreas = postalCode; 
+            searchAreas = postalCode; // It's already an array of postcodes
         } else if (location) {
             searchAreas = [location];
         }
@@ -413,6 +413,7 @@ async function scrapeGoogleMapsDetails(page, url, socket, country) {
     }, country);
 }
 
+// --- START: UPGRADED WEBSITE SCRAPING LOGIC ---
 
 async function scrapePageContent(page) {
     const ownerTitleKeywords = ['owner', 'founder', 'director', 'principal', 'proprietor', 'ceo', 'manager'];
@@ -433,7 +434,7 @@ async function scrapePageContent(page) {
                 const words = potentialName.split(' ').filter(Boolean);
                 if (words.length >= 2 && words.length <= 4 && words.length > 0) {
                     ownerName = words.map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-                    break; 
+                    break;
                 }
             }
         }
@@ -444,7 +445,14 @@ async function scrapePageContent(page) {
 }
 
 async function scrapeWebsiteForGoldData(page, websiteUrl, socket) {
-    const data = { Email: '', InstagramURL: '', FacebookURL: '', OwnerName: '' };
+    const data = { 
+        OwnerName: '', 
+        InstagramURL: '', 
+        FacebookURL: '',
+        Email1: '',
+        Email2: '',
+        Email3: ''
+    };
     try {
         await page.goto(websiteUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
         
@@ -457,16 +465,14 @@ async function scrapeWebsiteForGoldData(page, websiteUrl, socket) {
 
         const landingPageData = await scrapePageContent(page);
         landingPageData.emails.forEach(e => allFoundEmails.add(e));
-        if (landingPageData.ownerName) {
-            finalOwnerName = landingPageData.ownerName;
-        }
+        if (landingPageData.ownerName) finalOwnerName = landingPageData.ownerName;
 
         const pageKeywords = ['contact', 'about', 'team', 'meet', 'staff', 'our-people'];
         const keyPageLinks = initialLinks.filter(link => 
             pageKeywords.some(keyword => link.href.toLowerCase().includes(keyword) || link.text.toLowerCase().includes(keyword))
         ).map(link => link.href);
 
-        const uniqueKeyPages = [...new Set(keyPageLinks)].slice(0, 3); 
+        const uniqueKeyPages = [...new Set(keyPageLinks)].slice(0, 3);
 
         for (const linkUrl of uniqueKeyPages) {
             try {
@@ -474,9 +480,7 @@ async function scrapeWebsiteForGoldData(page, websiteUrl, socket) {
                 await page.goto(linkUrl, { waitUntil: 'domcontentloaded', timeout: 20000 });
                 const subsequentPageData = await scrapePageContent(page);
                 subsequentPageData.emails.forEach(e => allFoundEmails.add(e));
-                if (subsequentPageData.ownerName) { 
-                    finalOwnerName = subsequentPageData.ownerName;
-                }
+                if (subsequentPageData.ownerName) finalOwnerName = subsequentPageData.ownerName;
             } catch (e) {
                 socket.emit('log', `   -> Could not load sub-page ${linkUrl.substring(0, 50)}. Skipping.`);
             }
@@ -487,27 +491,36 @@ async function scrapeWebsiteForGoldData(page, websiteUrl, socket) {
         
         if (emailsArray.length > 0) {
             const genericEmailPrefixes = ['info@', 'contact@', 'support@', 'sales@', 'admin@', 'hello@', 'enquiries@'];
-            const personalEmails = emailsArray.filter(email => 
-                !genericEmailPrefixes.some(prefix => email.toLowerCase().startsWith(prefix))
-            );
-
-            let bestEmail = '';
+            
+            const nameMatchEmails = [];
+            const personalEmails = [];
+            const genericEmails = [];
 
             if (finalOwnerName) {
                 const nameParts = finalOwnerName.toLowerCase().split(' ');
                 const firstName = nameParts[0];
-                const lastName = nameParts[nameParts.length - 1];
-                bestEmail = personalEmails.find(email => email.toLowerCase().includes(firstName) || email.toLowerCase().includes(lastName));
+                emailsArray.forEach(email => {
+                    if (email.toLowerCase().includes(firstName)) {
+                        nameMatchEmails.push(email);
+                    }
+                });
             }
+
+            emailsArray.forEach(email => {
+                const isGeneric = genericEmailPrefixes.some(prefix => email.toLowerCase().startsWith(prefix));
+                const isNameMatch = nameMatchEmails.includes(email);
+                if (!isNameMatch && !isGeneric) {
+                    personalEmails.push(email);
+                } else if (!isNameMatch && isGeneric) {
+                    genericEmails.push(email);
+                }
+            });
+
+            const rankedEmails = [...new Set([...nameMatchEmails, ...personalEmails, ...genericEmails])];
             
-            if (!bestEmail && personalEmails.length > 0) {
-                bestEmail = personalEmails[0];
-            }
-            
-            if (!bestEmail) {
-                bestEmail = emailsArray[0];
-            }
-            data.Email = bestEmail;
+            data.Email1 = rankedEmails[0] || '';
+            data.Email2 = rankedEmails[1] || '';
+            data.Email3 = rankedEmails[2] || '';
         }
 
     } catch (error) {
@@ -516,7 +529,7 @@ async function scrapeWebsiteForGoldData(page, websiteUrl, socket) {
     return data;
 }
 
-
+// --- END: UPGRADED WEBSITE SCRAPING LOGIC ---
 
 function promiseWithTimeout(promise, ms) {
     let timeout = new Promise((_, reject) => {

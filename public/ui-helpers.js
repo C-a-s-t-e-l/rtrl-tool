@@ -126,6 +126,13 @@ function addTableRow(gridBody, data, index) {
     mapsLink.title = data.GoogleMapsURL || '';
     mapsLink.innerHTML = `<i class="fas fa-map-marker-alt"></i> View`;
 
+    // --- MODIFICATION: Create a detailed tooltip for emails ---
+    const emailTitle = [
+        data.Email1 ? `Rank 1: ${data.Email1}` : '',
+        data.Email2 ? `Rank 2: ${data.Email2}` : '',
+        data.Email3 ? `Rank 3: ${data.Email3}` : ''
+    ].filter(Boolean).join('\n');
+
     const cells = [
         checkboxContainer,
         createCell(cleanDisplayValue(data.BusinessName), cleanDisplayValue(data.BusinessName)),
@@ -134,7 +141,8 @@ function addTableRow(gridBody, data, index) {
         createCell(cleanDisplayValue(data.StreetAddress), cleanDisplayValue(data.StreetAddress)),
         createLinkCell(data.Website, cleanDisplayValue(data.Website), 25),
         createCell(cleanDisplayValue(data.OwnerName), cleanDisplayValue(data.OwnerName)),
-        createCell(cleanDisplayValue(data.Email), cleanDisplayValue(data.Email)),
+        // --- MODIFICATION: Display Email1, but have title with all three ---
+        createCell(cleanDisplayValue(data.Email1), emailTitle),
         createCell(cleanDisplayValue(data.Phone), cleanDisplayValue(data.Phone)),
         createLinkCell(data.InstagramURL, cleanDisplayValue(data.InstagramURL), 20),
         createLinkCell(data.FacebookURL, cleanDisplayValue(data.FacebookURL), 20),
@@ -170,7 +178,8 @@ function setDownloadButtonStates(isBusy, buttons, displayedData) {
     const hasData = displayedData.length > 0;
     buttons.fullExcel.disabled = isBusy || !hasData;
     buttons.notifyre.disabled = isBusy || !hasData || !displayedData.some(item => item.Phone && item.Phone.trim() !== '');
-    buttons.googleWorkspace.disabled = isBusy || !hasData || !displayedData.some(item => item.Email && item.Email.trim() !== '');
+    // --- MODIFICATION: Check for Email1 for Google Workspace button ---
+    buttons.googleWorkspace.disabled = isBusy || !hasData || !displayedData.some(item => item.Email1 && item.Email1.trim() !== '');
 }
 
 function logMessage(logEl, message, type = 'default') {
@@ -247,10 +256,12 @@ function downloadExcel(data, searchParams, fileSuffix, fileType, logEl, specific
         });
         headers = specificHeaders;
     } else {
+        // --- MODIFICATION: Create 3 email columns for full export ---
         exportData = data.map(item => ({
             BusinessName: item.BusinessName, Category: item.Category, 'Suburb/Area': item.SuburbArea,
             StreetAddress: item.StreetAddress, Website: item.Website, OwnerName: item.OwnerName,
-            Email: item.Email, Phone: item.Phone, InstagramURL: item.InstagramURL,
+            'Email 1': item.Email1, 'Email 2': item.Email2, 'Email 3': item.Email3, 
+            Phone: item.Phone, InstagramURL: item.InstagramURL,
             FacebookURL: item.FacebookURL, GoogleMapsURL: item.GoogleMapsURL,
             SourceURLs: [item.GoogleMapsURL, item.Website].filter(Boolean).join(';'),
             LastVerifiedDate: item.LastVerifiedDate
