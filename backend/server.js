@@ -464,7 +464,8 @@ async function scrapeWebsiteForGoldData(page, websiteUrl, socket) {
         let finalOwnerName = '';
 
         const landingPageData = await scrapePageContent(page);
-        landingPageData.emails.forEach(e => allFoundEmails.add(e));
+        // --- FIX: Convert emails to lowercase to prevent duplicates ---
+        landingPageData.emails.forEach(e => allFoundEmails.add(e.toLowerCase()));
         if (landingPageData.ownerName) finalOwnerName = landingPageData.ownerName;
 
         const pageKeywords = ['contact', 'about', 'team', 'meet', 'staff', 'our-people'];
@@ -479,7 +480,8 @@ async function scrapeWebsiteForGoldData(page, websiteUrl, socket) {
                 socket.emit('log', `   -> Checking sub-page: ${linkUrl.substring(0, 50)}...`);
                 await page.goto(linkUrl, { waitUntil: 'domcontentloaded', timeout: 20000 });
                 const subsequentPageData = await scrapePageContent(page);
-                subsequentPageData.emails.forEach(e => allFoundEmails.add(e));
+                // --- FIX: Convert emails to lowercase to prevent duplicates ---
+                subsequentPageData.emails.forEach(e => allFoundEmails.add(e.toLowerCase()));
                 if (subsequentPageData.ownerName) finalOwnerName = subsequentPageData.ownerName;
             } catch (e) {
                 socket.emit('log', `   -> Could not load sub-page ${linkUrl.substring(0, 50)}. Skipping.`);

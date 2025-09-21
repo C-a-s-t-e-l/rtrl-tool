@@ -356,19 +356,22 @@ header {
 }
 .results-grid {
     display: grid;
+    /* MODIFICATION: Added two columns for emails and adjusted others */
     grid-template-columns: 
-        50px 
-        minmax(250px, 2fr)
-        minmax(150px, 1.5fr)
-        minmax(150px, 1.5fr)
-        minmax(250px, 2.5fr)
-        minmax(200px, 1fr)
-        minmax(150px, 1fr)
-        minmax(200px, 1fr)
-        minmax(150px, 1fr)
-        minmax(200px, 1fr)
-        minmax(200px, 1fr)
-        minmax(100px, 1fr);
+        50px                  
+        minmax(200px, 1.5fr)  
+        minmax(150px, 1fr)    
+        minmax(120px, 1fr)    
+        minmax(250px, 2fr)  
+        minmax(150px, 1fr)    
+        minmax(120px, 1fr)   
+        minmax(200px, 1.5fr) 
+        minmax(200px, 1.5fr)  
+        minmax(200px, 1.5fr)  
+        minmax(120px, 1fr)   
+        minmax(150px, 1fr)    
+        minmax(150px, 1fr)    
+        minmax(80px, 0.5fr);  
 }
 
 .grid-header {

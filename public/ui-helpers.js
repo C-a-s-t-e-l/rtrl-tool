@@ -126,13 +126,6 @@ function addTableRow(gridBody, data, index) {
     mapsLink.title = data.GoogleMapsURL || '';
     mapsLink.innerHTML = `<i class="fas fa-map-marker-alt"></i> View`;
 
-    // --- MODIFICATION: Create a detailed tooltip for emails ---
-    const emailTitle = [
-        data.Email1 ? `Rank 1: ${data.Email1}` : '',
-        data.Email2 ? `Rank 2: ${data.Email2}` : '',
-        data.Email3 ? `Rank 3: ${data.Email3}` : ''
-    ].filter(Boolean).join('\n');
-
     const cells = [
         checkboxContainer,
         createCell(cleanDisplayValue(data.BusinessName), cleanDisplayValue(data.BusinessName)),
@@ -141,8 +134,10 @@ function addTableRow(gridBody, data, index) {
         createCell(cleanDisplayValue(data.StreetAddress), cleanDisplayValue(data.StreetAddress)),
         createLinkCell(data.Website, cleanDisplayValue(data.Website), 25),
         createCell(cleanDisplayValue(data.OwnerName), cleanDisplayValue(data.OwnerName)),
-        // --- MODIFICATION: Display Email1, but have title with all three ---
-        createCell(cleanDisplayValue(data.Email1), emailTitle),
+        // --- MODIFICATION: Create cells for all three emails ---
+        createCell(cleanDisplayValue(data.Email1), cleanDisplayValue(data.Email1)),
+        createCell(cleanDisplayValue(data.Email2), cleanDisplayValue(data.Email2)),
+        createCell(cleanDisplayValue(data.Email3), cleanDisplayValue(data.Email3)),
         createCell(cleanDisplayValue(data.Phone), cleanDisplayValue(data.Phone)),
         createLinkCell(data.InstagramURL, cleanDisplayValue(data.InstagramURL), 20),
         createLinkCell(data.FacebookURL, cleanDisplayValue(data.FacebookURL), 20),
