@@ -148,9 +148,7 @@ function addTableRow(gridBody, data, index) {
 }
 
 function setUiState(isBusy, elements) {
-    // START MODIFICATION: Changed businessNameInput to businessNamesInput
     const isIndividualSearch = elements.businessNamesInput.value.trim().length > 0;
-    // END MODIFICATION
     
     for (const key in elements) {
         if (elements.hasOwnProperty(key) && key !== 'downloadButtons' && key !== 'displayedData' && key !== 'bulkSearchContainer') {
@@ -160,11 +158,16 @@ function setUiState(isBusy, elements) {
     
     if (!isBusy) {
         elements.countInput.disabled = elements.findAllBusinessesCheckbox.checked || isIndividualSearch;
+
+        // --- START: BUG FIX ---
+        // Be more specific about which elements to disable.
         document.getElementById('bulkSearchContainer').querySelectorAll('input, select').forEach(el => {
+            // Only disable elements that are NOT for location.
             if (el.id !== 'countryInput' && el.id !== 'locationInput' && el.id !== 'postalCodeInput') {
                  el.disabled = isIndividualSearch;
             }
         });
+        // --- END: BUG FIX ---
     }
 
     setDownloadButtonStates(isBusy, elements.downloadButtons, elements.displayedData);
