@@ -72,8 +72,11 @@ io.on('connection', (socket) => {
     console.log(`Client connected: ${socket.id} at ${new Date().toLocaleString()}`);
     socket.emit('log', `[Server] Connected to Real-time Scraper.`);
 
-    socket.on('start_scrape', async ({ category, location, postalCode, country, count, businessName }) => {
-        const isIndividualSearch = !!businessName;
+    // START MODIFICATION
+    socket.on('start_scrape', async ({ category, location, postalCode, country, count, businessNames }) => {
+        const isIndividualSearch = businessNames && businessNames.length > 0;
+        // END MODIFICATION
+
         const finalCount = isIndividualSearch ? -1 : count;
         const isSearchAll = finalCount === -1;
         const targetCount = isSearchAll ? Infinity : finalCount;
@@ -108,99 +111,112 @@ io.on('connection', (socket) => {
             const CONCURRENCY = 4;
             let totalDiscoveredUrls = 0;
 
-            for (const [areaIndex, areaQuery] of searchAreas.entries()) {
-                 if (allProcessedBusinesses.length >= targetCount) break;
+            // START MODIFICATION: Logic restructured for bulk name search
+            const searchItems = isIndividualSearch ? businessNames : [category];
 
-                const baseSearchQuery = isIndividualSearch ? `${businessName}, ${areaQuery}, ${country}` : `${category} in ${areaQuery}, ${country}`;
-                socket.emit('log', `\n--- Starting search area ${areaIndex + 1} of ${searchAreas.length}: "${areaQuery}" ---`);
-            
-                const searchQueries = await getSearchQueriesForLocation(baseSearchQuery, areaQuery, country, socket);
-            
-                for (const [index, query] of searchQueries.entries()) {
-                    if (allProcessedBusinesses.length >= targetCount) break;
+            for (const item of searchItems) {
+                if (allProcessedBusinesses.length >= targetCount) break;
+                
+                if (isIndividualSearch) {
+                    socket.emit('log', `\n--- Now searching for: "${item}" ---`);
+                }
 
-                    socket.emit('log', `--- Scraping sub-area ${index + 1} of ${searchQueries.length}: "${query}" ---`);
-                    
-                    const discoveredUrlsForThisArea = new Set();
-                    await collectGoogleMapsUrlsContinuously(browser, query, socket, Infinity, discoveredUrlsForThisArea, country);
-                    
-                    let newUniqueUrls = Array.from(discoveredUrlsForThisArea).filter(url => !processedUrlSet.has(url));
-                    
-                    const boundingBox = countryBoundingBoxes[country.toLowerCase()];
-                    if (boundingBox) {
-                        const originalCount = newUniqueUrls.length;
-                        socket.emit('log', `   -> Applying geographic filter for ${country}.`);
-                        newUniqueUrls = newUniqueUrls.filter(url => isUrlInBoundingBox(url, boundingBox));
-                        const removedCount = originalCount - newUniqueUrls.length;
-                        if (removedCount > 0) {
-                            socket.emit('log', `   -> Geographic filter discarded ${removedCount} out-of-bounds listings.`);
-                        }
+                for (const [areaIndex, areaQuery] of searchAreas.entries()) {
+                     if (allProcessedBusinesses.length >= targetCount) break;
+
+                    const baseSearchQuery = isIndividualSearch ? `${item}, ${areaQuery}, ${country}` : `${item} in ${areaQuery}, ${country}`;
+                    if (!isIndividualSearch) {
+                        socket.emit('log', `\n--- Starting search area ${areaIndex + 1} of ${searchAreas.length}: "${areaQuery}" ---`);
                     }
-                    
-                    if (newUniqueUrls.length === 0) {
-                        socket.emit('log', `   -> No new unique businesses found in this sub-area. Moving to next.`);
-                        continue;
-                    }
-
-                    newUniqueUrls.forEach(url => processedUrlSet.add(url));
-                    totalDiscoveredUrls = processedUrlSet.size;
-
-                    socket.emit('log', `   -> Discovered ${newUniqueUrls.length} new listings. Total unique: ${totalDiscoveredUrls}. Now processing details...`);
-
-                    const urlList = newUniqueUrls;
-
-                    for (let i = 0; i < urlList.length; i += CONCURRENCY) {
+                
+                    const searchQueries = await getSearchQueriesForLocation(baseSearchQuery, areaQuery, country, socket);
+                
+                    for (const [index, query] of searchQueries.entries()) {
                         if (allProcessedBusinesses.length >= targetCount) break;
-                        const batch = urlList.slice(i, i + CONCURRENCY);
 
-                        const promises = batch.map(async (urlToProcess) => {
-                            if (allProcessedBusinesses.length >= targetCount) return null;
+                        socket.emit('log', `--- Scraping sub-area ${index + 1} of ${searchQueries.length}: "${query}" ---`);
                         
-                            return promiseWithTimeout(
-                                (async () => {
-                                    let detailPage;
-                                    try {
-                                        detailPage = await browser.newPage();
-                                        await detailPage.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36');
-                                        await detailPage.setRequestInterception(true);
-                                        detailPage.on('request', (req) => { if (['image', 'stylesheet', 'font', 'media'].includes(req.resourceType())) req.abort(); else req.continue(); });
-                                        
-                                        let googleData = await scrapeGoogleMapsDetails(detailPage, urlToProcess, socket, country);
-                                        if (!googleData || !googleData.BusinessName) return null;
-                                        
-                                        let websiteData = {};
-                                        if (googleData.Website) { websiteData = await scrapeWebsiteForGoldData(detailPage, googleData.Website, socket); }
-                                        
-                                        const fullBusinessData = { ...googleData, ...websiteData };
-                                        fullBusinessData.Category = isIndividualSearch ? (googleData.ScrapedCategory || 'N/A') : category;
-                                        return fullBusinessData;
-                                    } finally {
-                                        if (detailPage) await detailPage.close();
-                                    }
-                                })(), 
-                                120000
-                            ).catch(err => {
-                                socket.emit('log', `A task for ${urlToProcess} failed or timed out: ${err.message}. Skipping.`, 'error');
-                                return null;
-                            });
-                        });
-
-                        const results = await Promise.all(promises);
-                        results.forEach(businessData => {
-                            if (businessData && allProcessedBusinesses.length < targetCount) {
-                                allProcessedBusinesses.push(businessData);
-                                const status = isSearchAll 
-                                    ? `(Total Added: ${allProcessedBusinesses.length})` 
-                                    : `(${allProcessedBusinesses.length}/${finalCount})`;
-                                socket.emit('log', `-> ADDED: ${businessData.BusinessName}. ${status}`);
-                                socket.emit('business_found', businessData);
+                        const discoveredUrlsForThisArea = new Set();
+                        await collectGoogleMapsUrlsContinuously(browser, query, socket, Infinity, discoveredUrlsForThisArea, country);
+                        
+                        let newUniqueUrls = Array.from(discoveredUrlsForThisArea).filter(url => !processedUrlSet.has(url));
+                        
+                        const boundingBox = countryBoundingBoxes[country.toLowerCase()];
+                        if (boundingBox) {
+                            const originalCount = newUniqueUrls.length;
+                            socket.emit('log', `   -> Applying geographic filter for ${country}.`);
+                            newUniqueUrls = newUniqueUrls.filter(url => isUrlInBoundingBox(url, boundingBox));
+                            const removedCount = originalCount - newUniqueUrls.length;
+                            if (removedCount > 0) {
+                                socket.emit('log', `   -> Geographic filter discarded ${removedCount} out-of-bounds listings.`);
                             }
-                            socket.emit('progress_update', { processed: allProcessedBusinesses.length, discovered: totalDiscoveredUrls, added: allProcessedBusinesses.length, target: finalCount });
-                        });
+                        }
+                        
+                        if (newUniqueUrls.length === 0) {
+                            socket.emit('log', `   -> No new unique businesses found for this query. Moving to next.`);
+                            continue;
+                        }
+
+                        newUniqueUrls.forEach(url => processedUrlSet.add(url));
+                        totalDiscoveredUrls = processedUrlSet.size;
+
+                        socket.emit('log', `   -> Discovered ${newUniqueUrls.length} new listings. Total unique: ${totalDiscoveredUrls}. Now processing details...`);
+
+                        const urlList = newUniqueUrls;
+
+                        for (let i = 0; i < urlList.length; i += CONCURRENCY) {
+                            if (allProcessedBusinesses.length >= targetCount) break;
+                            const batch = urlList.slice(i, i + CONCURRENCY);
+
+                            const promises = batch.map(async (urlToProcess) => {
+                                if (allProcessedBusinesses.length >= targetCount) return null;
+                            
+                                return promiseWithTimeout(
+                                    (async () => {
+                                        let detailPage;
+                                        try {
+                                            detailPage = await browser.newPage();
+                                            await detailPage.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36');
+                                            await detailPage.setRequestInterception(true);
+                                            detailPage.on('request', (req) => { if (['image', 'stylesheet', 'font', 'media'].includes(req.resourceType())) req.abort(); else req.continue(); });
+                                            
+                                            let googleData = await scrapeGoogleMapsDetails(detailPage, urlToProcess, socket, country);
+                                            if (!googleData || !googleData.BusinessName) return null;
+                                            
+                                            let websiteData = {};
+                                            if (googleData.Website) { websiteData = await scrapeWebsiteForGoldData(detailPage, googleData.Website, socket); }
+                                            
+                                            const fullBusinessData = { ...googleData, ...websiteData };
+                                            fullBusinessData.Category = isIndividualSearch ? (googleData.ScrapedCategory || 'N/A') : category;
+                                            return fullBusinessData;
+                                        } finally {
+                                            if (detailPage) await detailPage.close();
+                                        }
+                                    })(), 
+                                    120000
+                                ).catch(err => {
+                                    socket.emit('log', `A task for ${urlToProcess} failed or timed out: ${err.message}. Skipping.`, 'error');
+                                    return null;
+                                });
+                            });
+
+                            const results = await Promise.all(promises);
+                            results.forEach(businessData => {
+                                if (businessData && allProcessedBusinesses.length < targetCount) {
+                                    allProcessedBusinesses.push(businessData);
+                                    const status = isSearchAll 
+                                        ? `(Total Added: ${allProcessedBusinesses.length})` 
+                                        : `(${allProcessedBusinesses.length}/${finalCount})`;
+                                    socket.emit('log', `-> ADDED: ${businessData.BusinessName}. ${status}`);
+                                    socket.emit('business_found', businessData);
+                                }
+                                socket.emit('progress_update', { processed: allProcessedBusinesses.length, discovered: totalDiscoveredUrls, added: allProcessedBusinesses.length, target: finalCount });
+                            });
+                        }
                     }
                 }
             }
-
+            // END MODIFICATION
 
             socket.emit('log', `Scraping completed. Found and processed a total of ${allProcessedBusinesses.length} businesses.`);
             socket.emit('scrape_complete');
@@ -413,8 +429,6 @@ async function scrapeGoogleMapsDetails(page, url, socket, country) {
     }, country);
 }
 
-// --- START: UPGRADED WEBSITE SCRAPING LOGIC ---
-
 async function scrapePageContent(page) {
     const ownerTitleKeywords = ['owner', 'founder', 'director', 'principal', 'proprietor', 'ceo', 'manager'];
     const pageText = await page.evaluate(() => document.body.innerText);
@@ -464,7 +478,6 @@ async function scrapeWebsiteForGoldData(page, websiteUrl, socket) {
         let finalOwnerName = '';
 
         const landingPageData = await scrapePageContent(page);
-        // --- FIX: Convert emails to lowercase to prevent duplicates ---
         landingPageData.emails.forEach(e => allFoundEmails.add(e.toLowerCase()));
         if (landingPageData.ownerName) finalOwnerName = landingPageData.ownerName;
 
@@ -480,7 +493,6 @@ async function scrapeWebsiteForGoldData(page, websiteUrl, socket) {
                 socket.emit('log', `   -> Checking sub-page: ${linkUrl.substring(0, 50)}...`);
                 await page.goto(linkUrl, { waitUntil: 'domcontentloaded', timeout: 20000 });
                 const subsequentPageData = await scrapePageContent(page);
-                // --- FIX: Convert emails to lowercase to prevent duplicates ---
                 subsequentPageData.emails.forEach(e => allFoundEmails.add(e.toLowerCase()));
                 if (subsequentPageData.ownerName) finalOwnerName = subsequentPageData.ownerName;
             } catch (e) {
@@ -530,8 +542,6 @@ async function scrapeWebsiteForGoldData(page, websiteUrl, socket) {
     }
     return data;
 }
-
-// --- END: UPGRADED WEBSITE SCRAPING LOGIC ---
 
 function promiseWithTimeout(promise, ms) {
     let timeout = new Promise((_, reject) => {

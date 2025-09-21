@@ -86,14 +86,16 @@
 
                 <hr class="separator">
 
+                <!-- START MODIFICATION -->
                 <div id="individualSearchContainer">
-                    <h4>Or, Search by Specific Name</h4>
+                    <h4>Or, Search by Specific Name(s)</h4>
                      <div class="form-group">
-                        <label for="businessNameInput"><i class="fas fa-store"></i> Business Name</label>
-                        <input type="text" id="businessNameInput" placeholder="e.g., Johnny's Bakery">
+                        <label for="businessNamesInput"><i class="fas fa-store"></i> Business Names (one per line)</label>
+                        <textarea id="businessNamesInput" rows="5" placeholder="e.g., Johnny's Bakery&#10;The Coffee Club&#10;Another Cafe"></textarea>
                         <small class="form-text">Fills all location info automatically. Overrides bulk search.</small>
                     </div>
                 </div>
+                <!-- END MODIFICATION -->
                 
                 <button id="startButton" class="btn btn-primary"><i class="fas fa-play"></i> Start Research</button>
             </div>

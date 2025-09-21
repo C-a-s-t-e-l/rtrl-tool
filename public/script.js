@@ -53,7 +53,9 @@ function initializeMainApp() {
     countrySuggestionsEl: document.getElementById("countrySuggestions"),
     countInput: document.getElementById("count"),
     findAllBusinessesCheckbox: document.getElementById("findAllBusinesses"),
-    businessNameInput: document.getElementById("businessNameInput"),
+    // START MODIFICATION
+    businessNamesInput: document.getElementById("businessNamesInput"),
+    // END MODIFICATION
     bulkSearchContainer: document.getElementById("bulkSearchContainer"),
     progressBar: document.getElementById("progressBar"),
     logEl: document.getElementById("log"),
@@ -251,6 +253,7 @@ function initializeMainApp() {
             const details = await getPlaceDetails(item.place_id);
             await populateFieldsFromPlaceDetails(details);
             elements.locationInput.value = item.description;
+
         } catch (error) {
             console.error("Could not get place details:", error);
             elements.locationInput.value = item.description.split(",")[0];
@@ -320,14 +323,14 @@ function initializeMainApp() {
     const filterText = elements.filterInput.value.toLowerCase();
 
     let filteredData;
-    if (filterText) {
-        filteredData = allCollectedData.filter(item => {
-            return (item.BusinessName?.toLowerCase().startsWith(filterText) ||
-                    item.Category?.toLowerCase().startsWith(filterText) ||
-                    item.StreetAddress?.toLowerCase().startsWith(filterText) ||
-                    item.SuburbArea?.toLowerCase().startsWith(filterText));
-        });
-    } else {
+if (filterText) {
+    filteredData = allCollectedData.filter(item => {
+        return (item.BusinessName?.toLowerCase().startsWith(filterText) ||
+                item.Category?.toLowerCase().startsWith(filterText) ||
+                item.StreetAddress?.toLowerCase().startsWith(filterText) ||
+                item.SuburbArea?.toLowerCase().startsWith(filterText));
+    });
+} else {
       filteredData = [...allCollectedData];
     }
 
@@ -541,7 +544,8 @@ function initializeMainApp() {
 
     elements.startButton.addEventListener("click", startResearch);
 
-    elements.businessNameInput.addEventListener("input", (e) => {
+    // START MODIFICATION
+    elements.businessNamesInput.addEventListener("input", (e) => {
       const isIndividualSearch = e.target.value.trim().length > 0;
       elements.bulkSearchContainer
         .querySelectorAll("input, select")
@@ -558,6 +562,7 @@ function initializeMainApp() {
         ? "0.5"
         : "1";
     });
+    // END MODIFICATION
 
     elements.selectAllCheckbox.addEventListener("change", (e) => {
       const isChecked = e.target.checked;
@@ -609,20 +614,16 @@ function initializeMainApp() {
       );
     });
     
-    // --- START: FIX FOR GOOGLE WORKSPACE BUTTON ---
     elements.downloadGoogleWorkspaceCSVButton.addEventListener("click", () => {
       const selectedRawData = getSelectedData();
       
-      // First, filter the selected data to only include those with a primary email
       const dataWithEmails = selectedRawData.filter(d => d.Email1 && d.Email1.trim() !== '');
 
-      // **THE FIX**: Check if the filtered list is empty. If so, inform the user and stop.
       if (dataWithEmails.length === 0) {
           logMessage(elements.logEl, 'No selected businesses have a primary email to export.', 'error');
           return;
       }
       
-      // If we have data, map it to the desired format
       const googleWorkspaceData = dataWithEmails.map(d => ({
             Email: d.Email1,
             OwnerName: d.OwnerName,
@@ -636,7 +637,6 @@ function initializeMainApp() {
             Category: d.Category
         }));
 
-      // Proceed with the download
       downloadExcel(
         googleWorkspaceData,
         currentSearchParameters,
@@ -657,7 +657,6 @@ function initializeMainApp() {
         ]
       );
     });
-    // --- END: FIX FOR GOOGLE WORKSPACE BUTTON ---
 
     elements.filterInput.addEventListener("input", applyFilterAndSort);
     elements.resultsTableHeader.addEventListener("click", (e) => {
@@ -822,7 +821,11 @@ function initializeMainApp() {
     if (elements.researchStatusIcon)
       elements.researchStatusIcon.className = "fas fa-spinner fa-spin";
 
-    const businessName = elements.businessNameInput.value.trim();
+    // START MODIFICATION
+    const namesText = elements.businessNamesInput.value.trim();
+    const businessNames = namesText.split('\n').map(name => name.trim()).filter(Boolean); // Create an array of names
+    // END MODIFICATION
+    
     const location = elements.locationInput.value.trim();
     const country = elements.countryInput.value;
     const countInputVal = elements.countInput.value.trim();
@@ -831,7 +834,7 @@ function initializeMainApp() {
         ? elements.customCategoryInput.value
         : elements.subCategorySelect.value || elements.primaryCategorySelect.value;
     
-    const searchCategoryKey = (businessName || categorySearchTerm).replace(/[\s/]/g, '_').toLowerCase();
+    const searchCategoryKey = (businessNames.length > 0 ? 'bulk_name_search' : categorySearchTerm).replace(/[\s/]/g, '_').toLowerCase();
     const searchAreaKey = (postalCodes.length > 0 ? postalCodes.join('_') : location.split(',')[0].replace(/[\s/,]/g, '_')).toLowerCase();
     const searchDate = new Date().toISOString().split('T')[0];
     const searchKey = `${searchDate}-${searchCategoryKey}-${searchAreaKey}`;
@@ -854,11 +857,12 @@ function initializeMainApp() {
       version: currentSearchVersion
     };
 
-    if (businessName) {
+    // START MODIFICATION
+    if (businessNames.length > 0) {
       if (!location && postalCodes.length === 0) {
         logMessage(
           elements.logEl,
-          `Input Error: Please provide a location or postal code for the individual business search.`,
+          `Input Error: Please provide a location or postal code for the bulk business search.`,
           "error"
         );
         handleScrapeError({ error: "Invalid input" });
@@ -866,11 +870,11 @@ function initializeMainApp() {
       }
       logMessage(
         elements.logEl,
-        `Sending request to find individual business: '${businessName}'...`,
+        `Sending request to find ${businessNames.length} specific businesses...`,
         "info"
       );
       socket.emit("start_scrape", {
-        businessName,
+        businessNames, // Send the array
         location,
         postalCode: postalCodes,
         country,
@@ -908,6 +912,7 @@ function initializeMainApp() {
       };
       socket.emit("start_scrape", payload);
     }
+    // END MODIFICATION
   }
 
   function handleScrapeError(error) {
@@ -933,7 +938,9 @@ function initializeMainApp() {
       countryInput: elements.countryInput,
       countInput: elements.countInput,
       findAllBusinessesCheckbox: elements.findAllBusinessesCheckbox,
-      businessNameInput: elements.businessNameInput,
+      // START MODIFICATION
+      businessNamesInput: elements.businessNamesInput,
+      // END MODIFICATION
       downloadButtons: {
         fullExcel: elements.downloadFullExcelButton,
         notifyre: elements.downloadNotifyreCSVButton,
