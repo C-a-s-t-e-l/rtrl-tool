@@ -219,8 +219,6 @@ function initializeMainApp() {
     { value: "HK", text: "Hong Kong" },
   ];
 
-    // --- FIX: Converted helper functions to standard declarations ---
-    // This solves the "ReferenceError" by making them available everywhere.
     async function getPlaceDetails(placeId) {
         return new Promise((resolve, reject) => {
             if (!geocoder) return reject(new Error("Geocoder service not initialized."));
@@ -252,13 +250,7 @@ function initializeMainApp() {
         try {
             const details = await getPlaceDetails(item.place_id);
             await populateFieldsFromPlaceDetails(details);
-            
-            // const postalCodeComponent = details.address_components.find(c => c.types.includes('postal_code'));
-            // if (postalCodeComponent) {
-            //     validateAndAddTag(postalCodeComponent.long_name);
-            // }
             elements.locationInput.value = item.description;
-
         } catch (error) {
             console.error("Could not get place details:", error);
             elements.locationInput.value = item.description.split(",")[0];
@@ -278,7 +270,6 @@ function initializeMainApp() {
              console.error("Could not get place details for postcode:", error);
         }
     }
-    // --- END OF FIX ---
 
   function initializeApp() {
     document.getElementById("currentYear").textContent =
@@ -329,14 +320,14 @@ function initializeMainApp() {
     const filterText = elements.filterInput.value.toLowerCase();
 
     let filteredData;
-if (filterText) {
-    filteredData = allCollectedData.filter(item => {
-        return (item.BusinessName?.toLowerCase().startsWith(filterText) ||
-                item.Category?.toLowerCase().startsWith(filterText) ||
-                item.StreetAddress?.toLowerCase().startsWith(filterText) ||
-                item.SuburbArea?.toLowerCase().startsWith(filterText));
-    });
-} else {
+    if (filterText) {
+        filteredData = allCollectedData.filter(item => {
+            return (item.BusinessName?.toLowerCase().startsWith(filterText) ||
+                    item.Category?.toLowerCase().startsWith(filterText) ||
+                    item.StreetAddress?.toLowerCase().startsWith(filterText) ||
+                    item.SuburbArea?.toLowerCase().startsWith(filterText));
+        });
+    } else {
       filteredData = [...allCollectedData];
     }
 
@@ -525,7 +516,6 @@ if (filterText) {
       );
     });
 
-    // --- FIX: Added autocomplete listener for postal codes ---
     elements.postalCodeInput.addEventListener("input", () => {
       clearTimeout(postalCodeAutocompleteTimer);
       postalCodeAutocompleteTimer = setTimeout(
@@ -540,7 +530,6 @@ if (filterText) {
       );
     });
     
-    // --- FIX: Added postal code suggestions to the click listener ---
     document.addEventListener("click", (event) => {
       if (!elements.locationInput.contains(event.target))
         elements.locationSuggestionsEl.style.display = "none";
@@ -619,10 +608,37 @@ if (filterText) {
         ]
       );
     });
+    
+    // --- START: FIX FOR GOOGLE WORKSPACE BUTTON ---
     elements.downloadGoogleWorkspaceCSVButton.addEventListener("click", () => {
-      const selectedData = getSelectedData();
+      const selectedRawData = getSelectedData();
+      
+      // First, filter the selected data to only include those with a primary email
+      const dataWithEmails = selectedRawData.filter(d => d.Email1 && d.Email1.trim() !== '');
+
+      // **THE FIX**: Check if the filtered list is empty. If so, inform the user and stop.
+      if (dataWithEmails.length === 0) {
+          logMessage(elements.logEl, 'No selected businesses have a primary email to export.', 'error');
+          return;
+      }
+      
+      // If we have data, map it to the desired format
+      const googleWorkspaceData = dataWithEmails.map(d => ({
+            Email: d.Email1,
+            OwnerName: d.OwnerName,
+            BusinessName: d.BusinessName,
+            StreetAddress: d.StreetAddress,
+            SuburbArea: d.SuburbArea,
+            Website: d.Website,
+            InstagramURL: d.InstagramURL,
+            FacebookURL: d.FacebookURL,
+            GoogleMapsURL: d.GoogleMapsURL,
+            Category: d.Category
+        }));
+
+      // Proceed with the download
       downloadExcel(
-        selectedData.filter((d) => d.Email),
+        googleWorkspaceData,
         currentSearchParameters,
         "google_workspace_email",
         "csv",
@@ -641,6 +657,7 @@ if (filterText) {
         ]
       );
     });
+    // --- END: FIX FOR GOOGLE WORKSPACE BUTTON ---
 
     elements.filterInput.addEventListener("input", applyFilterAndSort);
     elements.resultsTableHeader.addEventListener("click", (e) => {
@@ -750,6 +767,9 @@ if (filterText) {
 
     const newBusiness = {
       OwnerName: "",
+      Email1: "",
+      Email2: "",
+      Email3: "",
       ...business,
       SuburbArea: business.Suburb || elements.locationInput.value.split(",")[0].trim(),
       LastVerifiedDate: new Date().toISOString().split("T")[0],
