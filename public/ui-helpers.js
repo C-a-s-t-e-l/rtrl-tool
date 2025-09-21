@@ -134,7 +134,6 @@ function addTableRow(gridBody, data, index) {
         createCell(cleanDisplayValue(data.StreetAddress), cleanDisplayValue(data.StreetAddress)),
         createLinkCell(data.Website, cleanDisplayValue(data.Website), 25),
         createCell(cleanDisplayValue(data.OwnerName), cleanDisplayValue(data.OwnerName)),
-        // --- MODIFICATION: Create cells for all three emails ---
         createCell(cleanDisplayValue(data.Email1), cleanDisplayValue(data.Email1)),
         createCell(cleanDisplayValue(data.Email2), cleanDisplayValue(data.Email2)),
         createCell(cleanDisplayValue(data.Email3), cleanDisplayValue(data.Email3)),
@@ -149,7 +148,9 @@ function addTableRow(gridBody, data, index) {
 }
 
 function setUiState(isBusy, elements) {
-    const isIndividualSearch = elements.businessNameInput.value.trim().length > 0;
+    // START MODIFICATION: Changed businessNameInput to businessNamesInput
+    const isIndividualSearch = elements.businessNamesInput.value.trim().length > 0;
+    // END MODIFICATION
     
     for (const key in elements) {
         if (elements.hasOwnProperty(key) && key !== 'downloadButtons' && key !== 'displayedData' && key !== 'bulkSearchContainer') {
@@ -173,7 +174,6 @@ function setDownloadButtonStates(isBusy, buttons, displayedData) {
     const hasData = displayedData.length > 0;
     buttons.fullExcel.disabled = isBusy || !hasData;
     buttons.notifyre.disabled = isBusy || !hasData || !displayedData.some(item => item.Phone && item.Phone.trim() !== '');
-    // --- MODIFICATION: Check for Email1 for Google Workspace button ---
     buttons.googleWorkspace.disabled = isBusy || !hasData || !displayedData.some(item => item.Email1 && item.Email1.trim() !== '');
 }
 
@@ -251,7 +251,6 @@ function downloadExcel(data, searchParams, fileSuffix, fileType, logEl, specific
         });
         headers = specificHeaders;
     } else {
-        // --- MODIFICATION: Create 3 email columns for full export ---
         exportData = data.map(item => ({
             BusinessName: item.BusinessName, Category: item.Category, 'Suburb/Area': item.SuburbArea,
             StreetAddress: item.StreetAddress, Website: item.Website, OwnerName: item.OwnerName,

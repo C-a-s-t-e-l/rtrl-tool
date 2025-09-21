@@ -53,9 +53,7 @@ function initializeMainApp() {
     countrySuggestionsEl: document.getElementById("countrySuggestions"),
     countInput: document.getElementById("count"),
     findAllBusinessesCheckbox: document.getElementById("findAllBusinesses"),
-    // START MODIFICATION
     businessNamesInput: document.getElementById("businessNamesInput"),
-    // END MODIFICATION
     bulkSearchContainer: document.getElementById("bulkSearchContainer"),
     progressBar: document.getElementById("progressBar"),
     logEl: document.getElementById("log"),
@@ -544,7 +542,6 @@ if (filterText) {
 
     elements.startButton.addEventListener("click", startResearch);
 
-    // START MODIFICATION
     elements.businessNamesInput.addEventListener("input", (e) => {
       const isIndividualSearch = e.target.value.trim().length > 0;
       elements.bulkSearchContainer
@@ -562,7 +559,6 @@ if (filterText) {
         ? "0.5"
         : "1";
     });
-    // END MODIFICATION
 
     elements.selectAllCheckbox.addEventListener("change", (e) => {
       const isChecked = e.target.checked;
@@ -821,10 +817,8 @@ if (filterText) {
     if (elements.researchStatusIcon)
       elements.researchStatusIcon.className = "fas fa-spinner fa-spin";
 
-    // START MODIFICATION
     const namesText = elements.businessNamesInput.value.trim();
-    const businessNames = namesText.split('\n').map(name => name.trim()).filter(Boolean); // Create an array of names
-    // END MODIFICATION
+    const businessNames = namesText.split('\n').map(name => name.trim()).filter(Boolean);
     
     const location = elements.locationInput.value.trim();
     const country = elements.countryInput.value;
@@ -857,7 +851,6 @@ if (filterText) {
       version: currentSearchVersion
     };
 
-    // START MODIFICATION
     if (businessNames.length > 0) {
       if (!location && postalCodes.length === 0) {
         logMessage(
@@ -874,7 +867,7 @@ if (filterText) {
         "info"
       );
       socket.emit("start_scrape", {
-        businessNames, // Send the array
+        businessNames,
         location,
         postalCode: postalCodes,
         country,
@@ -912,7 +905,6 @@ if (filterText) {
       };
       socket.emit("start_scrape", payload);
     }
-    // END MODIFICATION
   }
 
   function handleScrapeError(error) {
