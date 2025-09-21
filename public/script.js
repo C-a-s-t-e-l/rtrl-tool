@@ -542,23 +542,38 @@ if (filterText) {
 
     elements.startButton.addEventListener("click", startResearch);
 
+    // --- START: BUG FIX for UI Dimming ---
     elements.businessNamesInput.addEventListener("input", (e) => {
       const isIndividualSearch = e.target.value.trim().length > 0;
-      elements.bulkSearchContainer
-        .querySelectorAll("input, select")
-        .forEach((el) => {
-          if (
-            el.id !== "countryInput" &&
-            el.id !== "locationInput" &&
-            el.id !== "postalCodeInput"
-          ) {
-            el.disabled = isIndividualSearch;
-          }
+
+      // Select all form groups and the checkbox group within the category search area
+      const elementsToToggle = elements.bulkSearchContainer.querySelectorAll('.form-group, .form-row');
+
+      elementsToToggle.forEach(el => {
+        // Find inputs/selects within this group
+        const inputs = el.querySelectorAll('input, select');
+        let isLocationGroup = false;
+        
+        // Check if any input in this group is a location field
+        inputs.forEach(input => {
+            if (['locationInput', 'postalCodeInput', 'countryInput'].includes(input.id)) {
+                isLocationGroup = true;
+            }
         });
-      elements.bulkSearchContainer.style.opacity = isIndividualSearch
-        ? "0.5"
-        : "1";
+
+        if (isLocationGroup) {
+            // Never dim or disable location fields
+            el.style.opacity = '1';
+        } else {
+            // For all other fields (Category, Count, Checkbox), apply the logic
+            el.style.opacity = isIndividualSearch ? '0.5' : '1';
+            inputs.forEach(input => {
+                input.disabled = isIndividualSearch;
+            });
+        }
+      });
     });
+    // --- END: BUG FIX for UI Dimming ---
 
     elements.selectAllCheckbox.addEventListener("change", (e) => {
       const isChecked = e.target.checked;
@@ -930,9 +945,7 @@ if (filterText) {
       countryInput: elements.countryInput,
       countInput: elements.countInput,
       findAllBusinessesCheckbox: elements.findAllBusinessesCheckbox,
-      // START MODIFICATION
       businessNamesInput: elements.businessNamesInput,
-      // END MODIFICATION
       downloadButtons: {
         fullExcel: elements.downloadFullExcelButton,
         notifyre: elements.downloadNotifyreCSVButton,
