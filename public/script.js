@@ -606,24 +606,52 @@ if (filterText) {
         elements.logEl
       );
     });
-    elements.downloadNotifyreCSVButton.addEventListener("click", () => {
-      const selectedData = getSelectedData();
-      downloadExcel(
-        selectedData.filter(d => d.Phone && d.Phone.startsWith('614')),
-        currentSearchParameters,
-        "notifyre_sms",
-        "csv",
-        elements.logEl,
-        [
-          "Phone",
-          "OwnerName",
-          "BusinessName",
-          "SuburbArea",
-          "Category",
-          "Website",
-        ]
-      );
+
+elements.downloadNotifyreCSVButton.addEventListener("click", () => {
+  const selectedData = getSelectedData();
+
+  const notifyreHeaders = [
+    "FirstName", "LastName", "Organization", "Email", "FaxNumber",
+    "MobileNumber", "CustomField1", "CustomField2", "CustomField3",
+    "CustomField4", "Unsubscribed"
+  ];
+
+  const notifyreFormattedData = selectedData
+    .filter(business => business.Phone && business.Phone.startsWith('614'))
+    .map(business => {
+      let firstName = '';
+      let lastName = '';
+
+      if (business.OwnerName && business.OwnerName.trim() !== '') {
+        const nameParts = business.OwnerName.trim().split(' ');
+        firstName = nameParts.shift(); 
+        lastName = nameParts.join(' '); 
+      }
+
+      return {
+        FirstName: firstName,
+        LastName: lastName,
+        Organization: business.BusinessName || '',
+        Email: business.Email || '',
+        FaxNumber: '', 
+        MobileNumber: business.Phone || '',
+        CustomField1: business.Category || '', 
+        CustomField2: business.SuburbArea || '', 
+        CustomField3: '',
+        CustomField4: '',
+        Unsubscribed: '', 
+      };
     });
+
+  downloadExcel(
+    notifyreFormattedData,
+    currentSearchParameters,
+    "notifyre_sms",
+    "csv",
+    elements.logEl,
+    notifyreHeaders 
+  );
+});
     
     elements.downloadGoogleWorkspaceCSVButton.addEventListener("click", () => {
       const selectedRawData = getSelectedData();
