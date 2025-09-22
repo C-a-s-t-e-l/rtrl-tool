@@ -29,6 +29,13 @@ if (!GOOGLE_MAPS_API_KEY) {
     process.exit(1);
 }
 
+// --- START: DE-DUPLICATION HELPER ---
+// Normalizes strings for creating a reliable unique key.
+const normalizeStringForKey = (str = '') => {
+    return str.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()']/g,"").replace(/\s+/g, '');
+};
+// --- END: DE-DUPLICATION HELPER ---
+
 const countryBoundingBoxes = {
     'australia': { minLat: -44.0, maxLat: -10.0, minLng: 112.0, maxLng: 154.0 },
     'philippines': { minLat: 4.0, maxLat: 21.0, minLng: 116.0, maxLng: 127.0 },
@@ -94,6 +101,9 @@ io.on('connection', (socket) => {
             
             const allProcessedBusinesses = [];
             const processedUrlSet = new Set();
+            // --- START: DE-DUPLICATION TRACKER ---
+            const addedBusinessKeys = new Set();
+            // --- END: DE-DUPLICATION TRACKER ---
             const CONCURRENCY = 4;
             let totalDiscoveredUrls = 0;
             
@@ -166,10 +176,19 @@ io.on('connection', (socket) => {
                             const results = await Promise.all(promises);
                             results.forEach(businessData => {
                                 if (businessData && allProcessedBusinesses.length < targetCount) {
-                                    allProcessedBusinesses.push(businessData);
-                                    const status = isSearchAll ? `(Total Added: ${allProcessedBusinesses.length})` : `(${allProcessedBusinesses.length}/${finalCount})`;
-                                    socket.emit('log', `-> ADDED: ${businessData.BusinessName}. ${status}`);
-                                    socket.emit('business_found', businessData);
+                                    // --- START: DE-DUPLICATION LOGIC ---
+                                    const businessKey = normalizeStringForKey(businessData.BusinessName) + normalizeStringForKey(businessData.StreetAddress);
+                                    
+                                    if (addedBusinessKeys.has(businessKey)) {
+                                        socket.emit('log', `-> SKIPPED (Duplicate): ${businessData.BusinessName} at ${businessData.StreetAddress}`);
+                                    } else {
+                                        addedBusinessKeys.add(businessKey);
+                                        allProcessedBusinesses.push(businessData);
+                                        const status = isSearchAll ? `(Total Added: ${allProcessedBusinesses.length})` : `(${allProcessedBusinesses.length}/${finalCount})`;
+                                        socket.emit('log', `-> ADDED: ${businessData.BusinessName}. ${status}`);
+                                        socket.emit('business_found', businessData);
+                                    }
+                                    // --- END: DE-DUPLICATION LOGIC ---
                                 }
                                 socket.emit('progress_update', { processed: allProcessedBusinesses.length, discovered: totalDiscoveredUrls, added: allProcessedBusinesses.length, target: finalCount });
                             });
@@ -301,7 +320,6 @@ async function scrapeGoogleMapsDetails(page, url, socket, country) {
     await page.waitForSelector('h1', {timeout: 60000});
     
     return page.evaluate((countryCode) => {
-        // --- START: FIX FOR WEIRD CHARACTERS ---
         const cleanText = (text) => {
             if (!text) return '';
             let cleaned = String(text);
@@ -322,7 +340,6 @@ async function scrapeGoogleMapsDetails(page, url, socket, country) {
             }
             return digits;
         };
-        // --- END: FIX FOR WEIRD CHARACTERS ---
         
         const data = {
             BusinessName: cleanText(document.querySelector('h1')?.innerText),
