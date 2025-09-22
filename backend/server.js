@@ -29,12 +29,20 @@ if (!GOOGLE_MAPS_API_KEY) {
     process.exit(1);
 }
 
-// --- START: DE-DUPLICATION HELPER ---
-// Normalizes strings for creating a reliable unique key.
+// --- START: IMPROVED DE-DUPLICATION HELPER ---
+// More aggressive cleaning for creating a reliable unique key.
 const normalizeStringForKey = (str = '') => {
-    return str.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()']/g,"").replace(/\s+/g, '');
+    if (!str) return '';
+    // Removes common business suffixes, punctuation, and all spaces.
+    // Also truncates address at the first comma to normalize (e.g., "123 Main St, Richmond" becomes "123 Main St").
+    return str.toLowerCase()
+        .replace(/,.*$/, '') 
+        .replace(/\b(cafe|pty|ltd|inc|llc|co|the)\b/g, '')
+        .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()']/g, "")
+        .replace(/\s+/g, '');
 };
-// --- END: DE-DUPLICATION HELPER ---
+// --- END: IMPROVED DE-DUPLICATION HELPER ---
+
 
 const countryBoundingBoxes = {
     'australia': { minLat: -44.0, maxLat: -10.0, minLng: 112.0, maxLng: 154.0 },
@@ -101,9 +109,7 @@ io.on('connection', (socket) => {
             
             const allProcessedBusinesses = [];
             const processedUrlSet = new Set();
-            // --- START: DE-DUPLICATION TRACKER ---
             const addedBusinessKeys = new Set();
-            // --- END: DE-DUPLICATION TRACKER ---
             const CONCURRENCY = 4;
             let totalDiscoveredUrls = 0;
             
@@ -125,7 +131,9 @@ io.on('connection', (socket) => {
                         socket.emit('log', `--- Scraping sub-area: "${query}" ---`);
                         
                         const discoveredUrlsForThisArea = new Set();
-                        await collectGoogleMapsUrlsContinuously(browser, query, socket, discoveredUrlsForThisArea, country);
+                        // --- START: MODIFICATION - Pass isIndividualSearch flag ---
+                        await collectGoogleMapsUrlsContinuously(browser, query, socket, discoveredUrlsForThisArea, country, isIndividualSearch);
+                        // --- END: MODIFICATION ---
                         
                         let newUniqueUrls = Array.from(discoveredUrlsForThisArea).filter(url => !processedUrlSet.has(url));
                         
@@ -161,6 +169,7 @@ io.on('connection', (socket) => {
                                             if (googleData.Website) websiteData = await scrapeWebsiteForGoldData(detailPage, googleData.Website, socket);
                                             
                                             const fullBusinessData = { ...googleData, ...websiteData };
+                                            // Assign the user's category search term, but keep the specific scraped one.
                                             fullBusinessData.Category = isIndividualSearch ? (googleData.ScrapedCategory || 'N/A') : category;
                                             return fullBusinessData;
                                         } finally {
@@ -176,7 +185,7 @@ io.on('connection', (socket) => {
                             const results = await Promise.all(promises);
                             results.forEach(businessData => {
                                 if (businessData && allProcessedBusinesses.length < targetCount) {
-                                    // --- START: DE-DUPLICATION LOGIC ---
+                                    // Use the improved de-duplication key
                                     const businessKey = normalizeStringForKey(businessData.BusinessName) + normalizeStringForKey(businessData.StreetAddress);
                                     
                                     if (addedBusinessKeys.has(businessKey)) {
@@ -188,7 +197,6 @@ io.on('connection', (socket) => {
                                         socket.emit('log', `-> ADDED: ${businessData.BusinessName}. ${status}`);
                                         socket.emit('business_found', businessData);
                                     }
-                                    // --- END: DE-DUPLICATION LOGIC ---
                                 }
                                 socket.emit('progress_update', { processed: allProcessedBusinesses.length, discovered: totalDiscoveredUrls, added: allProcessedBusinesses.length, target: finalCount });
                             });
@@ -250,7 +258,8 @@ async function getSearchQueriesForLocation(searchQuery, areaQuery, country, sock
     }
 }
 
-async function collectGoogleMapsUrlsContinuously(browser, searchQuery, socket, discoveredUrlSet, country) {
+// --- START: MODIFIED FUNCTION FOR STRICTER SEARCH ---
+async function collectGoogleMapsUrlsContinuously(browser, searchQuery, socket, discoveredUrlSet, country, isIndividualSearch = false) {
     let page;
     try {
         const countryNameToCode = {'australia': 'AU', 'new zealand': 'NZ', 'united states': 'US', 'united kingdom': 'GB', 'canada': 'CA', 'philippines': 'PH'};
@@ -284,8 +293,27 @@ async function collectGoogleMapsUrlsContinuously(browser, searchQuery, socket, d
             const MAX_NO_PROGRESS = 5;
             while (consecutiveNoProgressAttempts < MAX_NO_PROGRESS) {
                 const previousSize = discoveredUrlSet.size;
-                const visibleUrls = await page.$$eval('a[href*="/maps/place/"]', links => links.map(link => link.href));
-                visibleUrls.forEach(url => discoveredUrlSet.add(url));
+                
+                const visibleLinks = await page.$$eval('a[href*="/maps/place/"]', links => 
+                    links.map(link => ({ href: link.href, text: link.innerText || '' }))
+                );
+
+                let targetName = '';
+                if (isIndividualSearch) {
+                    targetName = searchQuery.split(',')[0].trim().toLowerCase();
+                }
+
+                visibleLinks.forEach(link => {
+                    if (isIndividualSearch) {
+                        // For individual name searches, only add links containing the target name.
+                        if (link.text.toLowerCase().includes(targetName)) {
+                            discoveredUrlSet.add(link.href);
+                        }
+                    } else {
+                        // For category searches, add all results.
+                        discoveredUrlSet.add(link.href);
+                    }
+                });
 
                 if (discoveredUrlSet.size > previousSize) {
                     consecutiveNoProgressAttempts = 0;
@@ -314,11 +342,13 @@ async function collectGoogleMapsUrlsContinuously(browser, searchQuery, socket, d
         if (page) await page.close();
     }
 }
+// --- END: MODIFIED FUNCTION ---
 
 async function scrapeGoogleMapsDetails(page, url, socket, country) {
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 90000 });
     await page.waitForSelector('h1', {timeout: 60000});
     
+    // --- START: MODIFIED EVALUATE TO GET ScrapedCategory ---
     return page.evaluate((countryCode) => {
         const cleanText = (text) => {
             if (!text) return '';
@@ -343,7 +373,7 @@ async function scrapeGoogleMapsDetails(page, url, socket, country) {
         
         const data = {
             BusinessName: cleanText(document.querySelector('h1')?.innerText),
-            ScrapedCategory: cleanText(document.querySelector('[jsaction*="category"]')?.innerText),
+            ScrapedCategory: cleanText(document.querySelector('[jsaction*="category"]')?.innerText), // <-- NEW
             StreetAddress: cleanText(document.querySelector('button[data-item-id="address"]')?.innerText),
             Website: document.querySelector('a[data-item-id="authority"]')?.href || '',
             Phone: cleanPhoneNumber(document.querySelector('button[data-item-id*="phone"]')?.innerText, countryCode),
@@ -362,6 +392,7 @@ async function scrapeGoogleMapsDetails(page, url, socket, country) {
         }
         return data;
     }, country);
+    // --- END: MODIFIED EVALUATE ---
 }
 
 async function scrapePageContent(page) {
