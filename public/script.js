@@ -77,7 +77,6 @@ function initializeMainApp() {
   let currentSort = { key: "BusinessName", direction: "asc" };
   const categories = {
     "Select Category": [],
-    "Other/Custom": [],
     Café: ["Café", "Coffee shop"],
     Bakery: ["Bakery", "Patisserie", "Cake shop", "Donut shop"],
     Restaurant: [
@@ -279,6 +278,8 @@ function initializeMainApp() {
       elements.researchStatusIcon.className = "fas fa-check-circle";
 
     const savedData = localStorage.getItem("rtrl_collected_data");
+    const savedParams = localStorage.getItem("rtrl_search_params");
+
     if (savedData) {
       logMessage(
         elements.logEl,
@@ -286,6 +287,9 @@ function initializeMainApp() {
         "success"
       );
       allCollectedData = JSON.parse(savedData);
+      if (savedParams) {
+          currentSearchParameters = JSON.parse(savedParams);
+      }
       if (allCollectedData.length > 0) {
         elements.collectedDataCard.classList.add("has-results");
       }
@@ -295,14 +299,6 @@ function initializeMainApp() {
     }
 
     populatePrimaryCategories(elements.primaryCategorySelect, categories, "");
-    handleCategoryChange(
-      "",
-      elements.subCategoryGroup,
-      elements.subCategorySelect,
-      elements.customCategoryGroup,
-      elements.customCategoryInput,
-      categories
-    );
     setupEventListeners();
     loadGoogleMaps();
   }
@@ -466,15 +462,31 @@ if (filterText) {
   function setupEventListeners() {
     setupTagInput();
     elements.primaryCategorySelect.addEventListener("change", (event) => {
-      handleCategoryChange(
-        event.target.value,
-        elements.subCategoryGroup,
-        elements.subCategorySelect,
-        elements.customCategoryGroup,
-        elements.customCategoryInput,
-        categories
-      );
+      const selectedCategory = event.target.value;
+      populateSubCategories(elements.subCategorySelect, elements.subCategoryGroup, selectedCategory, categories);
+
+      if (selectedCategory) {
+          elements.customCategoryInput.value = '';
+          elements.customCategoryInput.disabled = true;
+      } else {
+          elements.customCategoryInput.disabled = false;
+      }
     });
+
+    elements.customCategoryInput.addEventListener('input', (event) => {
+        const hasValue = event.target.value.trim() !== '';
+        if (hasValue) {
+            elements.primaryCategorySelect.value = '';
+            elements.subCategorySelect.innerHTML = '';
+            elements.subCategoryGroup.style.display = 'none';
+            elements.primaryCategorySelect.disabled = true;
+            elements.subCategorySelect.disabled = true;
+        } else {
+            elements.primaryCategorySelect.disabled = false;
+            elements.subCategorySelect.disabled = false;
+        }
+    });
+
     elements.findAllBusinessesCheckbox.addEventListener("change", (e) => {
       elements.countInput.disabled = e.target.checked;
       if (e.target.checked) elements.countInput.value = "";
@@ -542,19 +554,14 @@ if (filterText) {
 
     elements.startButton.addEventListener("click", startResearch);
 
-    // --- START: BUG FIX for UI Dimming ---
     elements.businessNamesInput.addEventListener("input", (e) => {
       const isIndividualSearch = e.target.value.trim().length > 0;
-
-      // Select all form groups and the checkbox group within the category search area
       const elementsToToggle = elements.bulkSearchContainer.querySelectorAll('.form-group, .form-row');
 
       elementsToToggle.forEach(el => {
-        // Find inputs/selects within this group
         const inputs = el.querySelectorAll('input, select');
         let isLocationGroup = false;
         
-        // Check if any input in this group is a location field
         inputs.forEach(input => {
             if (['locationInput', 'postalCodeInput', 'countryInput'].includes(input.id)) {
                 isLocationGroup = true;
@@ -562,10 +569,8 @@ if (filterText) {
         });
 
         if (isLocationGroup) {
-            // Never dim or disable location fields
             el.style.opacity = '1';
         } else {
-            // For all other fields (Category, Count, Checkbox), apply the logic
             el.style.opacity = isIndividualSearch ? '0.5' : '1';
             inputs.forEach(input => {
                 input.disabled = isIndividualSearch;
@@ -573,7 +578,6 @@ if (filterText) {
         }
       });
     });
-    // --- END: BUG FIX for UI Dimming ---
 
     elements.selectAllCheckbox.addEventListener("change", (e) => {
       const isChecked = e.target.checked;
@@ -867,9 +871,10 @@ elements.downloadNotifyreCSVButton.addEventListener("click", () => {
     const country = elements.countryInput.value;
     const countInputVal = elements.countInput.value.trim();
     
-    let categorySearchTerm = elements.primaryCategorySelect.value === "Other/Custom"
-        ? elements.customCategoryInput.value
-        : elements.subCategorySelect.value || elements.primaryCategorySelect.value;
+    const customCategoryValue = elements.customCategoryInput.value.trim();
+    let categorySearchTerm = customCategoryValue 
+        ? customCategoryValue
+        : (elements.subCategorySelect.value || elements.primaryCategorySelect.value);
     
     const searchCategoryKey = (businessNames.length > 0 ? 'bulk_name_search' : categorySearchTerm).replace(/[\s/]/g, '_').toLowerCase();
     const searchAreaKey = (postalCodes.length > 0 ? postalCodes.join('_') : location.split(',')[0].replace(/[\s/,]/g, '_')).toLowerCase();
@@ -893,6 +898,7 @@ elements.downloadNotifyreCSVButton.addEventListener("click", () => {
       area: searchAreaKey,
       version: currentSearchVersion
     };
+    localStorage.setItem('rtrl_search_params', JSON.stringify(currentSearchParameters));
 
     if (businessNames.length > 0) {
       if (!location && postalCodes.length === 0) {
@@ -927,7 +933,7 @@ elements.downloadNotifyreCSVButton.addEventListener("click", () => {
       if (!categorySearchTerm || (postalCodes.length === 0 && !location) || !country) {
         logMessage(
           elements.logEl,
-          `Input Error: Please provide a category, location/postal code, and country for bulk search.`,
+          `Input Error: Please provide a category or keyword, a location/postal code, and country.`,
           "error"
         );
         handleScrapeError({ error: "Invalid input" });

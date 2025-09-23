@@ -45,9 +45,11 @@
                         <label for="subCategorySelect">Sub-Category (Optional)</label>
                         <select id="subCategorySelect"></select>
                     </div>
+
+                    <div class="separator-text">OR</div>
     
-                    <div class="form-group" id="customCategoryGroup" style="display: none;">
-                        <label for="customCategoryInput">Custom Category</label>
+                    <div class="form-group" id="customCategoryGroup">
+                        <label for="customCategoryInput">Custom Keyword / Category</label>
                         <input type="text" id="customCategoryInput" placeholder="e.g., Artisan Cheese Shop">
                     </div>
     
@@ -60,7 +62,6 @@
                         <div class="form-group">
                             <label for="postalCodeInput"><i class="fas fa-hashtag"></i> Postal Code(s)</label>
                             <div id="postalCodeContainer" class="tag-container">
-                                <!-- Tags will be dynamically inserted here -->
                                 <input type="text" id="postalCodeInput" placeholder="Enter postcodes...">
                             </div>
                             <div id="postalCodeSuggestions" class="autocomplete-suggestions"></div>
@@ -86,7 +87,6 @@
 
                 <hr class="separator">
 
-                <!-- START MODIFICATION -->
                 <div id="individualSearchContainer">
                     <h4>Or, Search by Specific Name(s)</h4>
                      <div class="form-group">
@@ -95,7 +95,6 @@
                         <small class="form-text">Fills all location info automatically. Overrides bulk search.</small>
                     </div>
                 </div>
-                <!-- END MODIFICATION -->
                 
                 <button id="startButton" class="btn btn-primary"><i class="fas fa-play"></i> Start Research</button>
             </div>

@@ -165,7 +165,32 @@ header {
   gap: 1rem;
 }
 
-/* --- TAG INPUT STYLES --- */
+.separator-text {
+    text-align: center;
+    font-weight: 600;
+    color: var(--secondary-text);
+    margin: 1.5rem 0;
+    position: relative;
+}
+
+.separator-text::before,
+.separator-text::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    width: calc(50% - 30px);
+    height: 1px;
+    background-color: var(--border-color);
+}
+
+.separator-text::before {
+    left: 0;
+}
+
+.separator-text::after {
+    right: 0;
+}
+
 .tag-container {
     display: flex;
     flex-wrap: wrap;
@@ -219,7 +244,6 @@ header {
     color: var(--primary-text);
 }
 
-/* --- NEW ERROR STYLES FOR TAG INPUT --- */
 @keyframes shake {
     0%, 100% { transform: translateX(0); }
     10%, 30%, 50%, 70%, 90% { transform: translateX(-4px); }
@@ -230,8 +254,6 @@ header {
     border-color: var(--error-color);
     animation: shake 0.5s ease-in-out;
 }
-/* --- END NEW STYLES --- */
-
 
 .results-display {
   display: flex;
@@ -356,7 +378,6 @@ header {
 }
 .results-grid {
     display: grid;
-    /* MODIFICATION: Added two columns for emails and adjusted others */
     grid-template-columns: 
         50px                  
         minmax(200px, 1.5fr)  

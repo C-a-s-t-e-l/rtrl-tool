@@ -20,7 +20,7 @@ function populateSubCategories(selectEl, groupEl, selectedCategory, categoriesDa
     selectEl.innerHTML = '';
     const subCategories = categoriesData[selectedCategory];
 
-    if (subCategories && subCategories.length > 0 && selectedCategory && selectedCategory !== "Other/Custom") {
+    if (subCategories && subCategories.length > 0 && selectedCategory) {
         groupEl.style.display = 'block';
         subCategories.forEach(subCat => {
             const option = document.createElement('option');
@@ -34,19 +34,6 @@ function populateSubCategories(selectEl, groupEl, selectedCategory, categoriesDa
     } else {
         groupEl.style.display = 'none';
         selectEl.value = '';
-    }
-}
-
-function handleCategoryChange(selectedCategory, subCatGroup, subCatSelect, customCatGroup, customCatInput, categoriesData) {
-    if (selectedCategory === "Other/Custom") {
-        subCatGroup.style.display = 'none';
-        subCatSelect.value = '';
-        customCatGroup.style.display = 'block';
-        customCatInput.focus();
-    } else {
-        customCatGroup.style.display = 'none';
-        customCatInput.value = '';
-        populateSubCategories(subCatSelect, subCatGroup, selectedCategory, categoriesData);
     }
 }
 
@@ -159,15 +146,11 @@ function setUiState(isBusy, elements) {
     if (!isBusy) {
         elements.countInput.disabled = elements.findAllBusinessesCheckbox.checked || isIndividualSearch;
 
-        // --- START: BUG FIX ---
-        // Be more specific about which elements to disable.
         document.getElementById('bulkSearchContainer').querySelectorAll('input, select').forEach(el => {
-            // Only disable elements that are NOT for location.
             if (el.id !== 'countryInput' && el.id !== 'locationInput' && el.id !== 'postalCodeInput') {
                  el.disabled = isIndividualSearch;
             }
         });
-        // --- END: BUG FIX ---
     }
 
     setDownloadButtonStates(isBusy, elements.downloadButtons, elements.displayedData);
