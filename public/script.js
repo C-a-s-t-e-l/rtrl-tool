@@ -1,12 +1,12 @@
-const BACKEND_URL = "https://brieflessly-unlovely-constance.ngrok-free.app"; 
+const BACKEND_URL = "https://brieflessly-unlovely-constance.ngrok-free.app";
 function initializeMainApp() {
   async function loadGoogleMaps() {
     try {
-        const response = await fetch(`${BACKEND_URL}/api/config`, {
-            headers: {
-                "ngrok-skip-browser-warning": "true"
-            }
-        });
+      const response = await fetch(`${BACKEND_URL}/api/config`, {
+        headers: {
+          "ngrok-skip-browser-warning": "true",
+        },
+      });
       const config = await response.json();
       const googleMapsApiKey = config.googleMapsApiKey;
 
@@ -26,9 +26,9 @@ function initializeMainApp() {
 
   const socket = io(BACKEND_URL, {
     extraHeaders: {
-        "ngrok-skip-browser-warning": "true"
-    }
-});
+      "ngrok-skip-browser-warning": "true",
+    },
+  });
 
   const elements = {
     startButton: document.getElementById("startButton"),
@@ -218,58 +218,60 @@ function initializeMainApp() {
     { value: "HK", text: "Hong Kong" },
   ];
 
-    async function getPlaceDetails(placeId) {
-        return new Promise((resolve, reject) => {
-            if (!geocoder) return reject(new Error("Geocoder service not initialized."));
-            geocoder.geocode({ placeId }, (results, status) => {
-                if (status === google.maps.GeocoderStatus.OK && results[0]) {
-                    resolve(results[0]);
-                } else {
-                    reject(new Error(`Geocoder failed with status: ${status}`));
-                }
-            });
-        });
-    }
-
-    async function populateFieldsFromPlaceDetails(details) {
-        const components = {};
-        details.address_components.forEach((component) => {
-            components[component.types[0]] = {
-                long_name: component.long_name,
-                short_name: component.short_name,
-            };
-        });
-        const countryName = (components.country || {}).long_name || "";
-        if (countryName) {
-             elements.countryInput.value = countryName;
+  async function getPlaceDetails(placeId) {
+    return new Promise((resolve, reject) => {
+      if (!geocoder)
+        return reject(new Error("Geocoder service not initialized."));
+      geocoder.geocode({ placeId }, (results, status) => {
+        if (status === google.maps.GeocoderStatus.OK && results[0]) {
+          resolve(results[0]);
+        } else {
+          reject(new Error(`Geocoder failed with status: ${status}`));
         }
-    }
+      });
+    });
+  }
 
-    async function handleLocationSelection(item) {
-        try {
-            const details = await getPlaceDetails(item.place_id);
-            await populateFieldsFromPlaceDetails(details);
-            elements.locationInput.value = item.description;
-
-        } catch (error) {
-            console.error("Could not get place details:", error);
-            elements.locationInput.value = item.description.split(",")[0];
-        }
+  async function populateFieldsFromPlaceDetails(details) {
+    const components = {};
+    details.address_components.forEach((component) => {
+      components[component.types[0]] = {
+        long_name: component.long_name,
+        short_name: component.short_name,
+      };
+    });
+    const countryName = (components.country || {}).long_name || "";
+    if (countryName) {
+      elements.countryInput.value = countryName;
     }
+  }
 
-    async function handlePostalCodeSelection(item) {
-        try {
-            const details = await getPlaceDetails(item.place_id);
-            await populateFieldsFromPlaceDetails(details);
-            const postalCodeComponent = details.address_components.find(c => c.types.includes('postal_code'));
-            if (postalCodeComponent) {
-                validateAndAddTag(postalCodeComponent.long_name);
-                 elements.postalCodeInput.value = '';
-            }
-        } catch (error) {
-             console.error("Could not get place details for postcode:", error);
-        }
+  async function handleLocationSelection(item) {
+    try {
+      const details = await getPlaceDetails(item.place_id);
+      await populateFieldsFromPlaceDetails(details);
+      elements.locationInput.value = item.description;
+    } catch (error) {
+      console.error("Could not get place details:", error);
+      elements.locationInput.value = item.description.split(",")[0];
     }
+  }
+
+  async function handlePostalCodeSelection(item) {
+    try {
+      const details = await getPlaceDetails(item.place_id);
+      await populateFieldsFromPlaceDetails(details);
+      const postalCodeComponent = details.address_components.find((c) =>
+        c.types.includes("postal_code")
+      );
+      if (postalCodeComponent) {
+        validateAndAddTag(postalCodeComponent.long_name);
+        elements.postalCodeInput.value = "";
+      }
+    } catch (error) {
+      console.error("Could not get place details for postcode:", error);
+    }
+  }
 
   function initializeApp() {
     document.getElementById("currentYear").textContent =
@@ -288,7 +290,12 @@ function initializeMainApp() {
       );
       allCollectedData = JSON.parse(savedData);
       if (savedParams) {
-          currentSearchParameters = JSON.parse(savedParams);
+        currentSearchParameters = JSON.parse(savedParams);
+        logMessage(
+          elements.logEl,
+          `Loaded search parameters: ${currentSearchParameters.category} in ${currentSearchParameters.area}.`,
+          "info"
+        );
       }
       if (allCollectedData.length > 0) {
         elements.collectedDataCard.classList.add("has-results");
@@ -317,14 +324,16 @@ function initializeMainApp() {
     const filterText = elements.filterInput.value.toLowerCase();
 
     let filteredData;
-if (filterText) {
-    filteredData = allCollectedData.filter(item => {
-        return (item.BusinessName?.toLowerCase().startsWith(filterText) ||
-                item.Category?.toLowerCase().startsWith(filterText) ||
-                item.StreetAddress?.toLowerCase().startsWith(filterText) ||
-                item.SuburbArea?.toLowerCase().startsWith(filterText));
-    });
-} else {
+    if (filterText) {
+      filteredData = allCollectedData.filter((item) => {
+        return (
+          item.BusinessName?.toLowerCase().startsWith(filterText) ||
+          item.Category?.toLowerCase().startsWith(filterText) ||
+          item.StreetAddress?.toLowerCase().startsWith(filterText) ||
+          item.SuburbArea?.toLowerCase().startsWith(filterText)
+        );
+      });
+    } else {
       filteredData = [...allCollectedData];
     }
 
@@ -354,143 +363,172 @@ if (filterText) {
     });
   }
 
-    async function validateAndAddTag(postcode) {
-        const cleanedValue = postcode.trim();
-        if (!cleanedValue || isNaN(cleanedValue) || postalCodes.includes(cleanedValue)) {
-            elements.postalCodeInput.value = '';
-            return;
-        }
+  async function validateAndAddTag(postcode) {
+    const cleanedValue = postcode.trim();
+    if (
+      !cleanedValue ||
+      isNaN(cleanedValue) ||
+      postalCodes.includes(cleanedValue)
+    ) {
+      elements.postalCodeInput.value = "";
+      return;
+    }
 
-        const countryName = elements.countryInput.value.trim();
-        const countryIsoCode = countries.find(c => c.text.toLowerCase() === countryName.toLowerCase())?.value;
-        if (!countryIsoCode) {
-            logMessage(elements.logEl, "Please select a country before adding a postcode.", "error");
+    const countryName = elements.countryInput.value.trim();
+    const countryIsoCode = countries.find(
+      (c) => c.text.toLowerCase() === countryName.toLowerCase()
+    )?.value;
+    if (!countryIsoCode) {
+      logMessage(
+        elements.logEl,
+        "Please select a country before adding a postcode.",
+        "error"
+      );
+      triggerTagError();
+      return;
+    }
+
+    if (!geocoder) {
+      logMessage(
+        elements.logEl,
+        "Geocoder not ready. Please wait a moment.",
+        "error"
+      );
+      triggerTagError();
+      return;
+    }
+
+    try {
+      const request = {
+        componentRestrictions: {
+          country: countryIsoCode,
+          postalCode: cleanedValue,
+        },
+      };
+      geocoder.geocode(request, (results, status) => {
+        if (status === google.maps.GeocoderStatus.OK && results[0]) {
+          const result = results[0];
+          const components = result.address_components;
+          const suburbComponent = components.find((c) =>
+            c.types.includes("locality")
+          );
+          const postcodeComponent = components.find((c) =>
+            c.types.includes("postal_code")
+          );
+
+          if (
+            postcodeComponent &&
+            postcodeComponent.long_name === cleanedValue
+          ) {
+            const suburbName = suburbComponent ? suburbComponent.long_name : "";
+            addTagElement(cleanedValue, suburbName);
+            elements.postalCodeInput.value = "";
+          } else {
             triggerTagError();
-            return;
+          }
+        } else {
+          triggerTagError();
         }
+      });
+    } catch (error) {
+      triggerTagError();
+    }
+  }
 
-        if (!geocoder) {
-            logMessage(elements.logEl, "Geocoder not ready. Please wait a moment.", "error");
-            triggerTagError();
-            return;
+  function triggerTagError() {
+    elements.postalCodeContainer.classList.add("error");
+    setTimeout(() => {
+      elements.postalCodeContainer.classList.remove("error");
+    }, 500);
+  }
+
+  function addTagElement(postcode, suburb = "") {
+    postalCodes.push(postcode);
+    const tagText = suburb ? `${suburb} ${postcode}` : postcode;
+    const tagEl = document.createElement("span");
+    tagEl.className = "tag";
+    tagEl.innerHTML = `<span>${tagText}</span> <span class="tag-close-btn" data-value="${postcode}">&times;</span>`;
+    elements.postalCodeContainer.insertBefore(
+      tagEl,
+      elements.postalCodeInput
+    );
+  }
+
+  function setupTagInput() {
+    elements.postalCodeContainer.addEventListener("click", (e) => {
+      if (e.target.classList.contains("tag-close-btn")) {
+        const postcode = e.target.dataset.value;
+        const index = postalCodes.indexOf(postcode);
+        if (index > -1) {
+          postalCodes.splice(index, 1);
         }
-
-        try {
-            const request = {
-                componentRestrictions: {
-                    country: countryIsoCode,
-                    postalCode: cleanedValue
-                }
-            };
-            geocoder.geocode(request, (results, status) => {
-                if (status === google.maps.GeocoderStatus.OK && results[0]) {
-                    const result = results[0];
-                    const components = result.address_components;
-                    const suburbComponent = components.find(c => c.types.includes('locality'));
-                    const postcodeComponent = components.find(c => c.types.includes('postal_code'));
-
-                    if (postcodeComponent && postcodeComponent.long_name === cleanedValue) {
-                        const suburbName = suburbComponent ? suburbComponent.long_name : '';
-                        addTagElement(cleanedValue, suburbName);
-                        elements.postalCodeInput.value = '';
-                    } else {
-                        triggerTagError();
-                    }
-                } else {
-                    triggerTagError();
-                }
-            });
-        } catch (error) {
-            triggerTagError();
-        }
-    }
-
-    function triggerTagError() {
-        elements.postalCodeContainer.classList.add('error');
-        setTimeout(() => {
-            elements.postalCodeContainer.classList.remove('error');
-        }, 500);
-    }
-    
-    function addTagElement(postcode, suburb = '') {
-        postalCodes.push(postcode);
-        const tagText = suburb ? `${suburb} ${postcode}` : postcode;
-        const tagEl = document.createElement('span');
-        tagEl.className = 'tag';
-        tagEl.innerHTML = `<span>${tagText}</span> <span class="tag-close-btn" data-value="${postcode}">&times;</span>`;
-        elements.postalCodeContainer.insertBefore(tagEl, elements.postalCodeInput);
-    }
-
-    function setupTagInput() {
-        elements.postalCodeContainer.addEventListener('click', (e) => {
-            if (e.target.classList.contains('tag-close-btn')) {
-                const postcode = e.target.dataset.value;
-                const index = postalCodes.indexOf(postcode);
-                if (index > -1) {
-                    postalCodes.splice(index, 1);
-                }
-                e.target.parentElement.remove();
-            } else {
-                elements.postalCodeInput.focus();
-            }
-        });
-
-        elements.postalCodeInput.addEventListener('keydown', async (e) => {
-            if (e.key === 'Enter' || e.key === ',') {
-                e.preventDefault();
-                const value = elements.postalCodeInput.value.trim();
-                if (value) {
-                    await validateAndAddTag(value);
-                }
-            } else if (e.key === 'Backspace' && elements.postalCodeInput.value === '') {
-                if (postalCodes.length > 0) {
-                    const lastTag = elements.postalCodeContainer.querySelector('.tag:last-of-type');
-                    if (lastTag) {
-                         const closeBtn = lastTag.querySelector('.tag-close-btn');
-                         const postcode = closeBtn.dataset.value;
-                         const index = postalCodes.indexOf(postcode);
-                         if (index > -1) {
-                             postalCodes.splice(index, 1);
-                         }
-                         lastTag.remove();
-                    }
-                }
-            }
-        });
-    }
-
-  function setupEventListeners() {
-    setupTagInput();
-    elements.primaryCategorySelect.addEventListener("change", (event) => {
-      const selectedCategory = event.target.value;
-      populateSubCategories(elements.subCategorySelect, elements.subCategoryGroup, selectedCategory, categories);
-
-      if (selectedCategory) {
-          elements.customCategoryInput.value = '';
-          elements.customCategoryInput.disabled = true;
+        e.target.parentElement.remove();
       } else {
-          elements.customCategoryInput.disabled = false;
+        elements.postalCodeInput.focus();
       }
     });
 
-    elements.customCategoryInput.addEventListener('input', (event) => {
-        const hasValue = event.target.value.trim() !== '';
-        if (hasValue) {
-            elements.primaryCategorySelect.value = '';
-            elements.subCategorySelect.innerHTML = '';
-            elements.subCategoryGroup.style.display = 'none';
-            elements.primaryCategorySelect.disabled = true;
-            elements.subCategorySelect.disabled = true;
-        } else {
-            elements.primaryCategorySelect.disabled = false;
-            elements.subCategorySelect.disabled = false;
+    elements.postalCodeInput.addEventListener("keydown", async (e) => {
+      if (e.key === "Enter" || e.key === ",") {
+        e.preventDefault();
+        const value = elements.postalCodeInput.value.trim();
+        if (value) {
+          await validateAndAddTag(value);
         }
+      } else if (
+        e.key === "Backspace" &&
+        elements.postalCodeInput.value === ""
+      ) {
+        if (postalCodes.length > 0) {
+          const lastTag =
+            elements.postalCodeContainer.querySelector(".tag:last-of-type");
+          if (lastTag) {
+            const closeBtn = lastTag.querySelector(".tag-close-btn");
+            const postcode = closeBtn.dataset.value;
+            const index = postalCodes.indexOf(postcode);
+            if (index > -1) {
+              postalCodes.splice(index, 1);
+            }
+            lastTag.remove();
+          }
+        }
+      }
+    });
+  }
+
+  function setupEventListeners() {
+    setupTagInput();
+
+    elements.customCategoryInput.addEventListener("input", () => {
+      const hasCustomText = elements.customCategoryInput.value.trim() !== "";
+      elements.primaryCategorySelect.disabled = hasCustomText;
+      elements.subCategorySelect.disabled = hasCustomText;
+      if (hasCustomText) {
+        elements.primaryCategorySelect.value = "";
+        elements.primaryCategorySelect.dispatchEvent(new Event("change"));
+      }
+    });
+
+    elements.primaryCategorySelect.addEventListener("change", (event) => {
+      const selectedCategory = event.target.value;
+      populateSubCategories(
+        elements.subCategorySelect,
+        elements.subCategoryGroup,
+        selectedCategory,
+        categories
+      );
+      const hasCategorySelection = selectedCategory !== "";
+      elements.customCategoryInput.disabled = hasCategorySelection;
+      if (hasCategorySelection) {
+        elements.customCategoryInput.value = "";
+      }
     });
 
     elements.findAllBusinessesCheckbox.addEventListener("change", (e) => {
       elements.countInput.disabled = e.target.checked;
       if (e.target.checked) elements.countInput.value = "";
     });
+
     elements.countryInput.addEventListener("input", () => {
       clearTimeout(countryAutocompleteTimer);
       countryAutocompleteTimer = setTimeout(() => {
@@ -514,7 +552,7 @@ if (filterText) {
         );
       }, 300);
     });
-    
+
     elements.locationInput.addEventListener("input", () => {
       clearTimeout(locationAutocompleteTimer);
       locationAutocompleteTimer = setTimeout(
@@ -542,7 +580,7 @@ if (filterText) {
         300
       );
     });
-    
+
     document.addEventListener("click", (event) => {
       if (!elements.locationInput.contains(event.target))
         elements.locationSuggestionsEl.style.display = "none";
@@ -556,25 +594,30 @@ if (filterText) {
 
     elements.businessNamesInput.addEventListener("input", (e) => {
       const isIndividualSearch = e.target.value.trim().length > 0;
-      const elementsToToggle = elements.bulkSearchContainer.querySelectorAll('.form-group, .form-row');
+      const elementsToToggle =
+        elements.bulkSearchContainer.querySelectorAll(".form-group, .form-row");
 
-      elementsToToggle.forEach(el => {
-        const inputs = el.querySelectorAll('input, select');
+      elementsToToggle.forEach((el) => {
+        const inputs = el.querySelectorAll("input, select");
         let isLocationGroup = false;
-        
-        inputs.forEach(input => {
-            if (['locationInput', 'postalCodeInput', 'countryInput'].includes(input.id)) {
-                isLocationGroup = true;
-            }
+
+        inputs.forEach((input) => {
+          if (
+            ["locationInput", "postalCodeInput", "countryInput"].includes(
+              input.id
+            )
+          ) {
+            isLocationGroup = true;
+          }
         });
 
         if (isLocationGroup) {
-            el.style.opacity = '1';
+          el.style.opacity = "1";
         } else {
-            el.style.opacity = isIndividualSearch ? '0.5' : '1';
-            inputs.forEach(input => {
-                input.disabled = isIndividualSearch;
-            });
+          el.style.opacity = isIndividualSearch ? "0.5" : "1";
+          inputs.forEach((input) => {
+            input.disabled = isIndividualSearch;
+          });
         }
       });
     });
@@ -611,74 +654,88 @@ if (filterText) {
       );
     });
 
-elements.downloadNotifyreCSVButton.addEventListener("click", () => {
-  const selectedData = getSelectedData();
+    elements.downloadNotifyreCSVButton.addEventListener("click", () => {
+      const selectedData = getSelectedData();
 
-  const notifyreHeaders = [
-    "FirstName", "LastName", "Organization", "Email", "FaxNumber",
-    "MobileNumber", "CustomField1", "CustomField2", "CustomField3",
-    "CustomField4", "Unsubscribed"
-  ];
+      const notifyreHeaders = [
+        "FirstName",
+        "LastName",
+        "Organization",
+        "Email",
+        "FaxNumber",
+        "MobileNumber",
+        "CustomField1",
+        "CustomField2",
+        "CustomField3",
+        "CustomField4",
+        "Unsubscribed",
+      ];
 
-  const notifyreFormattedData = selectedData
-    .filter(business => business.Phone && business.Phone.startsWith('614'))
-    .map(business => {
-      let firstName = '';
-      let lastName = '';
+      const notifyreFormattedData = selectedData
+        .filter((business) => business.Phone && business.Phone.startsWith("614"))
+        .map((business) => {
+          let firstName = "";
+          let lastName = "";
 
-      if (business.OwnerName && business.OwnerName.trim() !== '') {
-        const nameParts = business.OwnerName.trim().split(' ');
-        firstName = nameParts.shift(); 
-        lastName = nameParts.join(' '); 
-      }
+          if (business.OwnerName && business.OwnerName.trim() !== "") {
+            const nameParts = business.OwnerName.trim().split(" ");
+            firstName = nameParts.shift();
+            lastName = nameParts.join(" ");
+          }
 
-      return {
-        FirstName: firstName,
-        LastName: lastName,
-        Organization: business.BusinessName || '',
-        Email: business.Email || '',
-        FaxNumber: '', 
-        MobileNumber: business.Phone || '',
-        CustomField1: business.Category || '', 
-        CustomField2: business.SuburbArea || '', 
-        CustomField3: '',
-        CustomField4: '',
-        Unsubscribed: '', 
-      };
+          return {
+            FirstName: firstName,
+            LastName: lastName,
+            Organization: business.BusinessName || "",
+            Email: business.Email || "",
+            FaxNumber: "",
+            MobileNumber: business.Phone || "",
+            CustomField1: business.Category || "",
+            CustomField2: business.SuburbArea || "",
+            CustomField3: "",
+            CustomField4: "",
+            Unsubscribed: "",
+          };
+        });
+
+      downloadExcel(
+        notifyreFormattedData,
+        currentSearchParameters,
+        "notifyre_sms",
+        "csv",
+        elements.logEl,
+        notifyreHeaders
+      );
     });
 
-  downloadExcel(
-    notifyreFormattedData,
-    currentSearchParameters,
-    "notifyre_sms",
-    "csv",
-    elements.logEl,
-    notifyreHeaders 
-  );
-});
-    
     elements.downloadGoogleWorkspaceCSVButton.addEventListener("click", () => {
       const selectedRawData = getSelectedData();
-      
-      const dataWithEmails = selectedRawData.filter(d => d.Email1 && d.Email1.trim() !== '');
+
+      const dataWithEmails = selectedRawData.filter(
+        (d) => d.Email1 && d.Email1.trim() !== ""
+      );
 
       if (dataWithEmails.length === 0) {
-          logMessage(elements.logEl, 'No selected businesses have a primary email to export.', 'error');
-          return;
+        logMessage(
+          elements.logEl,
+          "No selected businesses have a primary email to export.",
+          "error"
+        );
+        return;
       }
-      
-      const googleWorkspaceData = dataWithEmails.map(d => ({
-            Email: d.Email1,
-            OwnerName: d.OwnerName,
-            BusinessName: d.BusinessName,
-            StreetAddress: d.StreetAddress,
-            SuburbArea: d.SuburbArea,
-            Website: d.Website,
-            InstagramURL: d.InstagramURL,
-            FacebookURL: d.FacebookURL,
-            GoogleMapsURL: d.GoogleMapsURL,
-            Category: d.Category
-        }));
+
+      const googleWorkspaceData = dataWithEmails.map((d) => ({
+        Email: d.Email1,
+        OwnerName: d.OwnerName,
+        BusinessName: d.BusinessName,
+        StreetAddress: d.StreetAddress,
+        SuburbArea: d.SuburbArea,
+        Website: d.Website,
+        InstagramURL: d.InstagramURL,
+        FacebookURL: d.FacebookURL,
+        GoogleMapsURL: d.GoogleMapsURL,
+        Category: d.Category,
+      }));
 
       downloadExcel(
         googleWorkspaceData,
@@ -765,7 +822,10 @@ elements.downloadNotifyreCSVButton.addEventListener("click", () => {
     if (countryIsoCode)
       request.componentRestrictions = { country: countryIsoCode };
     service.getPlacePredictions(request, (predictions, status) => {
-      if (status === google.maps.places.PlacesServiceStatus.OK && predictions) {
+      if (
+        status === google.maps.places.PlacesServiceStatus.OK &&
+        predictions
+      ) {
         const items = predictions.map((p) => ({
           description: p.description,
           place_id: p.place_id,
@@ -813,7 +873,9 @@ elements.downloadNotifyreCSVButton.addEventListener("click", () => {
       Email2: "",
       Email3: "",
       ...business,
-      SuburbArea: business.Suburb || elements.locationInput.value.split(",")[0].trim(),
+      SuburbArea:
+        business.Suburb ||
+        elements.locationInput.value.split(",")[0].trim(),
       LastVerifiedDate: new Date().toISOString().split("T")[0],
     };
 
@@ -853,6 +915,8 @@ elements.downloadNotifyreCSVButton.addEventListener("click", () => {
 
   function startResearch() {
     localStorage.removeItem("rtrl_collected_data");
+    localStorage.removeItem("rtrl_search_params");
+
     setUiState(true, getUiElementsForStateChange());
     allCollectedData = [];
     displayedData = [];
@@ -865,40 +929,54 @@ elements.downloadNotifyreCSVButton.addEventListener("click", () => {
       elements.researchStatusIcon.className = "fas fa-spinner fa-spin";
 
     const namesText = elements.businessNamesInput.value.trim();
-    const businessNames = namesText.split('\n').map(name => name.trim()).filter(Boolean);
-    
+    const businessNames = namesText
+      .split("\n")
+      .map((name) => name.trim())
+      .filter(Boolean);
+
     const location = elements.locationInput.value.trim();
     const country = elements.countryInput.value;
     const countInputVal = elements.countInput.value.trim();
-    
-    const customCategoryValue = elements.customCategoryInput.value.trim();
-    let categorySearchTerm = customCategoryValue 
-        ? customCategoryValue
-        : (elements.subCategorySelect.value || elements.primaryCategorySelect.value);
-    
-    const searchCategoryKey = (businessNames.length > 0 ? 'bulk_name_search' : categorySearchTerm).replace(/[\s/]/g, '_').toLowerCase();
-    const searchAreaKey = (postalCodes.length > 0 ? postalCodes.join('_') : location.split(',')[0].replace(/[\s/,]/g, '_')).toLowerCase();
-    const searchDate = new Date().toISOString().split('T')[0];
+
+    let categorySearchTerm =
+      elements.customCategoryInput.value.trim() ||
+      elements.subCategorySelect.value ||
+      elements.primaryCategorySelect.value;
+
+    const searchCategoryKey = (
+      businessNames.length > 0 ? "bulk_name_search" : categorySearchTerm
+    )
+      .replace(/[\s/]/g, "_")
+      .toLowerCase();
+    const searchAreaKey = (
+      postalCodes.length > 0
+        ? postalCodes.join("_")
+        : location.split(",")[0].replace(/[\s/,]/g, "_")
+    ).toLowerCase();
+    const searchDate = new Date().toISOString().split("T")[0];
     const searchKey = `${searchDate}-${searchCategoryKey}-${searchAreaKey}`;
 
-    let searchLog = JSON.parse(localStorage.getItem('rtrl_search_log')) || {};
+    let searchLog = JSON.parse(localStorage.getItem("rtrl_search_log")) || {};
     if (searchLog.date !== searchDate) {
       searchLog = { date: searchDate };
     }
-    
+
     const currentCount = searchLog[searchKey] || 0;
     const newCount = currentCount + 1;
     searchLog[searchKey] = newCount;
-    localStorage.setItem('rtrl_search_log', JSON.stringify(searchLog));
-    
+    localStorage.setItem("rtrl_search_log", JSON.stringify(searchLog));
+
     const currentSearchVersion = newCount;
 
     currentSearchParameters = {
       category: searchCategoryKey,
       area: searchAreaKey,
-      version: currentSearchVersion
+      version: currentSearchVersion,
     };
-    localStorage.setItem('rtrl_search_params', JSON.stringify(currentSearchParameters));
+    localStorage.setItem(
+      "rtrl_search_params",
+      JSON.stringify(currentSearchParameters)
+    );
 
     if (businessNames.length > 0) {
       if (!location && postalCodes.length === 0) {
@@ -930,7 +1008,11 @@ elements.downloadNotifyreCSVButton.addEventListener("click", () => {
         countValue <= 0;
       const count = find_all ? -1 : countValue;
 
-      if (!categorySearchTerm || (postalCodes.length === 0 && !location) || !country) {
+      if (
+        !categorySearchTerm ||
+        (postalCodes.length === 0 && !location) ||
+        !country
+      ) {
         logMessage(
           elements.logEl,
           `Input Error: Please provide a category or keyword, a location/postal code, and country.`,

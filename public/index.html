@@ -36,21 +36,20 @@
                 
                 <div id="bulkSearchContainer">
                     <h4>Bulk Search by Category</h4>
+    
+                    <div class="form-group" id="customCategoryGroup">
+                        <label for="customCategoryInput">Custom Keyword / Category</label>
+                        <input type="text" id="customCategoryInput" placeholder="e.g., Artisan Cheese Shop">
+                    </div>
+
                     <div class="form-group">
-                        <label for="primaryCategorySelect">Business Category</label>
+                        <label for="primaryCategorySelect">Business Category (or use custom keyword)</label>
                         <select id="primaryCategorySelect"></select>
                     </div>
     
                     <div class="form-group" id="subCategoryGroup" style="display: none;">
                         <label for="subCategorySelect">Sub-Category (Optional)</label>
                         <select id="subCategorySelect"></select>
-                    </div>
-
-                    <div class="separator-text">OR</div>
-    
-                    <div class="form-group" id="customCategoryGroup">
-                        <label for="customCategoryInput">Custom Keyword / Category</label>
-                        <input type="text" id="customCategoryInput" placeholder="e.g., Artisan Cheese Shop">
                     </div>
     
                     <div class="form-row">
