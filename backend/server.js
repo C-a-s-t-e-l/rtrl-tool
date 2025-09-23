@@ -104,7 +104,7 @@ io.on('connection', (socket) => {
             const allProcessedBusinesses = [];
             const processedUrlSet = new Set();
             const addedBusinessKeys = new Set();
-            const CONCURRENCY = 4;
+            const CONCURRENCY = 2;
             let totalDiscoveredUrls = 0;
             
             const searchItems = isIndividualSearch ? businessNames : [category];
@@ -297,7 +297,6 @@ async function collectGoogleMapsUrlsContinuously(browser, searchQuery, socket, d
             await page.waitForSelector(feedSelector, { timeout: 15000 });
             socket.emit('log', `   -> Found results list. Scraping all items...`);
             
-            // --- GEOGRAPHIC FILTER IMPLEMENTATION ---
             const boundingBox = countryBoundingBoxes[country.toLowerCase()];
             if (boundingBox) {
                 socket.emit('log', `   -> Filtering results to stay within ${country} borders.`);
@@ -313,17 +312,14 @@ async function collectGoogleMapsUrlsContinuously(browser, searchQuery, socket, d
                 );
 
                 visibleLinks.forEach(link => {
-                    // Condition 1: Check if the URL is within the country's geographic boundaries
                     const inBounds = boundingBox ? isUrlInBoundingBox(link.href, boundingBox) : true;
-                    if (!inBounds) return; // Skip if it's outside the country
+                    if (!inBounds) return;
 
-                    // Condition 2: Apply strict name filtering if needed (for specific postcode searches)
                     if (isIndividualSearch && applyStrictNameFilter) {
                         if (link.text.toLowerCase().includes(businessNameToFilter.trim().toLowerCase())) {
                             discoveredUrlSet.add(link.href);
                         }
                     } else {
-                        // For all other searches, add the link if it's in bounds
                         discoveredUrlSet.add(link.href);
                     }
                 });
