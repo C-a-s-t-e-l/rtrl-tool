@@ -594,6 +594,13 @@ footer {
   opacity: 1;
 }
 
+#searchControlsCard {
+    max-height: 85vh; 
+    overflow-y: auto;
+    position: sticky;
+    top: 2rem;
+}
+
 
 @media (max-width: 1200px) {
   .app-container {
