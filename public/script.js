@@ -75,180 +75,179 @@ function initializeMainApp() {
     currentSearchParameters = {},
     postalCodes = [];
   let currentSort = { key: "BusinessName", direction: "asc" };
-// PASTE THIS CODE INTO public/script.js
 
-const categories = {
-  "Select Category": [],
-  "Alterations and tailoring": [],
-  "Baby and nursery": [
-    "ALL",
-    "Baby and infant toys",
-    "Baby bedding",
-    "Nursery furniture",
-    "Prams, strollers and carriers",
-    "Tableware and feeding"
-  ],
-  "Banks": [],
-  "Beauty and wellness": [
-    "ALL",
-    "Bath and body",
-    "Fragrance",
-    "Hair and beauty",
-    "Hair care",
-    "Makeup",
-    "Skincare",
-    "Vitamins and supplements"
-  ],
-  "Books, stationery and gifts": [
-    "ALL",
-    "Book stores",
-    "Cards and gift wrap",
-    "Newsagencies",
-    "Office supplies",
-    "Stationery"
-  ],
-  "Car and auto": [],
-  "Childcare": [],
-  "Clothing and accessories": [
-    "ALL",
-    "Babies' and toddlers'",
-    "Footwear",
-    "Jewellery and watches",
-    "Kids' and junior",
-    "Men's fashion",
-    "Sunglasses",
-    "Women's fashion"
-  ],
-  "Community services": [],
-  "Department stores": [],
-  "Designer and boutique": [],
-  "Discount and variety": [],
-  "Dry cleaning": [],
-  "Electronics and technology": [
-    "ALL",
-    "Cameras",
-    "Computers and tablets",
-    "Gaming and consoles",
-    "Mobile and accessories",
-    "Navigation",
-    "TV and audio"
-  ],
-  "Entertainment and activities": [
-    "ALL",
-    "Arcades and games",
-    "Bowling",
-    "Cinemas",
-    "Kids activities",
-    "Learning and education",
-    "Music"
-  ],
-  "Florists": [],
-  "Food and drink": [
-    "ALL",
-    "Asian",
-    "Bars and pubs",
-    "Breakfast and brunch",
-    "Cafes",
-    "Casual dining",
-    "Chocolate cafes",
-    "Desserts",
-    "Dietary requirements",
-    "Fast food",
-    "Fine dining",
-    "Greek",
-    "Grill houses",
-    "Halal",
-    "Healthy options",
-    "Italian",
-    "Juice bars",
-    "Kid-friendly",
-    "Lebanese",
-    "Mexican and Latin American",
-    "Middle Eastern",
-    "Modern Australian",
-    "Sandwiches and salads",
-    "Takeaway"
-  ],
-  "Foreign currency exchange": [],
-  "Fresh food and groceries": [
-    "ALL",
-    "Bakeries",
-    "Butchers",
-    "Confectionery",
-    "Delicatessens",
-    "Fresh produce",
-    "Liquor",
-    "Patisseries",
-    "Poultry",
-    "Seafood",
-    "Specialty foods",
-    "Supermarkets"
-  ],
-  "Health and fitness": [
-    "ALL",
-    "Chemists",
-    "Dentists",
-    "Gyms and fitness studios",
-    "Health insurers",
-    "Medical centres",
-    "Medicare",
-    "Optometrists",
-    "Specialty health providers"
-  ],
-  "Home": [
-    "ALL",
-    "Bath and home fragrances",
-    "Bedding",
-    "Furniture",
-    "Gifts",
-    "Hardware",
-    "Home appliances",
-    "Home decor",
-    "Kitchen",
-    "Pets",
-    "Photography and art",
-    "Picture frames"
-  ],
-  "Luggage and travel accessories": [
-    "ALL",
-    "Backpacks and gym duffle bags",
-    "Laptop cases and sleeves",
-    "Small leather goods",
-    "Suitcases and travel accessories",
-    "Work and laptop bags"
-  ],
-  "Luxury and premium": [
-    "ALL",
-    "Australian designer",
-    "International designer",
-    "Luxury",
-    "Premium brands"
-  ],
-  "Pawn brokers": [],
-  "Phone repairs": [],
-  "Photographic services": [],
-  "Post office": [],
-  "Power, gas and communication services": [],
-  "Professional services": [],
-  "Real estate agents": [],
-  "Shoe repair and key cutting": [],
-  "Sporting goods": [
-    "ALL",
-    "Activewear",
-    "Fitness and gym equipment",
-    "Outdoors and camping",
-    "Tech and wearables"
-  ],
-  "Tobacconists": [],
-  "Toys and hobbies": [
-    "ALL",
-    "Arts and crafts",
-    "Games",
-    "Hobbies",
-    "Toys"
-  ],
-  "Travel agents": []
-};
+  const categories = {
+    "Select Category": [],
+    "Alterations and tailoring": [],
+    "Baby and nursery": [
+      "ALL",
+      "Baby and infant toys",
+      "Baby bedding",
+      "Nursery furniture",
+      "Prams, strollers and carriers",
+      "Tableware and feeding"
+    ],
+    "Banks": [],
+    "Beauty and wellness": [
+      "ALL",
+      "Bath and body",
+      "Fragrance",
+      "Hair and beauty",
+      "Hair care",
+      "Makeup",
+      "Skincare",
+      "Vitamins and supplements"
+    ],
+    "Books, stationery and gifts": [
+      "ALL",
+      "Book stores",
+      "Cards and gift wrap",
+      "Newsagencies",
+      "Office supplies",
+      "Stationery"
+    ],
+    "Car and auto": [],
+    "Childcare": [],
+    "Clothing and accessories": [
+      "ALL",
+      "Babies' and toddlers'",
+      "Footwear",
+      "Jewellery and watches",
+      "Kids' and junior",
+      "Men's fashion",
+      "Sunglasses",
+      "Women's fashion"
+    ],
+    "Community services": [],
+    "Department stores": [],
+    "Designer and boutique": [],
+    "Discount and variety": [],
+    "Dry cleaning": [],
+    "Electronics and technology": [
+      "ALL",
+      "Cameras",
+      "Computers and tablets",
+      "Gaming and consoles",
+      "Mobile and accessories",
+      "Navigation",
+      "TV and audio"
+    ],
+    "Entertainment and activities": [
+      "ALL",
+      "Arcades and games",
+      "Bowling",
+      "Cinemas",
+      "Kids activities",
+      "Learning and education",
+      "Music"
+    ],
+    "Florists": [],
+    "Food and drink": [
+      "ALL",
+      "Asian",
+      "Bars and pubs",
+      "Breakfast and brunch",
+      "Cafes",
+      "Casual dining",
+      "Chocolate cafes",
+      "Desserts",
+      "Dietary requirements",
+      "Fast food",
+      "Fine dining",
+      "Greek",
+      "Grill houses",
+      "Halal",
+      "Healthy options",
+      "Italian",
+      "Juice bars",
+      "Kid-friendly",
+      "Lebanese",
+      "Mexican and Latin American",
+      "Middle Eastern",
+      "Modern Australian",
+      "Sandwiches and salads",
+      "Takeaway"
+    ],
+    "Foreign currency exchange": [],
+    "Fresh food and groceries": [
+      "ALL",
+      "Bakeries",
+      "Butchers",
+      "Confectionery",
+      "Delicatessens",
+      "Fresh produce",
+      "Liquor",
+      "Patisseries",
+      "Poultry",
+      "Seafood",
+      "Specialty foods",
+      "Supermarkets"
+    ],
+    "Health and fitness": [
+      "ALL",
+      "Chemists",
+      "Dentists",
+      "Gyms and fitness studios",
+      "Health insurers",
+      "Medical centres",
+      "Medicare",
+      "Optometrists",
+      "Specialty health providers"
+    ],
+    "Home": [
+      "ALL",
+      "Bath and home fragrances",
+      "Bedding",
+      "Furniture",
+      "Gifts",
+      "Hardware",
+      "Home appliances",
+      "Home decor",
+      "Kitchen",
+      "Pets",
+      "Photography and art",
+      "Picture frames"
+    ],
+    "Luggage and travel accessories": [
+      "ALL",
+      "Backpacks and gym duffle bags",
+      "Laptop cases and sleeves",
+      "Small leather goods",
+      "Suitcases and travel accessories",
+      "Work and laptop bags"
+    ],
+    "Luxury and premium": [
+      "ALL",
+      "Australian designer",
+      "International designer",
+      "Luxury",
+      "Premium brands"
+    ],
+    "Pawn brokers": [],
+    "Phone repairs": [],
+    "Photographic services": [],
+    "Post office": [],
+    "Power, gas and communication services": [],
+    "Professional services": [],
+    "Real estate agents": [],
+    "Shoe repair and key cutting": [],
+    "Sporting goods": [
+      "ALL",
+      "Activewear",
+      "Fitness and gym equipment",
+      "Outdoors and camping",
+      "Tech and wearables"
+    ],
+    "Tobacconists": [],
+    "Toys and hobbies": [
+      "ALL",
+      "Arts and crafts",
+      "Games",
+      "Hobbies",
+      "Toys"
+    ],
+    "Travel agents": []
+  };
   const countries = [
     { value: "AU", text: "Australia" },
     { value: "NZ", text: "New Zealand" },
@@ -980,40 +979,63 @@ const categories = {
       .map((name) => name.trim())
       .filter(Boolean);
 
-    const location = elements.locationInput.value.trim();
-    const country = elements.countryInput.value;
-    const countInputVal = elements.countInput.value.trim();
+    // --- NEW LOGIC START ---
+    const payload = {
+        location: elements.locationInput.value.trim(),
+        postalCode: postalCodes,
+        country: elements.countryInput.value,
+        businessNames: businessNames.length > 0 ? businessNames : [],
+    };
+    
+    const customCategory = elements.customCategoryInput.value.trim();
+    const primaryCategory = elements.primaryCategorySelect.value;
+    const subCategory = elements.subCategorySelect.value;
 
-    let categorySearchTerm =
-      elements.customCategoryInput.value.trim() ||
-      elements.subCategorySelect.value ||
-      elements.primaryCategorySelect.value;
+    if (businessNames.length > 0) {
+        payload.count = -1; // Individual name search always finds all
+    } else if (customCategory) {
+        payload.category = customCategory;
+    } else if (subCategory === 'ALL') {
+        payload.categoriesToLoop = categories[primaryCategory].filter(sc => sc !== 'ALL' && sc !== '');
+    } else {
+        payload.category = subCategory || primaryCategory;
+    }
+    
+    const hasLocation = payload.location || payload.postalCode.length > 0;
+    const hasSearchTerm = payload.businessNames.length || payload.category || (payload.categoriesToLoop && payload.categoriesToLoop.length);
 
-    const searchCategoryKey = (
-      businessNames.length > 0 ? "bulk_name_search" : categorySearchTerm
-    )
-      .replace(/[\s/]/g, "_")
-      .toLowerCase();
+    if (!hasSearchTerm || !hasLocation || !payload.country) {
+        logMessage(elements.logEl, `Input Error: Please provide a category/keyword, a location/postal code, and country.`, "error");
+        handleScrapeError({ error: "Invalid input" });
+        return;
+    }
+    
+    if (businessNames.length === 0) {
+        const countValue = parseInt(elements.countInput.value.trim(), 10);
+        const find_all = elements.findAllBusinessesCheckbox.checked || !elements.countInput.value.trim() || countValue <= 0;
+        payload.count = find_all ? -1 : countValue;
+    }
+
+    const searchCategoryForFile = customCategory || (subCategory === 'ALL' ? primaryCategory : subCategory) || primaryCategory || 'business_names';
+    const searchCategoryKey = (searchCategoryForFile).replace(/[\s/]/g, "_").toLowerCase();
     const searchAreaKey = (
       postalCodes.length > 0
         ? postalCodes.join("_")
-        : location.split(",")[0].replace(/[\s/,]/g, "_")
+        : elements.locationInput.value.trim().split(",")[0].replace(/[\s/,]/g, "_")
     ).toLowerCase();
     const searchDate = new Date().toISOString().split("T")[0];
-    const searchKey = `${searchDate}-${searchCategoryKey}-${searchAreaKey}`;
-
+    
     let searchLog = JSON.parse(localStorage.getItem("rtrl_search_log")) || {};
     if (searchLog.date !== searchDate) {
       searchLog = { date: searchDate };
     }
-
+    const searchKey = `${searchDate}-${searchCategoryKey}-${searchAreaKey}`;
     const currentCount = searchLog[searchKey] || 0;
     const newCount = currentCount + 1;
     searchLog[searchKey] = newCount;
     localStorage.setItem("rtrl_search_log", JSON.stringify(searchLog));
-
     const currentSearchVersion = newCount;
-
+    
     currentSearchParameters = {
       category: searchCategoryKey,
       area: searchAreaKey,
@@ -1024,65 +1046,11 @@ const categories = {
       JSON.stringify(currentSearchParameters)
     );
 
-    if (businessNames.length > 0) {
-      if (!location && postalCodes.length === 0) {
-        logMessage(
-          elements.logEl,
-          `Input Error: Please provide a location or postal code for the bulk business search.`,
-          "error"
-        );
-        handleScrapeError({ error: "Invalid input" });
-        return;
-      }
-      logMessage(
-        elements.logEl,
-        `Sending request to find ${businessNames.length} specific businesses...`,
-        "info"
-      );
-      socket.emit("start_scrape", {
-        businessNames,
-        location,
-        postalCode: postalCodes,
-        country,
-        count: -1,
-      });
-    } else {
-      const countValue = parseInt(countInputVal, 10);
-      const find_all =
-        elements.findAllBusinessesCheckbox.checked ||
-        !countInputVal ||
-        countValue <= 0;
-      const count = find_all ? -1 : countValue;
-
-      if (
-        !categorySearchTerm ||
-        (postalCodes.length === 0 && !location) ||
-        !country
-      ) {
-        logMessage(
-          elements.logEl,
-          `Input Error: Please provide a category or keyword, a location/postal code, and country.`,
-          "error"
-        );
-        handleScrapeError({ error: "Invalid input" });
-        return;
-      }
-      const targetDisplay = count === -1 ? "all available" : count;
-      logMessage(
-        elements.logEl,
-        `Sending request to server to find ${targetDisplay} '${categorySearchTerm}' businesses...`,
-        "info"
-      );
-      const payload = {
-        category: categorySearchTerm,
-        location,
-        postalCode: postalCodes,
-        country,
-        count,
-      };
-      socket.emit("start_scrape", payload);
-    }
+    logMessage(elements.logEl, `Sending request to server...`, "info");
+    socket.emit("start_scrape", payload);
+    // --- NEW LOGIC END ---
   }
+
 
   function handleScrapeError(error) {
     logMessage(

@@ -78,8 +78,14 @@ io.on('connection', (socket) => {
     console.log(`Client connected: ${socket.id} at ${new Date().toLocaleString()}`);
     socket.emit('log', `[Server] Connected to Real-time Scraper.`);
 
-    socket.on('start_scrape', async ({ category, location, postalCode, country, count, businessNames }) => {
+    socket.on('start_scrape', async ({ category, categoriesToLoop, location, postalCode, country, count, businessNames }) => {
         const isIndividualSearch = businessNames && businessNames.length > 0;
+        
+        // --- CHANGE START ---
+        // Determine what to loop through. It will be the list of business names, the list of sub-categories, or an array with a single category.
+        const searchItems = isIndividualSearch ? businessNames : (categoriesToLoop && categoriesToLoop.length > 0 ? categoriesToLoop : [category]);
+        // --- CHANGE END ---
+
         const finalCount = isIndividualSearch ? -1 : count;
         const isSearchAll = finalCount === -1;
         const targetCount = isSearchAll ? Infinity : finalCount;
@@ -107,11 +113,17 @@ io.on('connection', (socket) => {
             const CONCURRENCY = 2;
             let totalDiscoveredUrls = 0;
             
-            const searchItems = isIndividualSearch ? businessNames : [category];
-
             for (const item of searchItems) {
                 if (allProcessedBusinesses.length >= targetCount) break;
-                if (isIndividualSearch) socket.emit('log', `\n--- Now searching for: "${item}" ---`);
+                
+                // --- CHANGE START ---
+                // This log is now crucial for user feedback, showing the current business name or sub-category being searched.
+                if (isIndividualSearch) {
+                    socket.emit('log', `\n--- Now searching for business: "${item}" ---`);
+                } else {
+                    socket.emit('log', `\n--- Now searching for category: "${item}" ---`);
+                }
+                // --- CHANGE END ---
 
                 for (const areaQuery of searchAreas) {
                     if (allProcessedBusinesses.length >= targetCount) break;
@@ -169,11 +181,15 @@ io.on('connection', (socket) => {
                                             
                                             const fullBusinessData = { ...googleData, ...websiteData };
                                             
+                                            // --- CHANGE START ---
+                                            // This is the most important change to ensure data accuracy.
                                             if (isIndividualSearch) {
                                                 fullBusinessData.Category = googleData.ScrapedCategory || 'N/A';
                                             } else {
-                                                fullBusinessData.Category = category;
+                                                // Assign the specific sub-category from the current loop iteration.
+                                                fullBusinessData.Category = item;
                                             }
+                                            // --- CHANGE END ---
                                             
                                             return fullBusinessData;
                                         } finally {
