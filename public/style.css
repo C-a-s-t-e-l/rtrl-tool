@@ -594,13 +594,9 @@ footer {
   opacity: 1;
 }
 
-#searchControlsCard {
-    max-height: 85vh; 
-    overflow-y: auto;
-    position: sticky;
-    top: 2rem;
+.bottom-spacer {
+  height: 40vh; /* This creates empty space equal to 40% of the screen's height */
 }
-
 
 @media (max-width: 1200px) {
   .app-container {
