@@ -413,9 +413,12 @@ elements.downloadContactsCSVButton.addEventListener("click", async () => {
   }
 
   // --- THIS IS THE FIX ---
-  // Rebuild the category string correctly for the 'Notes' field
+  // We will build the category AND location strings here, including the geocode lookup,
+  // to ensure the 'Notes' field is 100% correct.
+
   const date = new Date().toISOString().split('T')[0].replace(/-/g, '');
   
+  // 1. Build the category string
   const primaryCat = currentSearchParameters.primaryCategory?.replace(/[\s/&]/g, "_") || '';
   const subCat = (currentSearchParameters.subCategory && currentSearchParameters.subCategory !== 'ALL') ? currentSearchParameters.subCategory.replace(/[\s/&]/g, "_") : '';
   const customCat = currentSearchParameters.customCategory?.replace(/[\s/&]/g, "_") || '';
@@ -425,7 +428,34 @@ elements.downloadContactsCSVButton.addEventListener("click", async () => {
       categoryString += `_${subCat}`;
   }
   
-  const notesContent = `${date}_${categoryString}_${currentSearchParameters.area}`;
+  // 2. Build the location string (with geocode lookup if needed)
+  let locationString = currentSearchParameters.area;
+  if (currentSearchParameters.postcodes && currentSearchParameters.postcodes.length > 0) {
+      try {
+          const postcodeToLookup = currentSearchParameters.postcodes[0];
+          const countryName = elements.countryInput.value;
+          const response = await new Promise((resolve, reject) => {
+              geocoder.geocode({ address: `${postcodeToLookup}, ${countryName}` }, (results, status) => {
+                  if (status === 'OK' && results[0]) {
+                      resolve(results[0]);
+                  } else {
+                      reject(new Error(`Geocode failed: ${status}`));
+                  }
+              });
+          });
+          const suburbComponent = response.address_components.find(c => c.types.includes('locality'));
+          if (suburbComponent) {
+              locationString = suburbComponent.long_name.replace(/[\s/]/g, "_").toLowerCase();
+          }
+      } catch (error) {
+          console.warn("Could not geocode for Notes field, using default.", error);
+          // Fallback to the original area key if geocoding fails
+          locationString = currentSearchParameters.area;
+      }
+  }
+
+  // 3. Create the final 'Notes' content string
+  const notesContent = `${date}_${categoryString}_${locationString}`;
   // --- END OF FIX ---
   
   const contactsHeaders = ["First Name", "Last Name", "Organization", "Email 1 - Type", "Email 1 - Value", "Address 1 - Type", "Address 1 - Street", "Notes"];
