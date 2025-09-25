@@ -450,21 +450,24 @@ elements.downloadContactsCSVButton.addEventListener("click", async () => {
   const notesContent = `${date}_${categoryString}_${locationString}`;
   
   const newHeaders = [
-      "Company", "Address_(other)_Sub", "Address_(other)_Stat", "Notes", 
+      "Company", "Address_(other)_Sub", "Address_(other)_State", "Notes", 
       "facebook", "instagram", "linkedin", 
       "email_1", "email_2", "email_3"
   ];
 
   const contactsData = dataWithEmails.map((d) => {
-   
-    const addressParts = d.StreetAddress ? d.StreetAddress.split(',') : [];
-    const stateMatch = addressParts.length > 1 ? addressParts[addressParts.length-1].trim().match(/\b([A-Z]{2,3})\b/) : null;
-    const state = stateMatch ? stateMatch[0] : '';
+    
+    let state = '';
+    if (d.StreetAddress) {
+
+        const stateMatch = d.StreetAddress.match(/\b([A-Z]{2,3})\b(?= \d{4,})/);
+        state = stateMatch ? stateMatch[1] : ''; 
+    }
 
     return {
       "Company": d.BusinessName || '',
       "Address_(other)_Sub": d.SuburbArea || '',
-      "Address_(other)_Stat": state,
+      "Address_(other)_State": state, 
       "Notes": notesContent,
       "facebook": d.FacebookURL || '',
       "instagram": d.InstagramURL || '',
