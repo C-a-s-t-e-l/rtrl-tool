@@ -220,7 +220,7 @@ function getColumnWidths(data, headers) {
     return widths.map(w => ({ wch: Math.max(w.wch, 10) }));
 }
 
-function downloadExcel(data, searchParams, fileSuffix, fileType, logEl, specificHeaders = null) {
+async function downloadExcel(data, searchParams, fileSuffix, fileType, logEl, specificHeaders = null, geocoder, countryName) {
     if (data.length === 0) {
         logMessage(logEl, 'No data to download for this format!', 'error');
         return;
@@ -254,12 +254,46 @@ function downloadExcel(data, searchParams, fileSuffix, fileType, logEl, specific
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Business List");
 
+    // --- NEW FILENAME LOGIC ---
     const date = new Date().toISOString().split('T')[0].replace(/-/g, '');
-    const category = searchParams.category || 'search';
-    const area = searchParams.area || 'area';
-    const versionString = (searchParams.version > 1) ? `_v${searchParams.version}` : '';
+    const company = 'rtrl';
+    
+    const primaryCat = searchParams.primaryCategory?.replace(/[\s/&]/g, "_") || '';
+    const subCat = (searchParams.subCategory && searchParams.subCategory !== 'ALL') ? searchParams.subCategory.replace(/[\s/&]/g, "_") : '';
+    const customCat = searchParams.customCategory?.replace(/[\s/&]/g, "_") || '';
+
+    let categoryString = customCat || primaryCat;
+    if (subCat) {
+        categoryString += `_${subCat}`;
+    }
+
+    let locationString = searchParams.area || 'location';
+    // If search was by postcode, convert first postcode to suburb name for the filename
+    if (searchParams.postcodes && searchParams.postcodes.length > 0) {
+        try {
+            const postcodeToLookup = searchParams.postcodes[0];
+            const response = await new Promise((resolve, reject) => {
+                geocoder.geocode({ address: `${postcodeToLookup}, ${countryName}` }, (results, status) => {
+                    if (status === 'OK' && results[0]) {
+                        resolve(results[0]);
+                    } else {
+                        reject(new Error(`Geocode was not successful for the following reason: ${status}`));
+                    }
+                });
+            });
+            const suburbComponent = response.address_components.find(c => c.types.includes('locality'));
+            if (suburbComponent) {
+                locationString = suburbComponent.long_name.replace(/[\s/]/g, "_").toLowerCase();
+            }
+        } catch (error) {
+            console.warn("Could not reverse geocode postcode for filename, using default.", error);
+            // Fallback to the original area key if geocoding fails
+            locationString = searchParams.area;
+        }
+    }
+    
     const fileExtension = fileType === 'xlsx' ? 'xlsx' : 'csv';
-    const fullFilename = `${date}_rtrl_${category}_${area}_${fileSuffix}${versionString}.${fileExtension}`;
+    const fullFilename = `${date}_${company}_${categoryString}_${locationString}_${fileSuffix}.${fileExtension}`;
 
     XLSX.writeFile(wb, fullFilename);
     logMessage(logEl, `${data.length} records exported to '${fullFilename}' successfully!`, 'success');

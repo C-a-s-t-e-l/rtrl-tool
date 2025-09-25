@@ -70,7 +70,7 @@
     
                     <div class="form-group">
                         <label for="countryInput"><i class="fas fa-globe-asia"></i> Country</label>
-                        <input type="text" id="countryInput" placeholder="e.g. Australia" autocomplete="off">
+                        <input type="text" id="countryInput" placeholder="e.g. Australia" autocomplete="off" value="Australia">
                         <div id="countrySuggestions" class="autocomplete-suggestions"></div>
                     </div>
     
@@ -80,7 +80,7 @@
                     </div>
                     
                     <div class="form-group checkbox-group">
-                        <input type="checkbox" id="findAllBusinesses" name="find_option">
+                        <input type="checkbox" id="findAllBusinesses" name="find_option" checked>
                         <label for="findAllBusinesses">Find all available businesses</label>
                     </div>
                 </div>
@@ -147,8 +147,8 @@
 
                      <div class="download-buttons-group">
                         <button id="downloadFullExcelButton" class="btn btn-success" disabled>Download Selected (.xlsx)</button>
-                        <button id="downloadNotifyreCSVButton" class="btn btn-secondary" disabled>Generate SMS List</button>
-                        <button id="downloadGoogleWorkspaceCSVButton" class="btn btn-secondary" disabled>Generate Email List</button>
+                        <button id="downloadNotifyreCSVButton" class="btn btn-secondary" disabled>Generate SMS List (.csv)</button>
+                        <button id="downloadContactsCSVButton" class="btn btn-secondary" disabled>Generate Contacts List (.csv)</button>
                     </div>
                 </div>
             </div>

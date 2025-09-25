@@ -36,9 +36,9 @@ function initializeMainApp() {
     downloadNotifyreCSVButton: document.getElementById(
       "downloadNotifyreCSVButton"
     ),
-    downloadGoogleWorkspaceCSVButton: document.getElementById(
-      "downloadGoogleWorkspaceCSVButton"
-    ),
+    downloadContactsCSVButton: document.getElementById(
+      "downloadContactsCSVButton"
+    ), // Updated ID
     primaryCategorySelect: document.getElementById("primaryCategorySelect"),
     subCategoryGroup: document.getElementById("subCategoryGroup"),
     subCategorySelect: document.getElementById("subCategorySelect"),
@@ -85,9 +85,9 @@ function initializeMainApp() {
       "Baby bedding",
       "Nursery furniture",
       "Prams, strollers and carriers",
-      "Tableware and feeding"
+      "Tableware and feeding",
     ],
-    "Banks": [],
+    Banks: [],
     "Beauty and wellness": [
       "ALL",
       "Bath and body",
@@ -96,7 +96,7 @@ function initializeMainApp() {
       "Hair care",
       "Makeup",
       "Skincare",
-      "Vitamins and supplements"
+      "Vitamins and supplements",
     ],
     "Books, stationery and gifts": [
       "ALL",
@@ -104,10 +104,10 @@ function initializeMainApp() {
       "Cards and gift wrap",
       "Newsagencies",
       "Office supplies",
-      "Stationery"
+      "Stationery",
     ],
     "Car and auto": [],
-    "Childcare": [],
+    Childcare: [],
     "Clothing and accessories": [
       "ALL",
       "Babies' and toddlers'",
@@ -116,7 +116,7 @@ function initializeMainApp() {
       "Kids' and junior",
       "Men's fashion",
       "Sunglasses",
-      "Women's fashion"
+      "Women's fashion",
     ],
     "Community services": [],
     "Department stores": [],
@@ -130,7 +130,7 @@ function initializeMainApp() {
       "Gaming and consoles",
       "Mobile and accessories",
       "Navigation",
-      "TV and audio"
+      "TV and audio",
     ],
     "Entertainment and activities": [
       "ALL",
@@ -139,9 +139,9 @@ function initializeMainApp() {
       "Cinemas",
       "Kids activities",
       "Learning and education",
-      "Music"
+      "Music",
     ],
-    "Florists": [],
+    Florists: [],
     "Food and drink": [
       "ALL",
       "Asian",
@@ -166,7 +166,7 @@ function initializeMainApp() {
       "Middle Eastern",
       "Modern Australian",
       "Sandwiches and salads",
-      "Takeaway"
+      "Takeaway",
     ],
     "Foreign currency exchange": [],
     "Fresh food and groceries": [
@@ -181,7 +181,7 @@ function initializeMainApp() {
       "Poultry",
       "Seafood",
       "Specialty foods",
-      "Supermarkets"
+      "Supermarkets",
     ],
     "Health and fitness": [
       "ALL",
@@ -192,9 +192,9 @@ function initializeMainApp() {
       "Medical centres",
       "Medicare",
       "Optometrists",
-      "Specialty health providers"
+      "Specialty health providers",
     ],
-    "Home": [
+    Home: [
       "ALL",
       "Bath and home fragrances",
       "Bedding",
@@ -206,7 +206,7 @@ function initializeMainApp() {
       "Kitchen",
       "Pets",
       "Photography and art",
-      "Picture frames"
+      "Picture frames",
     ],
     "Luggage and travel accessories": [
       "ALL",
@@ -214,14 +214,14 @@ function initializeMainApp() {
       "Laptop cases and sleeves",
       "Small leather goods",
       "Suitcases and travel accessories",
-      "Work and laptop bags"
+      "Work and laptop bags",
     ],
     "Luxury and premium": [
       "ALL",
       "Australian designer",
       "International designer",
       "Luxury",
-      "Premium brands"
+      "Premium brands",
     ],
     "Pawn brokers": [],
     "Phone repairs": [],
@@ -236,17 +236,11 @@ function initializeMainApp() {
       "Activewear",
       "Fitness and gym equipment",
       "Outdoors and camping",
-      "Tech and wearables"
+      "Tech and wearables",
     ],
-    "Tobacconists": [],
-    "Toys and hobbies": [
-      "ALL",
-      "Arts and crafts",
-      "Games",
-      "Hobbies",
-      "Toys"
-    ],
-    "Travel agents": []
+    Tobacconists: [],
+    "Toys and hobbies": ["ALL", "Arts and crafts", "Games", "Hobbies", "Toys"],
+    "Travel agents": [],
   };
   const countries = [
     { value: "AU", text: "Australia" },
@@ -352,6 +346,13 @@ function initializeMainApp() {
 
     populatePrimaryCategories(elements.primaryCategorySelect, categories, "");
     setupEventListeners();
+
+    // Handle default UI state for checkbox
+    if (elements.findAllBusinessesCheckbox.checked) {
+      elements.countInput.disabled = true;
+      elements.countInput.value = "";
+    }
+
     loadGoogleMaps();
   }
 
@@ -367,7 +368,6 @@ function initializeMainApp() {
 
   function applyFilterAndSort() {
     const filterText = elements.filterInput.value.toLowerCase();
-
     let filteredData;
     if (filterText) {
       filteredData = allCollectedData.filter((item) => {
@@ -381,7 +381,6 @@ function initializeMainApp() {
     } else {
       filteredData = [...allCollectedData];
     }
-
     const { key, direction } = currentSort;
     if (key) {
       filteredData.sort((a, b) => {
@@ -394,7 +393,6 @@ function initializeMainApp() {
         return direction === "asc" ? comparison : -comparison;
       });
     }
-
     displayedData = filteredData;
     renderTable();
   }
@@ -418,7 +416,6 @@ function initializeMainApp() {
       elements.postalCodeInput.value = "";
       return;
     }
-
     const countryName = elements.countryInput.value.trim();
     const countryIsoCode = countries.find(
       (c) => c.text.toLowerCase() === countryName.toLowerCase()
@@ -432,7 +429,6 @@ function initializeMainApp() {
       triggerTagError();
       return;
     }
-
     if (!geocoder) {
       logMessage(
         elements.logEl,
@@ -442,7 +438,6 @@ function initializeMainApp() {
       triggerTagError();
       return;
     }
-
     try {
       const request = {
         componentRestrictions: {
@@ -460,7 +455,6 @@ function initializeMainApp() {
           const postcodeComponent = components.find((c) =>
             c.types.includes("postal_code")
           );
-
           if (
             postcodeComponent &&
             postcodeComponent.long_name === cleanedValue
@@ -493,10 +487,7 @@ function initializeMainApp() {
     const tagEl = document.createElement("span");
     tagEl.className = "tag";
     tagEl.innerHTML = `<span>${tagText}</span> <span class="tag-close-btn" data-value="${postcode}">&times;</span>`;
-    elements.postalCodeContainer.insertBefore(
-      tagEl,
-      elements.postalCodeInput
-    );
+    elements.postalCodeContainer.insertBefore(tagEl, elements.postalCodeInput);
   }
 
   function setupTagInput() {
@@ -512,7 +503,6 @@ function initializeMainApp() {
         elements.postalCodeInput.focus();
       }
     });
-
     elements.postalCodeInput.addEventListener("keydown", async (e) => {
       if (e.key === "Enter" || e.key === ",") {
         e.preventDefault();
@@ -543,7 +533,6 @@ function initializeMainApp() {
 
   function setupEventListeners() {
     setupTagInput();
-
     elements.customCategoryInput.addEventListener("input", () => {
       const hasCustomText = elements.customCategoryInput.value.trim() !== "";
       elements.primaryCategorySelect.disabled = hasCustomText;
@@ -553,7 +542,6 @@ function initializeMainApp() {
         elements.primaryCategorySelect.dispatchEvent(new Event("change"));
       }
     });
-
     elements.primaryCategorySelect.addEventListener("change", (event) => {
       const selectedCategory = event.target.value;
       populateSubCategories(
@@ -568,12 +556,10 @@ function initializeMainApp() {
         elements.customCategoryInput.value = "";
       }
     });
-
     elements.findAllBusinessesCheckbox.addEventListener("change", (e) => {
       elements.countInput.disabled = e.target.checked;
       if (e.target.checked) elements.countInput.value = "";
     });
-
     elements.countryInput.addEventListener("input", () => {
       clearTimeout(countryAutocompleteTimer);
       countryAutocompleteTimer = setTimeout(() => {
@@ -597,7 +583,6 @@ function initializeMainApp() {
         );
       }, 300);
     });
-
     elements.locationInput.addEventListener("input", () => {
       clearTimeout(locationAutocompleteTimer);
       locationAutocompleteTimer = setTimeout(
@@ -611,7 +596,6 @@ function initializeMainApp() {
         300
       );
     });
-
     elements.postalCodeInput.addEventListener("input", () => {
       clearTimeout(postalCodeAutocompleteTimer);
       postalCodeAutocompleteTimer = setTimeout(
@@ -625,7 +609,6 @@ function initializeMainApp() {
         300
       );
     });
-
     document.addEventListener("click", (event) => {
       if (!elements.locationInput.contains(event.target))
         elements.locationSuggestionsEl.style.display = "none";
@@ -634,18 +617,15 @@ function initializeMainApp() {
       if (!elements.countryInput.contains(event.target))
         elements.countrySuggestionsEl.style.display = "none";
     });
-
     elements.startButton.addEventListener("click", startResearch);
-
     elements.businessNamesInput.addEventListener("input", (e) => {
       const isIndividualSearch = e.target.value.trim().length > 0;
-      const elementsToToggle =
-        elements.bulkSearchContainer.querySelectorAll(".form-group, .form-row");
-
+      const elementsToToggle = elements.bulkSearchContainer.querySelectorAll(
+        ".form-group, .form-row"
+      );
       elementsToToggle.forEach((el) => {
         const inputs = el.querySelectorAll("input, select");
         let isLocationGroup = false;
-
         inputs.forEach((input) => {
           if (
             ["locationInput", "postalCodeInput", "countryInput"].includes(
@@ -655,7 +635,6 @@ function initializeMainApp() {
             isLocationGroup = true;
           }
         });
-
         if (isLocationGroup) {
           el.style.opacity = "1";
         } else {
@@ -666,7 +645,6 @@ function initializeMainApp() {
         }
       });
     });
-
     elements.selectAllCheckbox.addEventListener("change", (e) => {
       const isChecked = e.target.checked;
       elements.resultsTableBody
@@ -675,7 +653,6 @@ function initializeMainApp() {
           checkbox.checked = isChecked;
         });
     });
-
     const getSelectedData = () => {
       const selectedIndices = [];
       elements.resultsTableBody
@@ -687,21 +664,21 @@ function initializeMainApp() {
         .map((index) => displayedData[index])
         .filter(Boolean);
     };
-
-    elements.downloadFullExcelButton.addEventListener("click", () => {
+    elements.downloadFullExcelButton.addEventListener("click", async () => {
       const selectedData = getSelectedData();
-      downloadExcel(
+      await downloadExcel(
         selectedData,
         currentSearchParameters,
         "full",
         "xlsx",
-        elements.logEl
+        elements.logEl,
+        null,
+        geocoder,
+        elements.countryInput.value
       );
     });
-
-    elements.downloadNotifyreCSVButton.addEventListener("click", () => {
+    elements.downloadNotifyreCSVButton.addEventListener("click", async () => {
       const selectedData = getSelectedData();
-
       const notifyreHeaders = [
         "FirstName",
         "LastName",
@@ -715,24 +692,23 @@ function initializeMainApp() {
         "CustomField4",
         "Unsubscribed",
       ];
-
       const notifyreFormattedData = selectedData
-        .filter((business) => business.Phone && business.Phone.startsWith("614"))
+        .filter(
+          (business) => business.Phone && business.Phone.startsWith("614")
+        )
         .map((business) => {
           let firstName = "";
           let lastName = "";
-
           if (business.OwnerName && business.OwnerName.trim() !== "") {
             const nameParts = business.OwnerName.trim().split(" ");
             firstName = nameParts.shift();
             lastName = nameParts.join(" ");
           }
-
           return {
             FirstName: firstName,
             LastName: lastName,
             Organization: business.BusinessName || "",
-            Email: business.Email || "",
+            Email: business.Email1 || "",
             FaxNumber: "",
             MobileNumber: business.Phone || "",
             CustomField1: business.Category || "",
@@ -742,24 +718,23 @@ function initializeMainApp() {
             Unsubscribed: "",
           };
         });
-
-      downloadExcel(
+      await downloadExcel(
         notifyreFormattedData,
         currentSearchParameters,
-        "notifyre_sms",
+        "sms",
         "csv",
         elements.logEl,
-        notifyreHeaders
+        notifyreHeaders,
+        geocoder,
+        elements.countryInput.value
       );
     });
 
-    elements.downloadGoogleWorkspaceCSVButton.addEventListener("click", () => {
+    elements.downloadContactsCSVButton.addEventListener("click", async () => {
       const selectedRawData = getSelectedData();
-
       const dataWithEmails = selectedRawData.filter(
         (d) => d.Email1 && d.Email1.trim() !== ""
       );
-
       if (dataWithEmails.length === 0) {
         logMessage(
           elements.logEl,
@@ -769,37 +744,50 @@ function initializeMainApp() {
         return;
       }
 
-      const googleWorkspaceData = dataWithEmails.map((d) => ({
-        Email: d.Email1,
-        OwnerName: d.OwnerName,
-        BusinessName: d.BusinessName,
-        StreetAddress: d.StreetAddress,
-        SuburbArea: d.SuburbArea,
-        Website: d.Website,
-        InstagramURL: d.InstagramURL,
-        FacebookURL: d.FacebookURL,
-        GoogleMapsURL: d.GoogleMapsURL,
-        Category: d.Category,
-      }));
+      // Create the "Notes" field content
+      const date = new Date().toISOString().split("T")[0].replace(/-/g, "");
+      const notesContent = `${date}_${currentSearchParameters.category}_${currentSearchParameters.area}`;
 
-      downloadExcel(
-        googleWorkspaceData,
+      // Headers for macOS Contacts CSV
+      const contactsHeaders = [
+        "First Name",
+        "Last Name",
+        "Organization",
+        "Email 1 - Type",
+        "Email 1 - Value",
+        "Address 1 - Type",
+        "Address 1 - Street",
+        "Notes",
+      ];
+
+      const contactsData = dataWithEmails.map((d) => {
+        let firstName = "";
+        let lastName = "";
+        if (d.OwnerName && d.OwnerName.trim() !== "") {
+          const nameParts = d.OwnerName.trim().split(" ");
+          firstName = nameParts.shift();
+          lastName = nameParts.join(" ");
+        }
+        return {
+          "First Name": firstName,
+          "Last Name": lastName,
+          Organization: d.BusinessName || "",
+          "Email 1 - Type": "work",
+          "Email 1 - Value": d.Email1,
+          "Address 1 - Type": "work",
+          "Address 1 - Street": d.StreetAddress,
+          Notes: notesContent,
+        };
+      });
+      await downloadExcel(
+        contactsData,
         currentSearchParameters,
-        "google_workspace_email",
+        "email",
         "csv",
         elements.logEl,
-        [
-          "Email",
-          "OwnerName",
-          "BusinessName",
-          "StreetAddress",
-          "SuburbArea",
-          "Website",
-          "InstagramURL",
-          "FacebookURL",
-          "GoogleMapsURL",
-          "Category",
-        ]
+        contactsHeaders,
+        geocoder,
+        elements.countryInput.value
       );
     });
 
@@ -807,7 +795,6 @@ function initializeMainApp() {
     elements.resultsTableHeader.addEventListener("click", (e) => {
       const header = e.target.closest(".sortable");
       if (!header) return;
-
       const key = header.dataset.sortKey;
       if (currentSort.key === key) {
         currentSort.direction =
@@ -823,7 +810,6 @@ function initializeMainApp() {
   socket.on("progress_update", ({ processed, discovered, added, target }) => {
     let percentage = 0;
     const isSearchAll = target === -1;
-
     if (isSearchAll) {
       if (discovered > 0) {
         percentage = (processed / discovered) * 100;
@@ -833,9 +819,7 @@ function initializeMainApp() {
         percentage = (added / target) * 100;
       }
     }
-
     if (percentage > 100) percentage = 100;
-
     const roundedPercentage = Math.round(percentage);
     elements.progressBar.style.width = `${roundedPercentage}%`;
     elements.progressPercentage.textContent = `${roundedPercentage}%`;
@@ -867,10 +851,7 @@ function initializeMainApp() {
     if (countryIsoCode)
       request.componentRestrictions = { country: countryIsoCode };
     service.getPlacePredictions(request, (predictions, status) => {
-      if (
-        status === google.maps.places.PlacesServiceStatus.OK &&
-        predictions
-      ) {
+      if (status === google.maps.places.PlacesServiceStatus.OK && predictions) {
         const items = predictions.map((p) => ({
           description: p.description,
           place_id: p.place_id,
@@ -906,12 +887,10 @@ function initializeMainApp() {
   });
   socket.on("log", (message) => logMessage(elements.logEl, message, "info"));
   socket.on("scrape_error", (error) => handleScrapeError(error));
-
   socket.on("business_found", (business) => {
     if (allCollectedData.length === 0) {
       elements.collectedDataCard.classList.add("has-results");
     }
-
     const newBusiness = {
       OwnerName: "",
       Email1: "",
@@ -919,18 +898,14 @@ function initializeMainApp() {
       Email3: "",
       ...business,
       SuburbArea:
-        business.Suburb ||
-        elements.locationInput.value.split(",")[0].trim(),
+        business.Suburb || elements.locationInput.value.split(",")[0].trim(),
       LastVerifiedDate: new Date().toISOString().split("T")[0],
     };
-
     allCollectedData.push(newBusiness);
     applyFilterAndSort();
   });
-
   socket.on("scrape_complete", () => {
     logMessage(elements.logEl, `Scraping process finished.`, "success");
-
     try {
       localStorage.setItem(
         "rtrl_collected_data",
@@ -948,20 +923,17 @@ function initializeMainApp() {
         "error"
       );
     }
-
     elements.selectAllCheckbox.checked = true;
     elements.progressBar.style.width = "100%";
     elements.progressPercentage.textContent = "100%";
     if (elements.researchStatusIcon)
       elements.researchStatusIcon.className = "fas fa-check-circle";
-
     setUiState(false, getUiElementsForStateChange());
   });
 
   function startResearch() {
     localStorage.removeItem("rtrl_collected_data");
     localStorage.removeItem("rtrl_search_params");
-
     setUiState(true, getUiElementsForStateChange());
     allCollectedData = [];
     displayedData = [];
@@ -972,85 +944,79 @@ function initializeMainApp() {
     elements.collectedDataCard.classList.remove("has-results");
     if (elements.researchStatusIcon)
       elements.researchStatusIcon.className = "fas fa-spinner fa-spin";
-
     const namesText = elements.businessNamesInput.value.trim();
     const businessNames = namesText
       .split("\n")
       .map((name) => name.trim())
       .filter(Boolean);
-
-    // --- NEW LOGIC START ---
     const payload = {
-        location: elements.locationInput.value.trim(),
-        postalCode: postalCodes,
-        country: elements.countryInput.value,
-        businessNames: businessNames.length > 0 ? businessNames : [],
+      location: elements.locationInput.value.trim(),
+      postalCode: postalCodes,
+      country: elements.countryInput.value,
+      businessNames: businessNames.length > 0 ? businessNames : [],
     };
-    
     const customCategory = elements.customCategoryInput.value.trim();
     const primaryCategory = elements.primaryCategorySelect.value;
     const subCategory = elements.subCategorySelect.value;
-
     if (businessNames.length > 0) {
-        payload.count = -1; // Individual name search always finds all
+      payload.count = -1;
     } else if (customCategory) {
-        payload.category = customCategory;
-    } else if (subCategory === 'ALL') {
-        payload.categoriesToLoop = categories[primaryCategory].filter(sc => sc !== 'ALL' && sc !== '');
+      payload.category = customCategory;
+    } else if (subCategory === "ALL") {
+      payload.categoriesToLoop = categories[primaryCategory].filter(
+        (sc) => sc !== "ALL" && sc !== ""
+      );
     } else {
-        payload.category = subCategory || primaryCategory;
+      payload.category = subCategory || primaryCategory;
     }
-    
     const hasLocation = payload.location || payload.postalCode.length > 0;
-    const hasSearchTerm = payload.businessNames.length || payload.category || (payload.categoriesToLoop && payload.categoriesToLoop.length);
-
+    const hasSearchTerm =
+      payload.businessNames.length ||
+      payload.category ||
+      (payload.categoriesToLoop && payload.categoriesToLoop.length);
     if (!hasSearchTerm || !hasLocation || !payload.country) {
-        logMessage(elements.logEl, `Input Error: Please provide a category/keyword, a location/postal code, and country.`, "error");
-        handleScrapeError({ error: "Invalid input" });
-        return;
+      logMessage(
+        elements.logEl,
+        `Input Error: Please provide a category/keyword, a location/postal code, and country.`,
+        "error"
+      );
+      handleScrapeError({ error: "Invalid input" });
+      return;
     }
-    
     if (businessNames.length === 0) {
-        const countValue = parseInt(elements.countInput.value.trim(), 10);
-        const find_all = elements.findAllBusinessesCheckbox.checked || !elements.countInput.value.trim() || countValue <= 0;
-        payload.count = find_all ? -1 : countValue;
+      const countValue = parseInt(elements.countInput.value.trim(), 10);
+      const find_all =
+        elements.findAllBusinessesCheckbox.checked ||
+        !elements.countInput.value.trim() ||
+        countValue <= 0;
+      payload.count = find_all ? -1 : countValue;
     }
 
-    const searchCategoryForFile = customCategory || (subCategory === 'ALL' ? primaryCategory : subCategory) || primaryCategory || 'business_names';
-    const searchCategoryKey = (searchCategoryForFile).replace(/[\s/]/g, "_").toLowerCase();
+    // Enhanced logic for search parameters
     const searchAreaKey = (
       postalCodes.length > 0
         ? postalCodes.join("_")
-        : elements.locationInput.value.trim().split(",")[0].replace(/[\s/,]/g, "_")
+        : elements.locationInput.value
+            .trim()
+            .split(",")[0]
+            .replace(/[\s/,]/g, "_")
     ).toLowerCase();
-    const searchDate = new Date().toISOString().split("T")[0];
-    
-    let searchLog = JSON.parse(localStorage.getItem("rtrl_search_log")) || {};
-    if (searchLog.date !== searchDate) {
-      searchLog = { date: searchDate };
-    }
-    const searchKey = `${searchDate}-${searchCategoryKey}-${searchAreaKey}`;
-    const currentCount = searchLog[searchKey] || 0;
-    const newCount = currentCount + 1;
-    searchLog[searchKey] = newCount;
-    localStorage.setItem("rtrl_search_log", JSON.stringify(searchLog));
-    const currentSearchVersion = newCount;
-    
+
     currentSearchParameters = {
-      category: searchCategoryKey,
+      primaryCategory: primaryCategory,
+      subCategory: subCategory,
+      customCategory: customCategory,
       area: searchAreaKey,
-      version: currentSearchVersion,
+      postcodes: postalCodes,
+      country: elements.countryInput.value,
     };
     localStorage.setItem(
       "rtrl_search_params",
       JSON.stringify(currentSearchParameters)
     );
-
     logMessage(elements.logEl, `Sending request to server...`, "info");
     socket.emit("start_scrape", payload);
-    // --- NEW LOGIC END ---
   }
-
 
   function handleScrapeError(error) {
     logMessage(
@@ -1079,21 +1045,18 @@ function initializeMainApp() {
       downloadButtons: {
         fullExcel: elements.downloadFullExcelButton,
         notifyre: elements.downloadNotifyreCSVButton,
-        googleWorkspace: elements.downloadGoogleWorkspaceCSVButton,
+        contacts: elements.downloadContactsCSVButton,
       },
       displayedData: displayedData,
     };
   }
-
   initializeApp();
 }
 
 const socketIoScript = document.createElement("script");
 socketIoScript.src =
   "https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js";
-
 socketIoScript.onload = initializeMainApp;
-
 socketIoScript.onerror = () => {
   console.error("Failed to load Socket.IO script from CDN.");
   const logEl = document.getElementById("log");
@@ -1102,5 +1065,4 @@ socketIoScript.onerror = () => {
       "FATAL ERROR: Could not load core networking library. Please check your internet connection and refresh the page.";
   }
 };
-
 document.head.appendChild(socketIoScript);
