@@ -404,42 +404,53 @@ function initializeMainApp() {
       await downloadExcel(notifyreFormattedData, currentSearchParameters, "sms", "csv", elements.logEl, notifyreHeaders, geocoder, elements.countryInput.value);
     });
 
-    elements.downloadContactsCSVButton.addEventListener("click", async () => {
-      const selectedRawData = getSelectedData();
-      const dataWithEmails = selectedRawData.filter((d) => d.Email1 && d.Email1.trim() !== "");
-      if (dataWithEmails.length === 0) {
-        logMessage(elements.logEl, "No selected businesses have a primary email to export.", "error");
-        return;
-      }
+elements.downloadContactsCSVButton.addEventListener("click", async () => {
+  const selectedRawData = getSelectedData();
+  const dataWithEmails = selectedRawData.filter((d) => d.Email1 && d.Email1.trim() !== "");
+  if (dataWithEmails.length === 0) {
+    logMessage(elements.logEl, "No selected businesses have a primary email to export.", "error");
+    return;
+  }
 
-      // Create the "Notes" field content
-      const date = new Date().toISOString().split('T')[0].replace(/-/g, '');
-      const notesContent = `${date}_${currentSearchParameters.category}_${currentSearchParameters.area}`;
-      
-      // Headers for macOS Contacts CSV
-      const contactsHeaders = ["First Name", "Last Name", "Organization", "Email 1 - Type", "Email 1 - Value", "Address 1 - Type", "Address 1 - Street", "Notes"];
+  // --- THIS IS THE FIX ---
+  // Rebuild the category string correctly for the 'Notes' field
+  const date = new Date().toISOString().split('T')[0].replace(/-/g, '');
+  
+  const primaryCat = currentSearchParameters.primaryCategory?.replace(/[\s/&]/g, "_") || '';
+  const subCat = (currentSearchParameters.subCategory && currentSearchParameters.subCategory !== 'ALL') ? currentSearchParameters.subCategory.replace(/[\s/&]/g, "_") : '';
+  const customCat = currentSearchParameters.customCategory?.replace(/[\s/&]/g, "_") || '';
 
-      const contactsData = dataWithEmails.map((d) => {
-        let firstName = "";
-        let lastName = "";
-        if (d.OwnerName && d.OwnerName.trim() !== "") {
-          const nameParts = d.OwnerName.trim().split(" ");
-          firstName = nameParts.shift();
-          lastName = nameParts.join(" ");
-        }
-        return {
-          "First Name": firstName,
-          "Last Name": lastName,
-          "Organization": d.BusinessName || '',
-          "Email 1 - Type": "work",
-          "Email 1 - Value": d.Email1,
-          "Address 1 - Type": "work",
-          "Address 1 - Street": d.StreetAddress,
-          "Notes": notesContent,
-        };
-      });
-      await downloadExcel(contactsData, currentSearchParameters, "email", "csv", elements.logEl, contactsHeaders, geocoder, elements.countryInput.value);
-    });
+  let categoryString = customCat || primaryCat;
+  if (subCat) {
+      categoryString += `_${subCat}`;
+  }
+  
+  const notesContent = `${date}_${categoryString}_${currentSearchParameters.area}`;
+  // --- END OF FIX ---
+  
+  const contactsHeaders = ["First Name", "Last Name", "Organization", "Email 1 - Type", "Email 1 - Value", "Address 1 - Type", "Address 1 - Street", "Notes"];
+
+  const contactsData = dataWithEmails.map((d) => {
+    let firstName = "";
+    let lastName = "";
+    if (d.OwnerName && d.OwnerName.trim() !== "") {
+      const nameParts = d.OwnerName.trim().split(" ");
+      firstName = nameParts.shift();
+      lastName = nameParts.join(" ");
+    }
+    return {
+      "First Name": firstName,
+      "Last Name": lastName,
+      "Organization": d.BusinessName || '',
+      "Email 1 - Type": "work",
+      "Email 1 - Value": d.Email1,
+      "Address 1 - Type": "work",
+      "Address 1 - Street": d.StreetAddress,
+      "Notes": notesContent,
+    };
+  });
+  await downloadExcel(contactsData, currentSearchParameters, "email", "csv", elements.logEl, contactsHeaders, geocoder, elements.countryInput.value);
+});
 
     elements.filterInput.addEventListener("input", applyFilterAndSort);
     elements.resultsTableHeader.addEventListener("click", (e) => {
