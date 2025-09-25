@@ -160,7 +160,7 @@ function setDownloadButtonStates(isBusy, buttons, displayedData) {
     const hasData = displayedData.length > 0;
     buttons.fullExcel.disabled = isBusy || !hasData;
     buttons.notifyre.disabled = isBusy || !hasData || !displayedData.some(item => item.Phone && item.Phone.trim() !== '');
-    buttons.googleWorkspace.disabled = isBusy || !hasData || !displayedData.some(item => item.Email1 && item.Email1.trim() !== '');
+    buttons.contacts.disabled = isBusy || !hasData || !displayedData.some(item => item.Email1 && item.Email1.trim() !== '');
 }
 
 function logMessage(logEl, message, type = 'default') {
