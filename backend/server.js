@@ -29,7 +29,6 @@ if (!GOOGLE_MAPS_API_KEY) {
     process.exit(1);
 }
 
-// --- Helper Functions (unchanged) ---
 const normalizeStringForKey = (str = '') => {
     if (!str) return '';
     return str.toLowerCase()
@@ -67,7 +66,6 @@ function isUrlInBoundingBox(url, box) {
     return lat >= box.minLat && lat <= box.maxLat && lng >= box.minLng && lng <= box.maxLng;
 }
 
-// --- Express Setup (unchanged) ---
 app.use(cors());
 app.use(express.json());
 
@@ -86,12 +84,11 @@ app.get(/(.*)/, (req, res) => {
     });
 });
 
-// --- Main Socket.IO Logic ---
 io.on('connection', (socket) => {
     console.log(`Client connected: ${socket.id} at ${new Date().toLocaleString()}`);
     socket.emit('log', `[Server] Connected to Real-time Scraper.`);
 
-socket.on('start_scrape', async ({ category, categoriesToLoop, location, postalCode, country, count, businessNames }) => {
+socket.on('start_scrape', async ({ category, categoriesToLoop, location, postalCode, country, count, businessNames, anchorPoint, radiusKm }) => {
     const isIndividualSearch = businessNames && businessNames.length > 0;
     const searchItems = isIndividualSearch ? businessNames : (categoriesToLoop && categoriesToLoop.length > 0 ? categoriesToLoop : [category]);
 
@@ -99,16 +96,8 @@ socket.on('start_scrape', async ({ category, categoriesToLoop, location, postalC
     const isSearchAll = finalCount === -1;
     const targetCount = isSearchAll ? Infinity : finalCount;
     
-    let searchAreas = [];
-    if (postalCode && postalCode.length > 0) searchAreas = postalCode;
-    else if (location) searchAreas = [location];
-
-    if (searchAreas.length === 0 || !country) {
-        return socket.emit('scrape_error', { error: `Missing location/postcode or country data.` });
-    }
-    
     let browser = null;
-    let collectionPage = null; // FIX: Declare reusable page here
+    let collectionPage = null;
 
     try {
         const puppeteerArgs = [
@@ -116,57 +105,61 @@ socket.on('start_scrape', async ({ category, categoriesToLoop, location, postalC
             '--disable-gpu', '--no-zygote', '--lang=en-US,en', '--ignore-certificate-errors',
             '--window-size=1920,1080', '--disable-blink-features=AutomationControlled'
         ];
-        // FIX: Added protocolTimeout for increased stability under load
         browser = await puppeteer.launch({ 
             headless: true, 
             args: puppeteerArgs,
             protocolTimeout: 120000 
         });
         
-        // FIX: Create one reusable page for the entire URL collection phase
         collectionPage = await browser.newPage();
         socket.emit('log', '[Setup] Created a dedicated page for URL collection.');
 
         const allProcessedBusinesses = [];
         const addedBusinessKeys = new Set();
         const CONCURRENCY = 2;
-        let totalDiscoveredUrls = 0;
         
-        // FIX: Switched to a Map to store URLs with their specific category
         const masterUrlMap = new Map();
         socket.emit('log', `--- Starting URL Collection Phase ---`);
 
         for (const item of searchItems) {
-            if (isIndividualSearch) {
-                socket.emit('log', `\n--- Searching for business: "${item}" ---`);
+            socket.emit('log', isIndividualSearch ? `\n--- Searching for business: "${item}" ---` : `\n--- Searching for category: "${item}" ---`);
+            
+            let locationQueries = [];
+            if (anchorPoint && radiusKm) {
+                locationQueries = await getSearchQueriesForRadius(anchorPoint, radiusKm, country, GOOGLE_MAPS_API_KEY, socket);
             } else {
-                socket.emit('log', `\n--- Searching for category: "${item}" ---`);
-            }
+                let searchAreas = [];
+                if (postalCode && postalCode.length > 0) searchAreas = postalCode;
+                else if (location) searchAreas = [location];
 
-            for (const areaQuery of searchAreas) {
-                const baseSearchQuery = isIndividualSearch ? `${item}, ${areaQuery}, ${country}` : `${item} in ${areaQuery}, ${country}`;
-                if (!isIndividualSearch) socket.emit('log', `\n--- Starting search area: "${areaQuery}" ---`);
-            
-                const searchQueries = await getSearchQueriesForLocation(baseSearchQuery, areaQuery, country, socket, isIndividualSearch);
-            
-                for (const query of searchQueries) {
-                    const discoveredUrlsForThisSubArea = new Set();
-                    // FIX: Pass the single reusable page, not the whole browser object
-                    await collectGoogleMapsUrlsContinuously(collectionPage, query, socket, discoveredUrlsForThisSubArea, country, isIndividualSearch, item);
-                    
-                    let initialSize = masterUrlMap.size;
-                    discoveredUrlsForThisSubArea.forEach(url => {
-                        if (!masterUrlMap.has(url)) {
-                            masterUrlMap.set(url, item); // 'item' is the specific sub-category
-                        }
-                    });
-                    let newUrlsFound = masterUrlMap.size - initialSize;
-                    socket.emit('log', `   -> Found ${newUrlsFound} new URLs in "${query}". Total unique URLs so far: ${masterUrlMap.size}`);
+                if (searchAreas.length === 0) {
+                     socket.emit('log', 'No location/postcode provided, skipping item.', 'error');
+                     continue;
+                }
+                
+                for (const areaQuery of searchAreas) {
+                    const baseQuery = isIndividualSearch ? `${item}, ${areaQuery}, ${country}` : `${item} in ${areaQuery}, ${country}`;
+                    const queriesForArea = await getSearchQueriesForLocation(baseQuery, areaQuery, country, socket, isIndividualSearch);
+                    locationQueries.push(...queriesForArea);
                 }
             }
+
+            for (const query of locationQueries) {
+                const finalSearchQuery = (isIndividualSearch || query.startsWith('near ')) ? `${item} ${query}` : query;
+                const discoveredUrlsForThisSubArea = new Set();
+                await collectGoogleMapsUrlsContinuously(collectionPage, finalSearchQuery, socket, discoveredUrlsForThisSubArea, country);
+                
+                let initialSize = masterUrlMap.size;
+                discoveredUrlsForThisSubArea.forEach(url => {
+                    if (!masterUrlMap.has(url)) {
+                        masterUrlMap.set(url, item);
+                    }
+                });
+                let newUrlsFound = masterUrlMap.size - initialSize;
+                socket.emit('log', `   -> Found ${newUrlsFound} new URLs in this area. Total unique URLs so far: ${masterUrlMap.size}`);
+            }
         }
-        
-        // FIX: Close the reusable collection page now that we are done with it.
+
         if (collectionPage) {
             await collectionPage.close();
             socket.emit('log', '[Cleanup] URL collection page closed.');
@@ -175,15 +168,13 @@ socket.on('start_scrape', async ({ category, categoriesToLoop, location, postalC
         socket.emit('log', `\n--- URL Collection Complete. Found ${masterUrlMap.size} total unique businesses. ---`);
         socket.emit('log', `--- Starting Data Processing Phase ---`);
 
-        // FIX: Convert the map to an array of {url, category} objects for processing
         const urlsToProcess = Array.from(masterUrlMap, ([url, category]) => ({ url, category }));
-        totalDiscoveredUrls = urlsToProcess.length;
+        const totalDiscoveredUrls = urlsToProcess.length;
 
         for (let i = 0; i < urlsToProcess.length; i += CONCURRENCY) {
             if (allProcessedBusinesses.length >= targetCount) break;
             const batch = urlsToProcess.slice(i, i + CONCURRENCY);
 
-            // FIX: This entire block is restructured to prevent memory leaks from timeouts.
             const promises = batch.map(async (processItem) => {
                 let detailPage = null; 
 
@@ -215,7 +206,6 @@ socket.on('start_scrape', async ({ category, categoriesToLoop, location, postalC
                         if (isIndividualSearch) {
                             fullBusinessData.Category = googleData.ScrapedCategory || 'N/A';
                         } else {
-                            // Use the specific sub-category saved with the URL
                             fullBusinessData.Category = processItem.category || category || 'N/A';
                         }
                         
@@ -285,8 +275,71 @@ socket.on('start_scrape', async ({ category, categoriesToLoop, location, postalC
     socket.on('disconnect', () => console.log(`Client disconnected: ${socket.id} at ${new Date().toLocaleString()}`));
 });
 
+function degToRad(degrees) {
+    return degrees * Math.PI / 180;
+}
 
-// --- Other Async Functions ---
+function calculateDistance(lat1, lon1, lat2, lon2) {
+    const R = 6371;
+    const x = degToRad(lon2 - lon1) * Math.cos(degToRad(lat1 + lat2) / 2);
+    const y = degToRad(lat2 - lat1);
+    return Math.sqrt(x * x + y * y) * R;
+}
+
+async function getSearchQueriesForRadius(anchorPoint, radiusKm, country, apiKey, socket) {
+    const searchQueries = [];
+    
+    let centerLat, centerLng;
+    
+    if (anchorPoint.includes(',')) {
+        const parts = anchorPoint.split(',');
+        centerLat = parseFloat(parts[0]);
+        centerLng = parseFloat(parts[1]);
+        socket.emit('log', `   -> Using direct coordinates for anchor point: ${centerLat.toFixed(4)}, ${centerLng.toFixed(4)}`);
+    } else {
+        socket.emit('log', `   -> Geocoding anchor point: "${anchorPoint}"`);
+        try {
+            const geocodeUrl = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(`${anchorPoint}, ${country}`)}&key=${apiKey}`;
+            const response = await axios.get(geocodeUrl);
+            if (response.data.status !== 'OK') {
+                socket.emit('log', `   -> Geocoding failed for anchor point: ${response.data.status}`, 'error');
+                return [];
+            }
+            const location = response.data.results[0].geometry.location;
+            centerLat = location.lat;
+            centerLng = location.lng;
+            socket.emit('log', `   -> Anchor point located at: ${centerLat.toFixed(4)}, ${centerLng.toFixed(4)}`);
+        } catch (error) {
+            socket.emit('log', `   -> Geocoding API call failed: ${error.message}`, 'error');
+            return [];
+        }
+    }
+
+    const GRID_SIZE = Math.max(3, Math.ceil(radiusKm / 2));
+    socket.emit('log', `   -> Generating a ${GRID_SIZE}x${GRID_SIZE} grid to cover the ${radiusKm}km radius.`);
+
+    const latOffset = radiusKm / 111.0;
+    const lngOffset = radiusKm / (111.0 * Math.cos(degToRad(centerLat)));
+    
+    const minLat = centerLat - latOffset;
+    const maxLat = centerLat + latOffset;
+    const minLng = centerLng - lngOffset;
+    const maxLng = centerLng + lngOffset;
+
+    for (let i = 0; i < GRID_SIZE; i++) {
+        for (let j = 0; j < GRID_SIZE; j++) {
+            const pointLat = minLat + (maxLat - minLat) * (i / (GRID_SIZE - 1));
+            const pointLng = minLng + (maxLng - minLng) * (j / (GRID_SIZE - 1));
+
+            if (calculateDistance(centerLat, centerLng, pointLat, pointLng) <= radiusKm) {
+                searchQueries.push(`near ${pointLat.toFixed(6)},${pointLng.toFixed(6)}`);
+            }
+        }
+    }
+    
+    socket.emit('log', `   -> Generated ${searchQueries.length} valid search points within the radius.`);
+    return searchQueries;
+}
 
 async function getSearchQueriesForLocation(searchQuery, areaQuery, country, socket, isIndividualSearch = false) {
     if (isIndividualSearch) {
@@ -295,7 +348,7 @@ async function getSearchQueriesForLocation(searchQuery, areaQuery, country, sock
     }
     
     socket.emit('log', `   -> Geocoding "${areaQuery}, ${country}"...`);
-    if (/^\d{4,}$/.test(areaQuery.trim())) { // Slightly more flexible regex
+    if (/^\d{4,}$/.test(areaQuery.trim())) {
         socket.emit('log', `   -> Postcode search detected. Forcing single search.`);
         return [searchQuery];
     }
@@ -332,9 +385,7 @@ async function getSearchQueriesForLocation(searchQuery, areaQuery, country, sock
     }
 }
 
-// FIX: Signature changed to accept a 'page' object instead of 'browser'
 async function collectGoogleMapsUrlsContinuously(page, searchQuery, socket, discoveredUrlSet, country, isIndividualSearch = false, businessNameToFilter = '') {
-    // FIX: Removed the try/finally block that created/closed the page.
     try {
         const countryNameToCode = {'australia': 'AU', 'new zealand': 'NZ', 'united states': 'US', 'united kingdom': 'GB', 'canada': 'CA', 'philippines': 'PH'};
         const countryCode = countryNameToCode[country.toLowerCase()];
@@ -349,7 +400,6 @@ async function collectGoogleMapsUrlsContinuously(page, searchQuery, socket, disc
         }
 
         socket.emit('log', `   -> Navigating to: ${searchQuery}`);
-        // FIX: Using the pre-existing page object to navigate
         await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
         
         try {
@@ -408,7 +458,6 @@ async function collectGoogleMapsUrlsContinuously(page, searchQuery, socket, disc
         socket.emit('log', `CRITICAL ERROR during URL collection for "${searchQuery}": ${error.message.split('\n')[0]}`, 'error');
         if (page) await page.screenshot({ path: `error_collection_${searchQuery.replace(/\W/g, '_')}_${Date.now()}.png` });
     }
-    // FIX: No 'finally' block here, as we are not closing the page.
 }
 
 async function scrapeGoogleMapsDetails(page, url, socket, country) {
@@ -511,7 +560,7 @@ async function scrapeWebsiteForGoldData(page, websiteUrl, socket) {
                 const subsequentPageData = await scrapePageContent(page);
                 subsequentPageData.emails.forEach(e => allFoundEmails.add(e.toLowerCase()));
                 if (subsequentPageData.ownerName) finalOwnerName = subsequentPageData.ownerName;
-            } catch (e) { /* ignore navigation errors */ }
+            } catch (e) { }
         }
         data.OwnerName = finalOwnerName;
         const emailsArray = Array.from(allFoundEmails);
@@ -531,7 +580,7 @@ async function scrapeWebsiteForGoldData(page, websiteUrl, socket) {
             const ranked = [...new Set([...nameMatch, ...personal, ...generic])];
             data.Email1 = ranked[0] || ''; data.Email2 = ranked[1] || ''; data.Email3 = ranked[2] || '';
         }
-    } catch (error) { /* ignore website scraping errors */ }
+    } catch (error) { }
     return data;
 }
 

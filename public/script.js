@@ -1,4 +1,5 @@
 const BACKEND_URL = "https://brieflessly-unlovely-constance.ngrok-free.app";
+
 function initializeMainApp() {
   async function loadGoogleMaps() {
     try {
@@ -34,9 +35,7 @@ function initializeMainApp() {
     startButton: document.getElementById("startButton"),
     downloadFullExcelButton: document.getElementById("downloadFullExcelButton"),
     downloadNotifyreCSVButton: document.getElementById("downloadNotifyreCSVButton"),
-    // --- THIS IS THE FIX ---
     downloadContactsCSVButton: document.getElementById("downloadContactsCSVButton"), 
-    // --- END OF FIX ---
     primaryCategorySelect: document.getElementById("primaryCategorySelect"),
     subCategoryGroup: document.getElementById("subCategoryGroup"),
     subCategorySelect: document.getElementById("subCategorySelect"),
@@ -53,6 +52,10 @@ function initializeMainApp() {
     findAllBusinessesCheckbox: document.getElementById("findAllBusinesses"),
     businessNamesInput: document.getElementById("businessNamesInput"),
     bulkSearchContainer: document.getElementById("bulkSearchContainer"),
+    locationSearchContainer: document.getElementById('locationSearchContainer'),
+    radiusSearchContainer: document.getElementById('radiusSearchContainer'),
+    anchorPointInput: document.getElementById('anchorPointInput'),
+    radiusSelect: document.getElementById('radiusSelect'),
     progressBar: document.getElementById("progressBar"),
     logEl: document.getElementById("log"),
     resultsTableBody: document.getElementById("resultsTableBody"),
@@ -73,6 +76,7 @@ function initializeMainApp() {
     currentSearchParameters = {},
     postalCodes = [];
   let currentSort = { key: "BusinessName", direction: "asc" };
+  let map, searchCircle;
 
   const categories = {
     "Select Category": [], "Alterations and tailoring": [], "Baby and nursery": ["ALL", "Baby and infant toys", "Baby bedding", "Nursery furniture", "Prams, strollers and carriers", "Tableware and feeding"], "Banks": [], "Beauty and wellness": ["ALL", "Bath and body", "Fragrance", "Hair and beauty", "Hair care", "Makeup", "Skincare", "Vitamins and supplements"], "Books, stationery and gifts": ["ALL", "Book stores", "Cards and gift wrap", "Newsagencies", "Office supplies", "Stationery"], "Car and auto": [], "Childcare": [], "Clothing and accessories": ["ALL", "Babies' and toddlers'", "Footwear", "Jewellery and watches", "Kids' and junior", "Men's fashion", "Sunglasses", "Women's fashion"], "Community services": [], "Department stores": [], "Designer and boutique": [], "Discount and variety": [], "Dry cleaning": [], "Electronics and technology": ["ALL", "Cameras", "Computers and tablets", "Gaming and consoles", "Mobile and accessories", "Navigation", "TV and audio"], "Entertainment and activities": ["ALL", "Arcades and games", "Bowling", "Cinemas", "Kids activities", "Learning and education", "Music"], "Florists": [], "Food and drink": ["ALL", "Asian", "Bars and pubs", "Breakfast and brunch", "Cafes", "Casual dining", "Chocolate cafes", "Desserts", "Dietary requirements", "Fast food", "Fine dining", "Greek", "Grill houses", "Halal", "Healthy options", "Italian", "Juice bars", "Kid-friendly", "Lebanese", "Mexican and Latin American", "Middle Eastern", "Modern Australian", "Sandwiches and salads", "Takeaway"], "Foreign currency exchange": [], "Fresh food and groceries": ["ALL", "Bakeries", "Butchers", "Confectionery", "Delicatessens", "Fresh produce", "Liquor", "Patisseries", "Poultry", "Seafood", "Specialty foods", "Supermarkets"], "Health and fitness": ["ALL", "Chemists", "Dentists", "Gyms and fitness studios", "Health insurers", "Medical centres", "Medicare", "Optometrists", "Specialty health providers"], "Home": ["ALL", "Bath and home fragrances", "Bedding", "Furniture", "Gifts", "Hardware", "Home appliances", "Home decor", "Kitchen", "Pets", "Photography and art", "Picture frames"], "Luggage and travel accessories": ["ALL", "Backpacks and gym duffle bags", "Laptop cases and sleeves", "Small leather goods", "Suitcases and travel accessories", "Work and laptop bags"], "Luxury and premium": ["ALL", "Australian designer", "International designer", "Luxury", "Premium brands"], "Pawn brokers": [], "Phone repairs": [], "Photographic services": [], "Post office": [], "Power, gas and communication services": [], "Professional services": [], "Real estate agents": [], "Shoe repair and key cutting": [], "Sporting goods": ["ALL", "Activewear", "Fitness and gym equipment", "Outdoors and camping", "Tech and wearables"], "Tobacconists": [], "Toys and hobbies": ["ALL", "Arts and crafts", "Games", "Hobbies", "Toys"], "Travel agents": []
@@ -129,6 +133,15 @@ function initializeMainApp() {
       console.error("Could not get place details for postcode:", error);
     }
   }
+  
+  function initializeMap() {
+    const defaultCenter = elements.countryInput.value.toLowerCase() === 'australia' ? [-33.8688, 151.2093] : [34.0522, -118.2437];
+    map = L.map('map').setView(defaultCenter, 10);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    }).addTo(map);
+  }
 
   function initializeApp() {
     document.getElementById("currentYear").textContent = new Date().getFullYear();
@@ -153,6 +166,7 @@ function initializeMainApp() {
     }
 
     populatePrimaryCategories(elements.primaryCategorySelect, categories, "");
+    initializeMap();
     setupEventListeners();
     
     if (elements.findAllBusinessesCheckbox.checked) {
@@ -261,6 +275,55 @@ function initializeMainApp() {
     elements.postalCodeContainer.insertBefore(tagEl, elements.postalCodeInput);
   }
 
+  function setLocationInputsState(disabled) {
+      elements.locationInput.disabled = disabled;
+      elements.postalCodeInput.disabled = disabled;
+      elements.locationSearchContainer.style.opacity = disabled ? 0.5 : 1;
+      if (disabled) {
+        elements.locationInput.value = '';
+        postalCodes = [];
+        elements.postalCodeContainer.querySelectorAll('.tag').forEach(tag => tag.remove());
+      }
+  }
+
+  function setRadiusInputsState(disabled) {
+      elements.anchorPointInput.disabled = disabled;
+      elements.radiusSelect.disabled = disabled;
+      elements.radiusSearchContainer.style.opacity = disabled ? 0.5 : 1;
+      if (disabled) {
+        elements.anchorPointInput.value = '';
+        elements.radiusSelect.value = '';
+        if (searchCircle) {
+            map.removeLayer(searchCircle);
+            searchCircle = null;
+        }
+      }
+  }
+
+  function drawSearchCircle(center) {
+    const radiusMeters = parseInt(elements.radiusSelect.value, 10) * 1000;
+    if (!radiusMeters) {
+        if (searchCircle) {
+            map.removeLayer(searchCircle);
+            searchCircle = null;
+        }
+        return;
+    };
+
+    if (searchCircle) {
+        searchCircle.setLatLng(center);
+        searchCircle.setRadius(radiusMeters);
+    } else {
+        searchCircle = L.circle(center, {
+            radius: radiusMeters,
+            color: '#20c997',
+            fillColor: '#20c997',
+            fillOpacity: 0.2
+        }).addTo(map);
+    }
+    map.fitBounds(searchCircle.getBounds());
+  }
+
   function setupTagInput() {
     elements.postalCodeContainer.addEventListener("click", (e) => {
       if (e.target.classList.contains("tag-close-btn")) {
@@ -270,6 +333,9 @@ function initializeMainApp() {
           postalCodes.splice(index, 1);
         }
         e.target.parentElement.remove();
+        if (postalCodes.length === 0 && !elements.locationInput.value.trim()) {
+            setRadiusInputsState(false);
+        }
       } else {
         elements.postalCodeInput.focus();
       }
@@ -295,6 +361,10 @@ function initializeMainApp() {
           }
         }
       }
+    });
+    elements.postalCodeContainer.addEventListener('input', () => {
+        const hasTags = postalCodes.length > 0 || elements.postalCodeInput.value.trim();
+        if (hasTags) setRadiusInputsState(true);
     });
   }
 
@@ -339,10 +409,40 @@ function initializeMainApp() {
     elements.locationInput.addEventListener("input", () => {
       clearTimeout(locationAutocompleteTimer);
       locationAutocompleteTimer = setTimeout(() => fetchPlaceSuggestions(elements.locationInput, elements.locationSuggestionsEl, ["geocode"], handleLocationSelection), 300);
+      setRadiusInputsState(elements.locationInput.value.trim().length > 0);
     });
     elements.postalCodeInput.addEventListener("input", () => {
       clearTimeout(postalCodeAutocompleteTimer);
       postalCodeAutocompleteTimer = setTimeout(() => fetchPlaceSuggestions(elements.postalCodeInput, elements.postalCodeSuggestionsEl, ["(regions)"], handlePostalCodeSelection), 300);
+    });
+    elements.anchorPointInput.addEventListener('input', () => {
+        const hasText = elements.anchorPointInput.value.trim().length > 0;
+        setLocationInputsState(hasText);
+    });
+    elements.anchorPointInput.addEventListener('blur', async () => {
+        const query = elements.anchorPointInput.value.trim();
+        const country = elements.countryInput.value.trim();
+        if (!query || !country) return;
+
+        try {
+            const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query + ', ' + country)}&limit=1`);
+            const data = await response.json();
+
+            if (data && data.length > 0) {
+                const { lat, lon } = data[0];
+                const newCenter = L.latLng(parseFloat(lat), parseFloat(lon));
+                map.setView(newCenter, 11);
+                drawSearchCircle(newCenter);
+            }
+        } catch (error) {
+            console.error("Geocoding failed:", error);
+        }
+    });
+    elements.radiusSelect.addEventListener('change', () => {
+        if (map && (searchCircle || elements.anchorPointInput.value.trim())) {
+            const center = searchCircle ? searchCircle.getLatLng() : map.getCenter();
+            drawSearchCircle(center);
+        }
     });
     document.addEventListener("click", (event) => {
       if (!elements.locationInput.contains(event.target)) elements.locationSuggestionsEl.style.display = "none";
@@ -355,21 +455,18 @@ function initializeMainApp() {
       const elementsToToggle = elements.bulkSearchContainer.querySelectorAll(".form-group, .form-row");
       elementsToToggle.forEach((el) => {
         const inputs = el.querySelectorAll("input, select");
-        let isLocationGroup = false;
-        inputs.forEach((input) => {
-          if (["locationInput", "postalCodeInput", "countryInput"].includes(input.id)) {
-            isLocationGroup = true;
-          }
-        });
-        if (isLocationGroup) {
-          el.style.opacity = "1";
-        } else {
           el.style.opacity = isIndividualSearch ? "0.5" : "1";
           inputs.forEach((input) => {
             input.disabled = isIndividualSearch;
           });
-        }
       });
+      if(isIndividualSearch){
+          setRadiusInputsState(true);
+          setLocationInputsState(true);
+      } else {
+          setRadiusInputsState(false);
+          setLocationInputsState(false);
+      }
     });
     elements.selectAllCheckbox.addEventListener("change", (e) => {
       const isChecked = e.target.checked;
@@ -403,83 +500,79 @@ function initializeMainApp() {
       });
       await downloadExcel(notifyreFormattedData, currentSearchParameters, "sms", "csv", elements.logEl, notifyreHeaders, geocoder, elements.countryInput.value);
     });
-
-
-elements.downloadContactsCSVButton.addEventListener("click", async () => {
-  const selectedRawData = getSelectedData();
-  const dataWithEmails = selectedRawData.filter((d) => (d.Email1 && d.Email1.trim() !== "") || (d.Email2 && d.Email2.trim() !== ""));
-  if (dataWithEmails.length === 0) {
-    logMessage(elements.logEl, "No selected businesses have a primary or secondary email to export.", "error");
-    return;
-  }
-
-  let locationString = currentSearchParameters.area;
-  if (currentSearchParameters.postcodes && currentSearchParameters.postcodes.length > 0) {
-      try {
-          const postcodeToLookup = currentSearchParameters.postcodes[0];
-          const countryName = elements.countryInput.value;
-          const response = await new Promise((resolve, reject) => {
-              geocoder.geocode({ address: `${postcodeToLookup}, ${countryName}` }, (results, status) => {
-                  if (status === 'OK' && results[0]) {
-                      resolve(results[0]);
-                  } else {
-                      reject(new Error(`Geocode failed: ${status}`));
-                  }
-              });
-          });
-          const suburbComponent = response.address_components.find(c => c.types.includes('locality'));
-          if (suburbComponent) {
-              locationString = suburbComponent.long_name.replace(/[\s/]/g, "_").toLowerCase();
-          }
-      } catch (error) {
-          console.warn("Could not geocode for Notes field, using default.", error);
-          locationString = currentSearchParameters.area;
+    elements.downloadContactsCSVButton.addEventListener("click", async () => {
+      const selectedRawData = getSelectedData();
+      const dataWithEmails = selectedRawData.filter((d) => (d.Email1 && d.Email1.trim() !== "") || (d.Email2 && d.Email2.trim() !== ""));
+      if (dataWithEmails.length === 0) {
+        logMessage(elements.logEl, "No selected businesses have a primary or secondary email to export.", "error");
+        return;
       }
-  }
 
-  const date = new Date().toISOString().split('T')[0].replace(/-/g, '');
-  const primaryCat = currentSearchParameters.primaryCategory?.replace(/[\s/&]/g, "_") || 'general';
-  const subCat = (currentSearchParameters.subCategory && currentSearchParameters.subCategory !== 'ALL') ? currentSearchParameters.subCategory.replace(/[\s/&]/g, "_") : '';
-  const customCat = currentSearchParameters.customCategory?.replace(/[\s/&]/g, "_") || '';
+      let locationString = currentSearchParameters.area;
+      if (currentSearchParameters.postcodes && currentSearchParameters.postcodes.length > 0) {
+          try {
+              const postcodeToLookup = currentSearchParameters.postcodes[0];
+              const countryName = elements.countryInput.value;
+              const response = await new Promise((resolve, reject) => {
+                  geocoder.geocode({ address: `${postcodeToLookup}, ${countryName}` }, (results, status) => {
+                      if (status === 'OK' && results[0]) {
+                          resolve(results[0]);
+                      } else {
+                          reject(new Error(`Geocode failed: ${status}`));
+                      }
+                  });
+              });
+              const suburbComponent = response.address_components.find(c => c.types.includes('locality'));
+              if (suburbComponent) {
+                  locationString = suburbComponent.long_name.replace(/[\s/]/g, "_").toLowerCase();
+              }
+          } catch (error) {
+              console.warn("Could not geocode for Notes field, using default.", error);
+              locationString = currentSearchParameters.area;
+          }
+      }
 
-  let categoryString = customCat || primaryCat;
-  if (subCat) {
-      categoryString += `_${subCat}`;
-  }
-  
-  const notesContent = `${date}_${categoryString}_${locationString}`;
-  
-  const newHeaders = [
-      "Company", "Address_(other)_Sub", "Address_(other)_State", "Notes", 
-      "facebook", "instagram", "linkedin", 
-      "email_1", "email_2", "email_3"
-  ];
+      const date = new Date().toISOString().split('T')[0].replace(/-/g, '');
+      const primaryCat = currentSearchParameters.primaryCategory?.replace(/[\s/&]/g, "_") || 'general';
+      const subCat = (currentSearchParameters.subCategory && currentSearchParameters.subCategory !== 'ALL') ? currentSearchParameters.subCategory.replace(/[\s/&]/g, "_") : '';
+      const customCat = currentSearchParameters.customCategory?.replace(/[\s/&]/g, "_") || '';
 
-  const contactsData = dataWithEmails.map((d) => {
-    
-    let state = '';
-    if (d.StreetAddress) {
+      let categoryString = customCat || primaryCat;
+      if (subCat) {
+          categoryString += `_${subCat}`;
+      }
+      
+      const notesContent = `${date}_${categoryString}_${locationString}`;
+      
+      const newHeaders = [
+          "Company", "Address_(other)_Sub", "Address_(other)_State", "Notes", 
+          "facebook", "instagram", "linkedin", 
+          "email_1", "email_2", "email_3"
+      ];
 
-        const stateMatch = d.StreetAddress.match(/\b([A-Z]{2,3})\b(?= \d{4,})/);
-        state = stateMatch ? stateMatch[1] : ''; 
-    }
+      const contactsData = dataWithEmails.map((d) => {
+        let state = '';
+        if (d.StreetAddress) {
+            const stateMatch = d.StreetAddress.match(/\b([A-Z]{2,3})\b(?= \d{4,})/);
+            state = stateMatch ? stateMatch[1] : ''; 
+        }
 
-    return {
-      "Company": d.BusinessName || '',
-      "Address_(other)_Sub": d.SuburbArea || '',
-      "Address_(other)_State": state, 
-      "Notes": notesContent,
-      "facebook": d.FacebookURL || '',
-      "instagram": d.InstagramURL || '',
-      "linkedin": '', 
-      "email_1": d.Email1 || '',
-      "email_2": d.Email2 || '',
-      "email_3": d.Email3 || ''
-    };
-  });
+        return {
+          "Company": d.BusinessName || '',
+          "Address_(other)_Sub": d.SuburbArea || '',
+          "Address_(other)_State": state, 
+          "Notes": notesContent,
+          "facebook": d.FacebookURL || '',
+          "instagram": d.InstagramURL || '',
+          "linkedin": '', 
+          "email_1": d.Email1 || '',
+          "email_2": d.Email2 || '',
+          "email_3": d.Email3 || ''
+        };
+      });
 
-  await downloadExcel(contactsData, currentSearchParameters, "emails", "csv", elements.logEl, newHeaders, geocoder, elements.countryInput.value);
-});
+      await downloadExcel(contactsData, currentSearchParameters, "emails", "csv", elements.logEl, newHeaders, geocoder, elements.countryInput.value);
+    });
 
     elements.filterInput.addEventListener("input", applyFilterAndSort);
     elements.resultsTableHeader.addEventListener("click", (e) => {
@@ -592,7 +685,23 @@ elements.downloadContactsCSVButton.addEventListener("click", async () => {
     if (elements.researchStatusIcon) elements.researchStatusIcon.className = "fas fa-spinner fa-spin";
     const namesText = elements.businessNamesInput.value.trim();
     const businessNames = namesText.split("\n").map((name) => name.trim()).filter(Boolean);
-    const payload = { location: elements.locationInput.value.trim(), postalCode: postalCodes, country: elements.countryInput.value, businessNames: businessNames.length > 0 ? businessNames : [] };
+    const payload = { 
+        country: elements.countryInput.value, 
+        businessNames: businessNames.length > 0 ? businessNames : [] 
+    };
+    
+    if (searchCircle) {
+        const center = searchCircle.getLatLng();
+        payload.anchorPoint = `${center.lat},${center.lng}`;
+        payload.radiusKm = searchCircle.getRadius() / 1000;
+    } else if (elements.anchorPointInput.value.trim() && elements.radiusSelect.value) {
+        payload.anchorPoint = elements.anchorPointInput.value.trim();
+        payload.radiusKm = parseInt(elements.radiusSelect.value, 10);
+    } else {
+        payload.location = elements.locationInput.value.trim();
+        payload.postalCode = postalCodes;
+    }
+
     const customCategory = elements.customCategoryInput.value.trim();
     const primaryCategory = elements.primaryCategorySelect.value;
     const subCategory = elements.subCategorySelect.value;
@@ -605,10 +714,12 @@ elements.downloadContactsCSVButton.addEventListener("click", async () => {
     } else {
       payload.category = subCategory || primaryCategory;
     }
-    const hasLocation = payload.location || payload.postalCode.length > 0;
-    const hasSearchTerm = payload.businessNames.length || payload.category || (payload.categoriesToLoop && payload.categoriesToLoop.length);
-    if (!hasSearchTerm || !hasLocation || !payload.country) {
-      logMessage(elements.logEl, `Input Error: Please provide a category/keyword, a location/postal code, and country.`, "error");
+    
+    const hasLocation = payload.location || (payload.postalCode && payload.postalCode.length > 0) || (payload.anchorPoint && payload.radiusKm);
+    const hasSearchTerm = payload.businessNames.length > 0 || payload.category || (payload.categoriesToLoop && payload.categoriesToLoop.length > 0);
+
+    if ((!hasSearchTerm || !hasLocation || !payload.country) && businessNames.length === 0) {
+      logMessage(elements.logEl, `Input Error: Please provide a category/keyword, a location type, and country.`, "error");
       handleScrapeError({ error: "Invalid input" });
       return;
     }
@@ -652,6 +763,8 @@ elements.downloadContactsCSVButton.addEventListener("click", async () => {
       countInput: elements.countInput,
       findAllBusinessesCheckbox: elements.findAllBusinessesCheckbox,
       businessNamesInput: elements.businessNamesInput,
+      anchorPointInput: elements.anchorPointInput,
+      radiusSelect: elements.radiusSelect,
       downloadButtons: { fullExcel: elements.downloadFullExcelButton, notifyre: elements.downloadNotifyreCSVButton, contacts: elements.downloadContactsCSVButton },
       displayedData: displayedData,
     };

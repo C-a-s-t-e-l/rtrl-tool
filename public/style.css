@@ -598,12 +598,46 @@ footer {
   height: 40vh; /* This creates empty space equal to 40% of the screen's height */
 }
 
+
+
 @media (max-width: 1200px) {
   .app-container {
       padding: 1.5rem;
   }
 }
 
+
+@media (max-width: 576px) {
+  .app-container {
+      padding: 1rem;
+  }
+  .card {
+    margin: 0 -1rem;
+  }
+  header {
+    padding: 1.5rem 1rem;
+    margin: -1rem -1rem 2rem -1rem;
+  }
+  .form-row {
+    flex-direction: column;
+    gap: 1.25rem;
+  }
+}
+
+#map {
+    height: 350px;
+    width: 100%;
+    border-radius: 8px;
+    margin-top: 1rem;
+    border: 1px solid var(--border-color);
+    z-index: 1;
+}
+
+@media (max-width: 1200px) {
+  .app-container {
+      padding: 1.5rem;
+  }
+}
 
 @media (max-width: 576px) {
   .app-container {

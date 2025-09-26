@@ -3,10 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <link rel="icon" type="image/x-icon" href="https://cdn-icons-png.flaticon.com/512/2248/2248814.png">
+    <link rel="icon" type="image/x-icon" href="https://cdn-icons-png.flaticon.com/512/2248/2248814.png">
     <title>RTRL Property Prospector</title>
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     
     <script>
@@ -19,7 +21,6 @@
     </script>
 </head>
 <body>
-<!-- test2 - vercel bug not redeploying commits -->
     <div class="app-container">
         <header>
             <div class="logo">
@@ -52,22 +53,7 @@
                         <label for="subCategorySelect">Sub-Category (Optional)</label>
                         <select id="subCategorySelect"></select>
                     </div>
-    
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="locationInput"><i class="fas fa-map-marker-alt"></i> Suburb / Area</label>
-                            <input type="text" id="locationInput" placeholder="e.g. Melbourne" autocomplete="off">
-                            <div id="locationSuggestions" class="autocomplete-suggestions"></div>
-                        </div>
-                        <div class="form-group">
-                            <label for="postalCodeInput"><i class="fas fa-hashtag"></i> Postal Code(s)</label>
-                            <div id="postalCodeContainer" class="tag-container">
-                                <input type="text" id="postalCodeInput" placeholder="Enter postcodes...">
-                            </div>
-                            <div id="postalCodeSuggestions" class="autocomplete-suggestions"></div>
-                        </div>
-                    </div>
-    
+
                     <div class="form-group">
                         <label for="countryInput"><i class="fas fa-globe-asia"></i> Country</label>
                         <input type="text" id="countryInput" placeholder="e.g. Australia" autocomplete="off" value="Australia">
@@ -83,6 +69,48 @@
                         <input type="checkbox" id="findAllBusinesses" name="find_option" checked>
                         <label for="findAllBusinesses">Find all available businesses</label>
                     </div>
+                </div>
+
+                <hr class="separator">
+
+                <div id="locationSearchContainer">
+                    <h4>Search by Location</h4>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="locationInput"><i class="fas fa-map-marker-alt"></i> Suburb / Area</label>
+                            <input type="text" id="locationInput" placeholder="e.g. Melbourne" autocomplete="off">
+                            <div id="locationSuggestions" class="autocomplete-suggestions"></div>
+                        </div>
+                        <div class="form-group">
+                            <label for="postalCodeInput"><i class="fas fa-hashtag"></i> Postal Code(s)</label>
+                            <div id="postalCodeContainer" class="tag-container">
+                                <input type="text" id="postalCodeInput" placeholder="Enter postcodes...">
+                            </div>
+                            <div id="postalCodeSuggestions" class="autocomplete-suggestions"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <hr class="separator">
+
+                <div id="radiusSearchContainer">
+                    <h4>Search by Radius</h4>
+                    <div class="form-group">
+                        <label for="anchorPointInput"><i class="fas fa-bullseye"></i> Center Suburb / Postcode</label>
+                        <input type="text" id="anchorPointInput" placeholder="e.g., Belconnen or 2617">
+                    </div>
+                    <div class="form-group">
+                        <label for="radiusSelect"><i class="fas fa-circle-notch"></i> Search Radius</label>
+                        <select id="radiusSelect">
+                            <option value="">Select distance...</option>
+                            <option value="2">2 km</option>
+                            <option value="5">5 km</option>
+                            <option value="10">10 km</option>
+                            <option value="25">25 km</option>
+                            <option value="50">50 km</option>
+                        </select>
+                    </div>
+                    <div id="map"></div>
                 </div>
 
                 <hr class="separator">
