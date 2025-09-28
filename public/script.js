@@ -423,7 +423,7 @@ function initializeMainApp() {
     });
     elements.locationInput.addEventListener("input", () => {
       clearTimeout(locationAutocompleteTimer);
-      locationAutocompleteTimer = setTimeout(() => fetchPlaceSuggestions(elements.locationInput, elements.locationSuggestionsEl, ["(regions)"], handleLocationSelection), 300);
+      locationAutocompleteTimer = setTimeout(() => fetchPlaceSuggestions(elements.locationInput, elements.locationSuggestionsEl, ["geocode"], handleLocationSelection), 300);
       setRadiusInputsState(elements.locationInput.value.trim().length > 0);
     });
     elements.postalCodeInput.addEventListener("input", () => {
@@ -438,7 +438,9 @@ function initializeMainApp() {
         }
         clearTimeout(anchorPointAutocompleteTimer);
         anchorPointAutocompleteTimer = setTimeout(() => {
-            fetchPlaceSuggestions(elements.anchorPointInput, elements.anchorPointSuggestionsEl, ['(regions)'], handleAnchorPointSelection);
+            // --- THIS IS THE FIX ---
+            fetchPlaceSuggestions(elements.anchorPointInput, elements.anchorPointSuggestionsEl, ['geocode'], handleAnchorPointSelection);
+            // --- END OF FIX ---
         }, 300);
     });
     elements.radiusSlider.addEventListener('input', () => {
