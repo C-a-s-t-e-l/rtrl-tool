@@ -55,7 +55,9 @@ function initializeMainApp() {
     locationSearchContainer: document.getElementById('locationSearchContainer'),
     radiusSearchContainer: document.getElementById('radiusSearchContainer'),
     anchorPointInput: document.getElementById('anchorPointInput'),
-    radiusSelect: document.getElementById('radiusSelect'),
+    anchorPointSuggestionsEl: document.getElementById('anchorPointSuggestions'),
+    radiusSlider: document.getElementById('radiusSlider'),
+    radiusValue: document.getElementById('radiusValue'),
     progressBar: document.getElementById("progressBar"),
     logEl: document.getElementById("log"),
     resultsTableBody: document.getElementById("resultsTableBody"),
@@ -73,10 +75,12 @@ function initializeMainApp() {
     locationAutocompleteTimer,
     postalCodeAutocompleteTimer,
     countryAutocompleteTimer,
+    anchorPointAutocompleteTimer,
     currentSearchParameters = {},
     postalCodes = [];
   let currentSort = { key: "BusinessName", direction: "asc" };
-  let map, searchCircle;
+  let map, searchCircle, selectedAnchorPoint = null;
+  const radiusSteps = [2, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50];
 
   const categories = {
     "Select Category": [], "Alterations and tailoring": [], "Baby and nursery": ["ALL", "Baby and infant toys", "Baby bedding", "Nursery furniture", "Prams, strollers and carriers", "Tableware and feeding"], "Banks": [], "Beauty and wellness": ["ALL", "Bath and body", "Fragrance", "Hair and beauty", "Hair care", "Makeup", "Skincare", "Vitamins and supplements"], "Books, stationery and gifts": ["ALL", "Book stores", "Cards and gift wrap", "Newsagencies", "Office supplies", "Stationery"], "Car and auto": [], "Childcare": [], "Clothing and accessories": ["ALL", "Babies' and toddlers'", "Footwear", "Jewellery and watches", "Kids' and junior", "Men's fashion", "Sunglasses", "Women's fashion"], "Community services": [], "Department stores": [], "Designer and boutique": [], "Discount and variety": [], "Dry cleaning": [], "Electronics and technology": ["ALL", "Cameras", "Computers and tablets", "Gaming and consoles", "Mobile and accessories", "Navigation", "TV and audio"], "Entertainment and activities": ["ALL", "Arcades and games", "Bowling", "Cinemas", "Kids activities", "Learning and education", "Music"], "Florists": [], "Food and drink": ["ALL", "Asian", "Bars and pubs", "Breakfast and brunch", "Cafes", "Casual dining", "Chocolate cafes", "Desserts", "Dietary requirements", "Fast food", "Fine dining", "Greek", "Grill houses", "Halal", "Healthy options", "Italian", "Juice bars", "Kid-friendly", "Lebanese", "Mexican and Latin American", "Middle Eastern", "Modern Australian", "Sandwiches and salads", "Takeaway"], "Foreign currency exchange": [], "Fresh food and groceries": ["ALL", "Bakeries", "Butchers", "Confectionery", "Delicatessens", "Fresh produce", "Liquor", "Patisseries", "Poultry", "Seafood", "Specialty foods", "Supermarkets"], "Health and fitness": ["ALL", "Chemists", "Dentists", "Gyms and fitness studios", "Health insurers", "Medical centres", "Medicare", "Optometrists", "Specialty health providers"], "Home": ["ALL", "Bath and home fragrances", "Bedding", "Furniture", "Gifts", "Hardware", "Home appliances", "Home decor", "Kitchen", "Pets", "Photography and art", "Picture frames"], "Luggage and travel accessories": ["ALL", "Backpacks and gym duffle bags", "Laptop cases and sleeves", "Small leather goods", "Suitcases and travel accessories", "Work and laptop bags"], "Luxury and premium": ["ALL", "Australian designer", "International designer", "Luxury", "Premium brands"], "Pawn brokers": [], "Phone repairs": [], "Photographic services": [], "Post office": [], "Power, gas and communication services": [], "Professional services": [], "Real estate agents": [], "Shoe repair and key cutting": [], "Sporting goods": ["ALL", "Activewear", "Fitness and gym equipment", "Outdoors and camping", "Tech and wearables"], "Tobacconists": [], "Toys and hobbies": ["ALL", "Arts and crafts", "Games", "Hobbies", "Toys"], "Travel agents": []
@@ -117,6 +121,23 @@ function initializeMainApp() {
     } catch (error) {
       console.error("Could not get place details:", error);
       elements.locationInput.value = item.description.split(",")[0];
+    }
+  }
+
+  async function handleAnchorPointSelection(item) {
+    try {
+        const details = await getPlaceDetails(item.place_id);
+        const { lat, lng } = details.geometry.location;
+        const newCenter = L.latLng(lat(), lng());
+
+        selectedAnchorPoint = { center: newCenter, name: item.description };
+        elements.anchorPointInput.value = item.description;
+        elements.anchorPointSuggestionsEl.style.display = 'none';
+
+        map.setView(newCenter, 11);
+        drawSearchCircle(newCenter);
+    } catch (error) {
+        console.error("Could not get place details for anchor point:", error);
     }
   }
 
@@ -288,11 +309,11 @@ function initializeMainApp() {
 
   function setRadiusInputsState(disabled) {
       elements.anchorPointInput.disabled = disabled;
-      elements.radiusSelect.disabled = disabled;
+      elements.radiusSlider.disabled = disabled;
       elements.radiusSearchContainer.style.opacity = disabled ? 0.5 : 1;
       if (disabled) {
         elements.anchorPointInput.value = '';
-        elements.radiusSelect.value = '';
+        selectedAnchorPoint = null;
         if (searchCircle) {
             map.removeLayer(searchCircle);
             searchCircle = null;
@@ -301,14 +322,8 @@ function initializeMainApp() {
   }
 
   function drawSearchCircle(center) {
-    const radiusMeters = parseInt(elements.radiusSelect.value, 10) * 1000;
-    if (!radiusMeters) {
-        if (searchCircle) {
-            map.removeLayer(searchCircle);
-            searchCircle = null;
-        }
-        return;
-    };
+    const stepIndex = parseInt(elements.radiusSlider.value, 10);
+    const radiusMeters = radiusSteps[stepIndex] * 1000;
 
     if (searchCircle) {
         searchCircle.setLatLng(center);
@@ -408,7 +423,7 @@ function initializeMainApp() {
     });
     elements.locationInput.addEventListener("input", () => {
       clearTimeout(locationAutocompleteTimer);
-      locationAutocompleteTimer = setTimeout(() => fetchPlaceSuggestions(elements.locationInput, elements.locationSuggestionsEl, ["geocode"], handleLocationSelection), 300);
+      locationAutocompleteTimer = setTimeout(() => fetchPlaceSuggestions(elements.locationInput, elements.locationSuggestionsEl, ["(regions)"], handleLocationSelection), 300);
       setRadiusInputsState(elements.locationInput.value.trim().length > 0);
     });
     elements.postalCodeInput.addEventListener("input", () => {
@@ -418,36 +433,27 @@ function initializeMainApp() {
     elements.anchorPointInput.addEventListener('input', () => {
         const hasText = elements.anchorPointInput.value.trim().length > 0;
         setLocationInputsState(hasText);
-    });
-    elements.anchorPointInput.addEventListener('blur', async () => {
-        const query = elements.anchorPointInput.value.trim();
-        const country = elements.countryInput.value.trim();
-        if (!query || !country) return;
-
-        try {
-            const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query + ', ' + country)}&limit=1`);
-            const data = await response.json();
-
-            if (data && data.length > 0) {
-                const { lat, lon } = data[0];
-                const newCenter = L.latLng(parseFloat(lat), parseFloat(lon));
-                map.setView(newCenter, 11);
-                drawSearchCircle(newCenter);
-            }
-        } catch (error) {
-            console.error("Geocoding failed:", error);
+        if (selectedAnchorPoint && elements.anchorPointInput.value.trim() !== selectedAnchorPoint.name) {
+            selectedAnchorPoint = null;
         }
+        clearTimeout(anchorPointAutocompleteTimer);
+        anchorPointAutocompleteTimer = setTimeout(() => {
+            fetchPlaceSuggestions(elements.anchorPointInput, elements.anchorPointSuggestionsEl, ['(regions)'], handleAnchorPointSelection);
+        }, 300);
     });
-    elements.radiusSelect.addEventListener('change', () => {
-        if (map && (searchCircle || elements.anchorPointInput.value.trim())) {
-            const center = searchCircle ? searchCircle.getLatLng() : map.getCenter();
-            drawSearchCircle(center);
+    elements.radiusSlider.addEventListener('input', () => {
+        const stepIndex = parseInt(elements.radiusSlider.value, 10);
+        const km = radiusSteps[stepIndex];
+        elements.radiusValue.textContent = `${km} km`;
+        if (selectedAnchorPoint) {
+            drawSearchCircle(selectedAnchorPoint.center);
         }
     });
     document.addEventListener("click", (event) => {
       if (!elements.locationInput.contains(event.target)) elements.locationSuggestionsEl.style.display = "none";
       if (!elements.postalCodeContainer.contains(event.target)) elements.postalCodeSuggestionsEl.style.display = "none";
       if (!elements.countryInput.contains(event.target)) elements.countrySuggestionsEl.style.display = "none";
+      if (!elements.anchorPointInput.contains(event.target)) elements.anchorPointSuggestionsEl.style.display = "none";
     });
     elements.startButton.addEventListener("click", startResearch);
     elements.businessNamesInput.addEventListener("input", (e) => {
@@ -690,13 +696,11 @@ function initializeMainApp() {
         businessNames: businessNames.length > 0 ? businessNames : [] 
     };
     
-    if (searchCircle) {
-        const center = searchCircle.getLatLng();
+    if (selectedAnchorPoint) {
+        const center = selectedAnchorPoint.center;
         payload.anchorPoint = `${center.lat},${center.lng}`;
-        payload.radiusKm = searchCircle.getRadius() / 1000;
-    } else if (elements.anchorPointInput.value.trim() && elements.radiusSelect.value) {
-        payload.anchorPoint = elements.anchorPointInput.value.trim();
-        payload.radiusKm = parseInt(elements.radiusSelect.value, 10);
+        const stepIndex = parseInt(elements.radiusSlider.value, 10);
+        payload.radiusKm = radiusSteps[stepIndex];
     } else {
         payload.location = elements.locationInput.value.trim();
         payload.postalCode = postalCodes;
@@ -764,7 +768,7 @@ function initializeMainApp() {
       findAllBusinessesCheckbox: elements.findAllBusinessesCheckbox,
       businessNamesInput: elements.businessNamesInput,
       anchorPointInput: elements.anchorPointInput,
-      radiusSelect: elements.radiusSelect,
+      radiusSlider: elements.radiusSlider,
       downloadButtons: { fullExcel: elements.downloadFullExcelButton, notifyre: elements.downloadNotifyreCSVButton, contacts: elements.downloadContactsCSVButton },
       displayedData: displayedData,
     };

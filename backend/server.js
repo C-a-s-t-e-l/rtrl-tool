@@ -116,7 +116,7 @@ socket.on('start_scrape', async ({ category, categoriesToLoop, location, postalC
 
         const allProcessedBusinesses = [];
         const addedBusinessKeys = new Set();
-        const CONCURRENCY = 2;
+        const CONCURRENCY = 4;
         
         const masterUrlMap = new Map();
         socket.emit('log', `--- Starting URL Collection Phase ---`);
@@ -402,6 +402,16 @@ async function collectGoogleMapsUrlsContinuously(page, searchQuery, socket, disc
         socket.emit('log', `   -> Navigating to: ${searchQuery}`);
         await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
         
+        const noResultsFound = await page.evaluate(() => {
+            const noResultsElement = Array.from(document.querySelectorAll('div')).find(el => el.innerText.includes("Google Maps can't find"));
+            return !!noResultsElement;
+        });
+
+        if (noResultsFound) {
+            socket.emit('log', `   -> INFO: No results found on Google Maps for "${searchQuery}". Skipping this area.`);
+            return;
+        }
+        
         try {
             await page.click('form[action^="https://consent.google.com"] button', { timeout: 10000 });
             socket.emit('log', '   -> Accepted Google consent dialog.');
@@ -450,8 +460,7 @@ async function collectGoogleMapsUrlsContinuously(page, searchQuery, socket, disc
                 socket.emit('log', `   -> Direct navigation detected. Capturing single URL.`);
                 discoveredUrlSet.add(currentUrl);
             } else {
-                socket.emit('log', `   -> No valid results found on this page.`, 'error');
-                await page.screenshot({ path: `error_no_results_${Date.now()}.png` });
+                socket.emit('log', `   -> No valid results list or direct place page found for this query.`, 'error');
             }
         }
     } catch (error) {
