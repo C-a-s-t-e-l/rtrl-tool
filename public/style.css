@@ -352,21 +352,23 @@ header {
 }
 .results-grid {
     display: grid;
-    grid-template-columns: 
-        50px                  
-        minmax(200px, 1.5fr)  
-        minmax(150px, 1fr)    
-        minmax(120px, 1fr)    
-        minmax(250px, 2fr)  
-        minmax(150px, 1fr)    
-        minmax(120px, 1fr)   
-        minmax(200px, 1.5fr) 
-        minmax(200px, 1.5fr)  
-        minmax(200px, 1.5fr)  
-        minmax(120px, 1fr)   
-        minmax(150px, 1fr)    
-        minmax(150px, 1fr)    
-        minmax(80px, 0.5fr);  
+grid-template-columns: 
+    50px
+    minmax(200px, 1.5fr)
+    minmax(150px, 1fr)
+    minmax(120px, 0.7fr)
+    minmax(120px, 0.7fr)
+    minmax(120px, 1fr)
+    minmax(250px, 2fr)
+    minmax(150px, 1fr)
+    minmax(120px, 1fr)
+    minmax(200px, 1.5fr)
+    minmax(200px, 1.5fr)
+    minmax(200px, 1.5fr)
+    minmax(120px, 1fr)
+    minmax(150px, 1fr)
+    minmax(150px, 1fr)
+    minmax(80px, 0.5fr);
 }
 
 .grid-header {
@@ -491,7 +493,7 @@ span a:hover {
 .download-buttons-group {
   flex-wrap: wrap;
   gap: 0.75rem;
-  margin-top: 1.5rem;
+  margin-bottom: 1.5rem; 
   flex-shrink: 0;
 }
 .download-buttons-group .btn {
@@ -651,6 +653,26 @@ footer {
     margin-top: 1rem;
     border: 1px solid var(--border-color);
     z-index: 1;
+}
+
+.filter-bar {
+    gap: 0.75rem;
+}
+
+.filter-control {
+    padding: 0.75rem 1rem;
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
+    font-size: 0.95rem;
+    background-color: #fff;
+}
+.filter-control:focus {
+    outline: none;
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 3px rgba(32, 201, 151, 0.25);
+}
+#filterInput {
+    flex-grow: 1;
 }
 
 @media (max-width: 1200px) {

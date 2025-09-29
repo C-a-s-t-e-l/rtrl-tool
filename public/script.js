@@ -33,6 +33,8 @@ function initializeMainApp() {
 
   const elements = {
     startButton: document.getElementById("startButton"),
+    ratingFilter: document.getElementById("ratingFilter"),
+    reviewCountFilter: document.getElementById("reviewCountFilter"),
     downloadFullExcelButton: document.getElementById("downloadFullExcelButton"),
     downloadNotifyreCSVButton: document.getElementById("downloadNotifyreCSVButton"),
     downloadContactsCSVButton: document.getElementById("downloadContactsCSVButton"), 
@@ -206,28 +208,57 @@ function initializeMainApp() {
     updateSortHeaders();
   }
 
-  function applyFilterAndSort() {
+function applyFilterAndSort() {
     const filterText = elements.filterInput.value.toLowerCase();
+    const minRating = parseFloat(elements.ratingFilter.value);
+    const minReviews = parseInt(elements.reviewCountFilter.value, 10);
+
     let filteredData;
+
+    // Start with the main text filter
     if (filterText) {
-      filteredData = allCollectedData.filter((item) => {
-        return (item.BusinessName?.toLowerCase().startsWith(filterText) || item.Category?.toLowerCase().startsWith(filterText) || item.StreetAddress?.toLowerCase().startsWith(filterText) || item.SuburbArea?.toLowerCase().startsWith(filterText));
-      });
+        filteredData = allCollectedData.filter((item) => {
+            return (
+                item.BusinessName?.toLowerCase().includes(filterText) || 
+                item.Category?.toLowerCase().includes(filterText) || 
+                item.StreetAddress?.toLowerCase().includes(filterText) || 
+                item.SuburbArea?.toLowerCase().includes(filterText)
+            );
+        });
     } else {
-      filteredData = [...allCollectedData];
+        filteredData = [...allCollectedData];
     }
+
+    // Apply rating filter
+    if (!isNaN(minRating) && minRating > 0) {
+        filteredData = filteredData.filter(item => (parseFloat(item.StarRating) || 0) >= minRating);
+    }
+
+    // Apply review count filter
+    if (!isNaN(minReviews) && minReviews >= 0) {
+        filteredData = filteredData.filter(item => (parseInt(item.ReviewCount, 10) || 0) >= minReviews);
+    }
+
     const { key, direction } = currentSort;
     if (key) {
-      filteredData.sort((a, b) => {
-        const valA = a[key] || "";
-        const valB = b[key] || "";
-        const comparison = valA.localeCompare(valB, undefined, { numeric: true, sensitivity: "base" });
-        return direction === "asc" ? comparison : -comparison;
-      });
+        filteredData.sort((a, b) => {
+            let valA = a[key] || "";
+            let valB = b[key] || "";
+
+            if (key === 'StarRating' || key === 'ReviewCount') {
+                valA = parseFloat(valA) || 0;
+                valB = parseFloat(valB) || 0;
+                return direction === "asc" ? valA - valB : valB - valA;
+            }
+            
+            const comparison = String(valA).localeCompare(String(valB), undefined, { numeric: true, sensitivity: "base" });
+            return direction === "asc" ? comparison : -comparison;
+        });
     }
+    
     displayedData = filteredData;
     renderTable();
-  }
+}
 
   function updateSortHeaders() {
     elements.resultsTableHeader.querySelectorAll(".sortable").forEach((th) => {
@@ -583,6 +614,8 @@ function initializeMainApp() {
     });
 
     elements.filterInput.addEventListener("input", applyFilterAndSort);
+    elements.ratingFilter.addEventListener("input", applyFilterAndSort);
+    elements.reviewCountFilter.addEventListener("input", applyFilterAndSort);
     elements.resultsTableHeader.addEventListener("click", (e) => {
       const header = e.target.closest(".sortable");
       if (!header) return;
@@ -679,7 +712,7 @@ function initializeMainApp() {
     setUiState(false, getUiElementsForStateChange());
   });
 
-  function startResearch() {
+function startResearch() {
     localStorage.removeItem("rtrl_collected_data");
     localStorage.removeItem("rtrl_search_params");
     setUiState(true, getUiElementsForStateChange());
@@ -735,20 +768,25 @@ function initializeMainApp() {
       payload.count = find_all ? -1 : countValue;
     }
 
-    const searchAreaKey = (postalCodes.length > 0 ? postalCodes.join("_") : elements.locationInput.value.trim().split(",")[0].replace(/[\s/,]/g, "_")).toLowerCase();
+    let searchAreaKey;
+    if (selectedAnchorPoint) {
+        searchAreaKey = elements.anchorPointInput.value.trim().split(",")[0].replace(/[\s/,]/g, "_").toLowerCase();
+    } else {
+        searchAreaKey = (postalCodes.length > 0 ? postalCodes.join("_") : elements.locationInput.value.trim().split(",")[0].replace(/[\s/,]/g, "_")).toLowerCase();
+    }
     
     currentSearchParameters = {
       primaryCategory: primaryCategory,
       subCategory: subCategory,
       customCategory: customCategory,
-      area: searchAreaKey,
+      area: searchAreaKey, 
       postcodes: postalCodes,
       country: elements.countryInput.value,
     };
     localStorage.setItem("rtrl_search_params", JSON.stringify(currentSearchParameters));
     logMessage(elements.logEl, `Sending request to server...`, "info");
     socket.emit("start_scrape", payload);
-  }
+}
 
   function handleScrapeError(error) {
     logMessage(elements.logEl, `SCRAPE ERROR: ${error.error || "An unknown server error occurred."}`, "error");

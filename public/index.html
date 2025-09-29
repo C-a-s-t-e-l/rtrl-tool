@@ -138,44 +138,57 @@
                     <pre id="log" class="log-console">Waiting to start research...</pre>
                 </div>
                 
-                <div class="collected-data card" id="collectedDataCard">
-                    <h2>Collected Data</h2>
-                    <div class="placeholder-text">No data collected yet. Start a research to see results here.</div>
-                    
-                    <div class="filter-bar">
-                        <i class="fas fa-filter"></i>
-                        <input type="text" id="filterInput" placeholder="Filter results by name, suburb, address...">
-                    </div>
+<div class="collected-data card" id="collectedDataCard">
+    <h2>Collected Data</h2>
 
-                    <div class="results-grid-container">
-                        <div class="results-grid" id="resultsGrid">
-                            <div class="grid-header" id="resultsTableHeader">
-                                <div class="checkbox-column"><input type="checkbox" id="selectAllCheckbox"></div>
-                                <div class="sortable" data-sort-key="BusinessName">Business</div>
-                                <div>Category</div>
-                                <div class="sortable" data-sort-key="SuburbArea">Suburb</div>
-                                <div>Address</div>
-                                <div>Website</div>
-                                <div>Owner</div>
-                                <div>Email 1</div>
-                                <div>Email 2</div>
-                                <div>Email 3</div>
-                                <div>Phone</div>
-                                <div>Insta</div>
-                                <div>FB</div>
-                                <div>Maps</div>
-                            </div>
-                            <div class="grid-body" id="resultsTableBody">
-                            </div>
-                        </div>
-                    </div>
+    <!-- BUTTONS MOVED HERE -->
+    <div class="download-buttons-group">
+        <button id="downloadFullExcelButton" class="btn btn-success" disabled>Download Selected (.xlsx)</button>
+        <button id="downloadNotifyreCSVButton" class="btn btn-secondary" disabled>Generate SMS List (.csv)</button>
+        <button id="downloadContactsCSVButton" class="btn btn-secondary" disabled>Generate Contacts List (.csv)</button>
+    </div>
 
-                     <div class="download-buttons-group">
-                        <button id="downloadFullExcelButton" class="btn btn-success" disabled>Download Selected (.xlsx)</button>
-                        <button id="downloadNotifyreCSVButton" class="btn btn-secondary" disabled>Generate SMS List (.csv)</button>
-                        <button id="downloadContactsCSVButton" class="btn btn-secondary" disabled>Generate Contacts List (.csv)</button>
-                    </div>
-                </div>
+    <div class="placeholder-text">No data collected yet. Start a research to see results here.</div>
+    
+    <div class="filter-bar">
+        <i class="fas fa-filter"></i>
+        <input type="text" id="filterInput" placeholder="Filter by name, suburb, address...">
+        
+        <select id="ratingFilter" class="filter-control">
+            <option value="">Min Rating</option>
+            <option value="4.5">4.5+ stars</option>
+            <option value="4.0">4.0+ stars</option>
+            <option value="3.5">3.5+ stars</option>
+            <option value="3.0">3.0+ stars</option>
+        </select>
+        <input type="number" id="reviewCountFilter" placeholder="Min Reviews" class="filter-control">
+    </div>
+
+    <div class="results-grid-container">
+        <div class="results-grid" id="resultsGrid">
+            <div class="grid-header" id="resultsTableHeader">
+                <div class="checkbox-column"><input type="checkbox" id="selectAllCheckbox"></div>
+                <div class="sortable" data-sort-key="BusinessName">Business</div>
+                <div>Category</div>
+                <div class="sortable" data-sort-key="StarRating">Rating</div>
+                <div class="sortable" data-sort-key="ReviewCount">Reviews</div>
+                <div class="sortable" data-sort-key="SuburbArea">Suburb</div>
+                <div>Address</div>
+                <div>Website</div>
+                <div>Owner</div>
+                <div>Email 1</div>
+                <div>Email 2</div>
+                <div>Email 3</div>
+                <div>Phone</div>
+                <div>Insta</div>
+                <div>FB</div>
+                <div>Maps</div>
+            </div>
+            <div class="grid-body" id="resultsTableBody">
+            </div>
+        </div>
+    </div>
+</div>
             </div>
         </main>
                 <div class="bottom-spacer"></div>

@@ -116,7 +116,7 @@ socket.on('start_scrape', async ({ category, categoriesToLoop, location, postalC
 
         const allProcessedBusinesses = [];
         const addedBusinessKeys = new Set();
-        const CONCURRENCY = 4;
+        const CONCURRENCY = 3;
         
         const masterUrlMap = new Map();
         socket.emit('log', `--- Starting URL Collection Phase ---`);
@@ -511,6 +511,22 @@ async function scrapeGoogleMapsDetails(page, url, socket, country) {
             }
         }
         
+        // --- NEW LOGIC FOR REVIEWS ---
+        const reviewElement = document.querySelector('div.F7nice'); // This selector finds the rating/review block
+        let starRating = '';
+        let reviewCount = '';
+
+        if (reviewElement) {
+            const ratingText = reviewElement.innerText.split(' ')[0];
+            starRating = parseFloat(ratingText) || '';
+            
+            const reviewCountMatch = reviewElement.innerText.match(/\(([\d,]+)\)/);
+            if (reviewCountMatch && reviewCountMatch[1]) {
+                reviewCount = reviewCountMatch[1].replace(/,/g, '');
+            }
+        }
+        // --- END NEW LOGIC ---
+
         const data = {
             BusinessName: cleanText(document.querySelector('h1')?.innerText),
             ScrapedCategory: cleanText(categoryText),
@@ -518,7 +534,9 @@ async function scrapeGoogleMapsDetails(page, url, socket, country) {
             Website: document.querySelector('a[data-item-id="authority"]')?.href || '',
             Phone: cleanPhoneNumber(document.querySelector('button[data-item-id*="phone"]')?.innerText, countryCode),
             GoogleMapsURL: window.location.href,
-            Suburb: ''
+            Suburb: '',
+            StarRating: String(starRating),
+            ReviewCount: reviewCount
         };
 
         if (data.StreetAddress) {

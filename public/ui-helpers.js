@@ -117,6 +117,8 @@ function addTableRow(gridBody, data, index) {
         checkboxContainer,
         createCell(cleanDisplayValue(data.BusinessName), cleanDisplayValue(data.BusinessName)),
         createCell(cleanDisplayValue(data.Category), cleanDisplayValue(data.Category)),
+        createCell(cleanDisplayValue(data.StarRating), `Rating: ${data.StarRating}`),
+        createCell(cleanDisplayValue(data.ReviewCount), `Reviews: ${data.ReviewCount}`),
         createCell(cleanDisplayValue(data.SuburbArea), cleanDisplayValue(data.SuburbArea)),
         createCell(cleanDisplayValue(data.StreetAddress), cleanDisplayValue(data.StreetAddress)),
         createLinkCell(data.Website, cleanDisplayValue(data.Website), 25),
@@ -220,11 +222,30 @@ function getColumnWidths(data, headers) {
     return widths.map(w => ({ wch: Math.max(w.wch, 10) }));
 }
 
+
 async function downloadExcel(data, searchParams, fileSuffix, fileType, logEl, specificHeaders = null, geocoder, countryName) {
     if (data.length === 0) {
         logMessage(logEl, 'No data to download for this format!', 'error');
         return;
     }
+
+    const createLinkObject = (url) => {
+        if (!url || typeof url !== 'string' || !url.trim()) {
+            return '';
+        }
+       
+        const formula = `HYPERLINK("${url}", "${url}")`;
+        return {
+            f: formula, 
+            v: url,     
+            s: {        
+                font: {
+                    color: { rgb: "0563C1" },
+                    underline: true
+                }
+            }
+        };
+    };
 
     let exportData;
     let headers;
@@ -232,29 +253,48 @@ async function downloadExcel(data, searchParams, fileSuffix, fileType, logEl, sp
     if (specificHeaders) {
         exportData = data.map(item => {
             const row = {};
-            specificHeaders.forEach(h => { row[h] = item[h] || ''; });
+            specificHeaders.forEach(h => {
+                if (h.toLowerCase().includes('url') || h.toLowerCase().includes('website')) {
+                    row[h] = createLinkObject(item[h]);
+                } else {
+                    row[h] = item[h] || '';
+                }
+            });
+            if (fileSuffix === 'emails' && item.Website) {
+                 row['Website'] = createLinkObject(item.Website);
+                 if (!specificHeaders.includes('Website')) specificHeaders.push('Website');
+            }
             return row;
         });
         headers = specificHeaders;
     } else {
         exportData = data.map(item => ({
             BusinessName: item.BusinessName, Category: item.Category, 'Suburb/Area': item.SuburbArea,
-            StreetAddress: item.StreetAddress, Website: item.Website, OwnerName: item.OwnerName,
+            StreetAddress: item.StreetAddress, Website: createLinkObject(item.Website), OwnerName: item.OwnerName,
             'Email 1': item.Email1, 'Email 2': item.Email2, 'Email 3': item.Email3, 
-            Phone: item.Phone, InstagramURL: item.InstagramURL,
-            FacebookURL: item.FacebookURL, GoogleMapsURL: item.GoogleMapsURL,
+            Phone: item.Phone, InstagramURL: createLinkObject(item.InstagramURL),
+            FacebookURL: createLinkObject(item.FacebookURL), GoogleMapsURL: createLinkObject(item.GoogleMapsURL),
             SourceURLs: [item.GoogleMapsURL, item.Website].filter(Boolean).join(';'),
-            LastVerifiedDate: item.LastVerifiedDate
+            LastVerifiedDate: item.LastVerifiedDate, StarRating: item.StarRating, ReviewCount: item.ReviewCount
         }));
         headers = Object.keys(exportData[0] || {});
     }
 
     const ws = XLSX.utils.json_to_sheet(exportData, { header: headers });
     ws['!cols'] = getColumnWidths(exportData, headers);
+    
+    for (const cellAddress in ws) {
+        if (ws.hasOwnProperty(cellAddress)) {
+            const cell = ws[cellAddress];
+            if (cell && (cell.l || cell.f)) { 
+                cell.t = 's';
+            }
+        }
+    }
+
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Business List");
 
-    // --- NEW FILENAME LOGIC ---
     const date = new Date().toISOString().split('T')[0].replace(/-/g, '');
     const company = 'rtrl';
     
@@ -263,31 +303,22 @@ async function downloadExcel(data, searchParams, fileSuffix, fileType, logEl, sp
     const customCat = searchParams.customCategory?.replace(/[\s/&]/g, "_") || '';
 
     let categoryString = customCat || primaryCat;
-    if (subCat) {
-        categoryString += `_${subCat}`;
-    }
+    if (subCat) { categoryString += `_${subCat}`; }
 
     let locationString = searchParams.area || 'location';
-    // If search was by postcode, convert first postcode to suburb name for the filename
     if (searchParams.postcodes && searchParams.postcodes.length > 0) {
         try {
             const postcodeToLookup = searchParams.postcodes[0];
             const response = await new Promise((resolve, reject) => {
                 geocoder.geocode({ address: `${postcodeToLookup}, ${countryName}` }, (results, status) => {
-                    if (status === 'OK' && results[0]) {
-                        resolve(results[0]);
-                    } else {
-                        reject(new Error(`Geocode was not successful for the following reason: ${status}`));
-                    }
+                    if (status === 'OK' && results[0]) { resolve(results[0]); } 
+                    else { reject(new Error(`Geocode failed: ${status}`)); }
                 });
             });
             const suburbComponent = response.address_components.find(c => c.types.includes('locality'));
-            if (suburbComponent) {
-                locationString = suburbComponent.long_name.replace(/[\s/]/g, "_").toLowerCase();
-            }
+            if (suburbComponent) { locationString = suburbComponent.long_name.replace(/[\s/]/g, "_").toLowerCase(); }
         } catch (error) {
-            console.warn("Could not reverse geocode postcode for filename, using default.", error);
-            // Fallback to the original area key if geocoding fails
+            console.warn("Could not geocode for filename, using default.", error);
             locationString = searchParams.area;
         }
     }
@@ -295,6 +326,11 @@ async function downloadExcel(data, searchParams, fileSuffix, fileType, logEl, sp
     const fileExtension = fileType === 'xlsx' ? 'xlsx' : 'csv';
     const fullFilename = `${date}_${company}_${categoryString}_${locationString}_${fileSuffix}.${fileExtension}`;
 
-    XLSX.writeFile(wb, fullFilename);
+    if (fileExtension === 'csv') {
+        XLSX.writeFile(wb, fullFilename, { bookType: 'csv', cellDates: true });
+    } else {
+        XLSX.writeFile(wb, fullFilename);
+    }
+    
     logMessage(logEl, `${data.length} records exported to '${fullFilename}' successfully!`, 'success');
 }
