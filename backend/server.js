@@ -20,6 +20,9 @@ const io = new Server(server, {
     cors: { origin: FRONTEND_URL, methods: ["GET", "POST"] }
 });
 
+// --- ZOMBIE FIX 1 of 3: Create a global map to track active browsers ---
+const activeBrowsers = new Map();
+
 const PORT = process.env.PORT || 3000;
 const GOOGLE_MAPS_API_KEY = process.env.MAPS_API_KEY;
 const PLACEHOLDER_KEY = '%%GOOGLE_MAPS_API_KEY%%';
@@ -111,12 +114,15 @@ socket.on('start_scrape', async ({ category, categoriesToLoop, location, postalC
             protocolTimeout: 120000 
         });
         
+        // --- ZOMBIE FIX 2 of 3: Track this browser instance against the user's socket ID ---
+        activeBrowsers.set(socket.id, browser);
+
         collectionPage = await browser.newPage();
         socket.emit('log', '[Setup] Created a dedicated page for URL collection.');
 
         const allProcessedBusinesses = [];
         const addedBusinessKeys = new Set();
-        const CONCURRENCY = 3;
+        const CONCURRENCY = 4;
         
         const masterUrlMap = new Map();
         socket.emit('log', `--- Starting URL Collection Phase ---`);
@@ -268,11 +274,25 @@ socket.on('start_scrape', async ({ category, categoriesToLoop, location, postalC
         console.error('A critical error occurred:', error);
         socket.emit('scrape_error', { error: `Critical failure: ${error.message.split('\n')[0]}` });
     } finally {
+        // Untrack the browser on clean exit, so the disconnect handler doesn't close it unnecessarily
+        activeBrowsers.delete(socket.id);
         if (browser) await browser.close();
     }
 });
 
-    socket.on('disconnect', () => console.log(`Client disconnected: ${socket.id} at ${new Date().toLocaleString()}`));
+    // --- ZOMBIE FIX 3 of 3: On disconnect, check for and kill any orphaned browsers ---
+    socket.on('disconnect', () => {
+        console.log(`Client disconnected: ${socket.id} at ${new Date().toLocaleString()}`);
+        
+        if (activeBrowsers.has(socket.id)) {
+            console.log(`[Cleanup] Found an orphaned browser for disconnected client ${socket.id}. Closing it now.`);
+            const browserToClose = activeBrowsers.get(socket.id);
+            if (browserToClose) {
+                browserToClose.close();
+            }
+            activeBrowsers.delete(socket.id);
+        }
+    });
 });
 
 function degToRad(degrees) {
@@ -511,8 +531,7 @@ async function scrapeGoogleMapsDetails(page, url, socket, country) {
             }
         }
         
-        // --- NEW LOGIC FOR REVIEWS ---
-        const reviewElement = document.querySelector('div.F7nice'); // This selector finds the rating/review block
+        const reviewElement = document.querySelector('div.F7nice');
         let starRating = '';
         let reviewCount = '';
 
@@ -525,8 +544,7 @@ async function scrapeGoogleMapsDetails(page, url, socket, country) {
                 reviewCount = reviewCountMatch[1].replace(/,/g, '');
             }
         }
-        // --- END NEW LOGIC ---
-
+        
         const data = {
             BusinessName: cleanText(document.querySelector('h1')?.innerText),
             ScrapedCategory: cleanText(categoryText),

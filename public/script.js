@@ -689,14 +689,27 @@ function applyFilterAndSort() {
   });
   socket.on("log", (message) => logMessage(elements.logEl, message, "info"));
   socket.on("scrape_error", (error) => handleScrapeError(error));
-  socket.on("business_found", (business) => {
+socket.on("business_found", (business) => {
     if (allCollectedData.length === 0) {
-      elements.collectedDataCard.classList.add("has-results");
+        elements.collectedDataCard.classList.add("has-results");
     }
-    const newBusiness = { OwnerName: "", Email1: "", Email2: "", Email3: "", ...business, SuburbArea: business.Suburb || elements.locationInput.value.split(",")[0].trim(), LastVerifiedDate: new Date().toISOString().split("T")[0] };
+    const newBusiness = { 
+        OwnerName: "", Email1: "", Email2: "", Email3: "", 
+        ...business, 
+        SuburbArea: business.Suburb || elements.locationInput.value.split(",")[0].trim(), 
+        LastVerifiedDate: new Date().toISOString().split("T")[0] 
+    };
     allCollectedData.push(newBusiness);
+    
+    try {
+        localStorage.setItem("rtrl_collected_data", JSON.stringify(allCollectedData));
+
+    } catch (e) {
+        logMessage(elements.logEl, `Could not save to local storage: ${e.message}`, "error");
+    }
+
     applyFilterAndSort();
-  });
+});
   socket.on("scrape_complete", () => {
     logMessage(elements.logEl, `Scraping process finished.`, "success");
     try {
