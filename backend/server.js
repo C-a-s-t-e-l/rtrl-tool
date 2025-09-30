@@ -87,6 +87,8 @@ app.get(/(.*)/, (req, res) => {
     });
 });
 
+// REPLACE the entire io.on('connection', ...) block in backend/server.js
+
 io.on('connection', (socket) => {
     console.log(`Client connected: ${socket.id} at ${new Date().toLocaleString()}`);
     socket.emit('log', `[Server] Connected to Real-time Scraper.`);
@@ -108,25 +110,29 @@ socket.on('start_scrape', async ({ category, categoriesToLoop, location, postalC
             '--disable-gpu', '--no-zygote', '--lang=en-US,en', '--ignore-certificate-errors',
             '--window-size=1920,1080', '--disable-blink-features=AutomationControlled'
         ];
-        browser = await puppeteer.launch({ 
-            headless: true, 
-            args: puppeteerArgs,
-            protocolTimeout: 120000 
-        });
         
-        // --- ZOMBIE FIX 2 of 3: Track this browser instance against the user's socket ID ---
-        activeBrowsers.set(socket.id, browser);
+        const launchBrowser = async () => {
+            console.log('[Browser Lifecycle] Launching new browser instance...');
+            const newBrowser = await puppeteer.launch({ 
+                headless: true, 
+                args: puppeteerArgs,
+                protocolTimeout: 120000 
+            });
+            activeBrowsers.set(socket.id, newBrowser);
+            return newBrowser;
+        };
 
+        browser = await launchBrowser();
         collectionPage = await browser.newPage();
         socket.emit('log', '[Setup] Created a dedicated page for URL collection.');
 
         const allProcessedBusinesses = [];
         const addedBusinessKeys = new Set();
-        const CONCURRENCY = 4;
-        
+        const CONCURRENCY = 3;
         const masterUrlMap = new Map();
         socket.emit('log', `--- Starting URL Collection Phase ---`);
 
+        // Reverted to the simple, reliable loop that calls the reliable function
         for (const item of searchItems) {
             socket.emit('log', isIndividualSearch ? `\n--- Searching for business: "${item}" ---` : `\n--- Searching for category: "${item}" ---`);
             
@@ -137,12 +143,10 @@ socket.on('start_scrape', async ({ category, categoriesToLoop, location, postalC
                 let searchAreas = [];
                 if (postalCode && postalCode.length > 0) searchAreas = postalCode;
                 else if (location) searchAreas = [location];
-
                 if (searchAreas.length === 0) {
                      socket.emit('log', 'No location/postcode provided, skipping item.', 'error');
                      continue;
                 }
-                
                 for (const areaQuery of searchAreas) {
                     const baseQuery = isIndividualSearch ? `${item}, ${areaQuery}, ${country}` : `${item} in ${areaQuery}, ${country}`;
                     const queriesForArea = await getSearchQueriesForLocation(baseQuery, areaQuery, country, socket, isIndividualSearch);
@@ -153,6 +157,7 @@ socket.on('start_scrape', async ({ category, categoriesToLoop, location, postalC
             for (const query of locationQueries) {
                 const finalSearchQuery = (isIndividualSearch || query.startsWith('near ')) ? `${item} ${query}` : query;
                 const discoveredUrlsForThisSubArea = new Set();
+                
                 await collectGoogleMapsUrlsContinuously(collectionPage, finalSearchQuery, socket, discoveredUrlsForThisSubArea, country);
                 
                 let initialSize = masterUrlMap.size;
@@ -167,65 +172,75 @@ socket.on('start_scrape', async ({ category, categoriesToLoop, location, postalC
         }
 
         if (collectionPage) {
-            await collectionPage.close();
-            socket.emit('log', '[Cleanup] URL collection page closed.');
+             try {
+                await collectionPage.close();
+             } catch (e) {}
         }
 
         socket.emit('log', `\n--- URL Collection Complete. Found ${masterUrlMap.size} total unique businesses. ---`);
+        socket.emit('log', `[System] Restarting browser after URL collection for maximum stability...`);
+        
+        activeBrowsers.delete(socket.id);
+        await browser.close();
+        browser = await launchBrowser();
+        
+        socket.emit('log', `[System] New browser is ready for data processing.`);
         socket.emit('log', `--- Starting Data Processing Phase ---`);
 
-        const urlsToProcess = Array.from(masterUrlMap, ([url, category]) => ({ url, category }));
+        const urlsToProcess = Array.from(masterUrlMap, ([url, specificCategory]) => ({ url, category: specificCategory }));
         const totalDiscoveredUrls = urlsToProcess.length;
+
+        let processedInThisBrowser = 0;
+        const BROWSER_RESTART_THRESHOLD = 50;
 
         for (let i = 0; i < urlsToProcess.length; i += CONCURRENCY) {
             if (allProcessedBusinesses.length >= targetCount) break;
-            const batch = urlsToProcess.slice(i, i + CONCURRENCY);
 
+            if (processedInThisBrowser > 0 && processedInThisBrowser % BROWSER_RESTART_THRESHOLD === 0) {
+                socket.emit('log', `[System] Browser has processed ${processedInThisBrowser} items. Restarting for stability...`);
+                activeBrowsers.delete(socket.id);
+                await browser.close();
+                browser = await launchBrowser();
+                socket.emit('log', `[System] New browser instance is ready.`);
+            }
+
+            const batch = urlsToProcess.slice(i, i + CONCURRENCY);
             const promises = batch.map(async (processItem) => {
                 let detailPage = null; 
-
                 try {
                     const scrapingTask = async () => {
                         detailPage = await browser.newPage();
                         await detailPage.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36');
                         await detailPage.setRequestInterception(true);
                         detailPage.on('request', (req) => { if (['image', 'stylesheet', 'font', 'media'].includes(req.resourceType())) req.abort(); else req.continue(); });
-                        
                         let googleData = await scrapeGoogleMapsDetails(detailPage, processItem.url, socket, country);
                         if (!googleData || !googleData.BusinessName) return null;
-                        
                         let websiteData = {};
                         if (googleData.Website) websiteData = await scrapeWebsiteForGoldData(detailPage, googleData.Website, socket);
                         
                         const fullBusinessData = { ...googleData, ...websiteData };
                         
+                        // Assign the correct, specific category from the URL collection phase
                         if (isIndividualSearch) {
-                            const scrapedName = fullBusinessData.BusinessName?.toLowerCase() || '';
-                            const searchedName = searchItems[0].toLowerCase();
-                            
-                            if (!scrapedName.includes(searchedName)) {
-                                socket.emit('log', `-> REJECTED (Name mismatch): "${fullBusinessData.BusinessName}" doesn't match search for "${searchItems[0]}"`);
-                                return null;
-                            }
-                        }
-
-                        if (isIndividualSearch) {
-                            fullBusinessData.Category = googleData.ScrapedCategory || 'N/A';
+                           fullBusinessData.Category = googleData.ScrapedCategory || 'N/A';
                         } else {
-                            fullBusinessData.Category = processItem.category || category || 'N/A';
+                           fullBusinessData.Category = processItem.category || 'N/A';
                         }
                         
                         return fullBusinessData;
                     };
-
                     return await promiseWithTimeout(scrapingTask(), 120000);
-
                 } catch (err) {
                     socket.emit('log', `A task for ${processItem.url} failed or timed out: ${err.message}. Skipping.`, 'error');
                     return null;
                 } finally {
+                    processedInThisBrowser++;
                     if (detailPage) {
-                        await detailPage.close();
+                        try {
+                            await detailPage.close();
+                        } catch (detailPageCloseError) {
+                            console.log(`[Cleanup] Non-critical error closing a detail page (browser likely already gone).`);
+                        }
                     }
                 }
             });
@@ -274,23 +289,33 @@ socket.on('start_scrape', async ({ category, categoriesToLoop, location, postalC
         console.error('A critical error occurred:', error);
         socket.emit('scrape_error', { error: `Critical failure: ${error.message.split('\n')[0]}` });
     } finally {
-        // Untrack the browser on clean exit, so the disconnect handler doesn't close it unnecessarily
         activeBrowsers.delete(socket.id);
-        if (browser) await browser.close();
+        if (browser) {
+            try {
+                await browser.close();
+            } catch (closeError) {
+                console.log(`[Cleanup] Harmless error during final browser close (likely already closed by disconnect handler): ${closeError.message}`);
+            }
+        }
     }
 });
 
-    // --- ZOMBIE FIX 3 of 3: On disconnect, check for and kill any orphaned browsers ---
     socket.on('disconnect', () => {
         console.log(`Client disconnected: ${socket.id} at ${new Date().toLocaleString()}`);
         
         if (activeBrowsers.has(socket.id)) {
-            console.log(`[Cleanup] Found an orphaned browser for disconnected client ${socket.id}. Closing it now.`);
+            console.log(`[Cleanup] Found an orphaned browser for disconnected client ${socket.id}. Attempting to close it.`);
             const browserToClose = activeBrowsers.get(socket.id);
-            if (browserToClose) {
-                browserToClose.close();
+            try {
+                if (browserToClose) {
+                    browserToClose.close();
+                    console.log(`[Cleanup] Successfully closed orphaned browser for ${socket.id}.`);
+                }
+            } catch (error) {
+                console.log(`[Cleanup] Harmless error while closing orphaned browser (it was likely already closed): ${error.message}`);
+            } finally {
+                activeBrowsers.delete(socket.id);
             }
-            activeBrowsers.delete(socket.id);
         }
     });
 });
@@ -405,12 +430,15 @@ async function getSearchQueriesForLocation(searchQuery, areaQuery, country, sock
     }
 }
 
-async function collectGoogleMapsUrlsContinuously(page, searchQuery, socket, discoveredUrlSet, country, isIndividualSearch = false, businessNameToFilter = '') {
+// REPLACE the entire collectGoogleMapsUrlsContinuously function in backend/server.js
+
+async function collectGoogleMapsUrlsContinuously(page, searchQuery, socket, discoveredUrlSet, country) {
     try {
         const countryNameToCode = {'australia': 'AU', 'new zealand': 'NZ', 'united states': 'US', 'united kingdom': 'GB', 'canada': 'CA', 'philippines': 'PH'};
         const countryCode = countryNameToCode[country.toLowerCase()];
         const countryParam = countryCode ? `?cr=country${countryCode}` : '';
         let searchUrl;
+        
         if (searchQuery.includes(' near ')) {
             const parts = searchQuery.split(' near ');
             const searchFor = parts[0].split(',')[0].trim();
