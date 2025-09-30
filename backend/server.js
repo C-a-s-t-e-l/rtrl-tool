@@ -86,9 +86,6 @@ app.get(/(.*)/, (req, res) => {
         res.send(data.replace(PLACEHOLDER_KEY, GOOGLE_MAPS_API_KEY));
     });
 });
-
-// REPLACE the entire io.on('connection', ...) block in backend/server.js
-
 io.on('connection', (socket) => {
     console.log(`Client connected: ${socket.id} at ${new Date().toLocaleString()}`);
     socket.emit('log', `[Server] Connected to Real-time Scraper.`);
@@ -376,7 +373,7 @@ async function getSearchQueriesForRadius(anchorPoint, radiusKm, country, apiKey,
             const pointLat = minLat + (maxLat - minLat) * (i / (GRID_SIZE - 1));
             const pointLng = minLng + (maxLng - minLng) * (j / (GRID_SIZE - 1));
 
-            if (calculateDistance(centerLat, centerLng, pointLat, pointLng) <= radiusKm) {
+            if (calculateDistance(centerLat, centerLng, pointLat, pointLng) <= radiusKm * 1.05) {
                 searchQueries.push(`near ${pointLat.toFixed(6)},${pointLng.toFixed(6)}`);
             }
         }
@@ -429,9 +426,6 @@ async function getSearchQueriesForLocation(searchQuery, areaQuery, country, sock
         return [searchQuery];
     }
 }
-
-// REPLACE the entire collectGoogleMapsUrlsContinuously function in backend/server.js
-
 async function collectGoogleMapsUrlsContinuously(page, searchQuery, socket, discoveredUrlSet, country) {
     try {
         const countryNameToCode = {'australia': 'AU', 'new zealand': 'NZ', 'united states': 'US', 'united kingdom': 'GB', 'canada': 'CA', 'philippines': 'PH'};

@@ -16,26 +16,76 @@ function populatePrimaryCategories(selectEl, categoriesData, defaultCategory) {
     selectEl.value = defaultCategory;
 }
 
-function populateSubCategories(selectEl, groupEl, selectedCategory, categoriesData) {
-    selectEl.innerHTML = '';
+function populateSubCategories(containerEl, groupEl, selectedCategory, categoriesData) {
+    containerEl.innerHTML = '';
     const subCategories = categoriesData[selectedCategory];
 
-    if (subCategories && subCategories.length > 0 && selectedCategory) {
+    if (subCategories && subCategories.length > 1 && selectedCategory) { // Only show if there's more than just "ALL"
         groupEl.style.display = 'block';
-        subCategories.forEach(subCat => {
-            const option = document.createElement('option');
-            option.value = subCat;
-            option.textContent = subCat === "" ? "Select Sub-Category (Optional)" : subCat;
-            selectEl.appendChild(option);
-        });
-        if (subCategories[0] === "") {
-            selectEl.value = "";
+
+        const createCheckboxItem = (value, text, isBold = false) => {
+            const itemDiv = document.createElement('div');
+            itemDiv.className = 'checkbox-item';
+            if (isBold) itemDiv.classList.add('checkbox-item-all');
+
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.id = `subcat-${value.replace(/\s/g, '_')}`;
+            checkbox.value = value;
+
+            const label = document.createElement('label');
+            label.htmlFor = `subcat-${value.replace(/\s/g, '_')}`;
+            label.textContent = text;
+
+            itemDiv.appendChild(checkbox);
+            itemDiv.appendChild(label);
+            return { itemDiv, checkbox };
+        };
+
+        const allSubCategories = subCategories.filter(sc => sc !== 'ALL' && sc !== '');
+        if(allSubCategories.length === 0) {
+            groupEl.style.display = 'none';
+            return;
         }
+
+        // Add "Select All" checkbox
+        const { itemDiv: allDiv, checkbox: allCheckbox } = createCheckboxItem('select_all', 'Select All', true);
+        containerEl.appendChild(allDiv);
+
+        const individualCheckboxes = [];
+
+        // Add individual sub-category checkboxes
+        allSubCategories.forEach(subCat => {
+            if (subCat) { // Ensure not empty string
+                const { itemDiv, checkbox } = createCheckboxItem(subCat, subCat);
+                individualCheckboxes.push(checkbox);
+                containerEl.appendChild(itemDiv);
+            }
+        });
+
+        // "Select All" logic
+        allCheckbox.addEventListener('change', () => {
+            individualCheckboxes.forEach(cb => {
+                cb.checked = allCheckbox.checked;
+            });
+        });
+
+        // Logic to update "Select All" based on individual item changes
+        individualCheckboxes.forEach(cb => {
+            cb.addEventListener('change', () => {
+                if (!cb.checked) {
+                    allCheckbox.checked = false;
+                } else if (individualCheckboxes.every(iCb => iCb.checked)) {
+                    allCheckbox.checked = true;
+                }
+            });
+        });
+
     } else {
         groupEl.style.display = 'none';
-        selectEl.value = '';
     }
 }
+
 
 function renderSuggestions(inputElement, suggestionsContainer, items, displayKey, valueKey, onSelectCallback) {
     suggestionsContainer.innerHTML = '';
@@ -140,8 +190,14 @@ function setUiState(isBusy, elements) {
     const isIndividualSearch = elements.businessNamesInput.value.trim().length > 0;
     
     for (const key in elements) {
-        if (elements.hasOwnProperty(key) && key !== 'downloadButtons' && key !== 'displayedData' && key !== 'bulkSearchContainer') {
-            elements[key].disabled = isBusy;
+        if (!elements.hasOwnProperty(key)) continue;
+
+        if (key === 'subCategoryCheckboxContainer') {
+            elements[key].querySelectorAll('input[type="checkbox"]').forEach(cb => cb.disabled = isBusy);
+        } else if (key !== 'downloadButtons' && key !== 'displayedData' && key !== 'bulkSearchContainer') {
+            if (elements[key] && typeof elements[key].disabled !== 'undefined') {
+                elements[key].disabled = isBusy;
+            }
         }
     }
     
@@ -153,6 +209,9 @@ function setUiState(isBusy, elements) {
                  el.disabled = isIndividualSearch;
             }
         });
+        
+        // Also disable/enable checkboxes based on individual search
+        elements.subCategoryCheckboxContainer.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.disabled = isIndividualSearch);
     }
 
     setDownloadButtonStates(isBusy, elements.downloadButtons, elements.displayedData);
@@ -316,7 +375,7 @@ async function downloadExcel(data, searchParams, fileSuffix, fileType, logEl, sp
                 });
             });
             const suburbComponent = response.address_components.find(c => c.types.includes('locality'));
-            if (suburbComponent) { locationString = suburbComponent.long_name.replace(/[\s/]/g, "_").toLowerCase(); }
+            if (subComponent) { locationString = suburbComponent.long_name.replace(/[\s/]/g, "_").toLowerCase(); }
         } catch (error) {
             console.warn("Could not geocode for filename, using default.", error);
             locationString = searchParams.area;

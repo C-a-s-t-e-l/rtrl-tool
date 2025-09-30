@@ -40,7 +40,7 @@ function initializeMainApp() {
     downloadContactsCSVButton: document.getElementById("downloadContactsCSVButton"), 
     primaryCategorySelect: document.getElementById("primaryCategorySelect"),
     subCategoryGroup: document.getElementById("subCategoryGroup"),
-    subCategorySelect: document.getElementById("subCategorySelect"),
+    subCategoryCheckboxContainer: document.getElementById("subCategoryCheckboxContainer"),
     customCategoryGroup: document.getElementById("customCategoryGroup"),
     customCategoryInput: document.getElementById("customCategoryInput"),
     locationInput: document.getElementById("locationInput"),
@@ -82,7 +82,6 @@ function initializeMainApp() {
     postalCodes = [];
   let currentSort = { key: "BusinessName", direction: "asc" };
   let map, searchCircle, selectedAnchorPoint = null;
-  const radiusSteps = [2, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50];
 
   const categories = {
     "Select Category": [], "Alterations and tailoring": [], "Baby and nursery": ["ALL", "Baby and infant toys", "Baby bedding", "Nursery furniture", "Prams, strollers and carriers", "Tableware and feeding"], "Banks": [], "Beauty and wellness": ["ALL", "Bath and body", "Fragrance", "Hair and beauty", "Hair care", "Makeup", "Skincare", "Vitamins and supplements"], "Books, stationery and gifts": ["ALL", "Book stores", "Cards and gift wrap", "Newsagencies", "Office supplies", "Stationery"], "Car and auto": [], "Childcare": [], "Clothing and accessories": ["ALL", "Babies' and toddlers'", "Footwear", "Jewellery and watches", "Kids' and junior", "Men's fashion", "Sunglasses", "Women's fashion"], "Community services": [], "Department stores": [], "Designer and boutique": [], "Discount and variety": [], "Dry cleaning": [], "Electronics and technology": ["ALL", "Cameras", "Computers and tablets", "Gaming and consoles", "Mobile and accessories", "Navigation", "TV and audio"], "Entertainment and activities": ["ALL", "Arcades and games", "Bowling", "Cinemas", "Kids activities", "Learning and education", "Music"], "Florists": [], "Food and drink": ["ALL", "Asian", "Bars and pubs", "Breakfast and brunch", "Cafes", "Casual dining", "Chocolate cafes", "Desserts", "Dietary requirements", "Fast food", "Fine dining", "Greek", "Grill houses", "Halal", "Healthy options", "Italian", "Juice bars", "Kid-friendly", "Lebanese", "Mexican and Latin American", "Middle Eastern", "Modern Australian", "Sandwiches and salads", "Takeaway"], "Foreign currency exchange": [], "Fresh food and groceries": ["ALL", "Bakeries", "Butchers", "Confectionery", "Delicatessens", "Fresh produce", "Liquor", "Patisseries", "Poultry", "Seafood", "Specialty foods", "Supermarkets"], "Health and fitness": ["ALL", "Chemists", "Dentists", "Gyms and fitness studios", "Health insurers", "Medical centres", "Medicare", "Optometrists", "Specialty health providers"], "Home": ["ALL", "Bath and home fragrances", "Bedding", "Furniture", "Gifts", "Hardware", "Home appliances", "Home decor", "Kitchen", "Pets", "Photography and art", "Picture frames"], "Luggage and travel accessories": ["ALL", "Backpacks and gym duffle bags", "Laptop cases and sleeves", "Small leather goods", "Suitcases and travel accessories", "Work and laptop bags"], "Luxury and premium": ["ALL", "Australian designer", "International designer", "Luxury", "Premium brands"], "Pawn brokers": [], "Phone repairs": [], "Photographic services": [], "Post office": [], "Power, gas and communication services": [], "Professional services": [], "Real estate agents": [], "Shoe repair and key cutting": [], "Sporting goods": ["ALL", "Activewear", "Fitness and gym equipment", "Outdoors and camping", "Tech and wearables"], "Tobacconists": [], "Toys and hobbies": ["ALL", "Arts and crafts", "Games", "Hobbies", "Toys"], "Travel agents": []
@@ -211,7 +210,7 @@ function initializeMainApp() {
 function applyFilterAndSort() {
     const filterText = elements.filterInput.value.toLowerCase();
     const minRating = parseFloat(elements.ratingFilter.value);
-    const minReviews = parseInt(elements.reviewCountFilter.value, 10);
+    const reviewFilterValue = elements.reviewCountFilter.value;
 
     let filteredData;
 
@@ -235,8 +234,20 @@ function applyFilterAndSort() {
     }
 
     // Apply review count filter
-    if (!isNaN(minReviews) && minReviews >= 0) {
-        filteredData = filteredData.filter(item => (parseInt(item.ReviewCount, 10) || 0) >= minReviews);
+    if (reviewFilterValue) {
+        filteredData = filteredData.filter(item => {
+            const reviewCount = parseInt(item.ReviewCount, 10) || 0;
+            if (reviewFilterValue === '<25') {
+                return reviewCount < 25;
+            } else if (reviewFilterValue === '<50') {
+                return reviewCount < 50;
+            } else if (reviewFilterValue === '<100') {
+                return reviewCount < 100;
+            } else if (reviewFilterValue === '>100') {
+                return reviewCount > 100;
+            }
+            return true;
+        });
     }
 
     const { key, direction } = currentSort;
@@ -353,8 +364,7 @@ function applyFilterAndSort() {
   }
 
   function drawSearchCircle(center) {
-    const stepIndex = parseInt(elements.radiusSlider.value, 10);
-    const radiusMeters = radiusSteps[stepIndex] * 1000;
+    const radiusMeters = parseInt(elements.radiusSlider.value, 10) * 1000;
 
     if (searchCircle) {
         searchCircle.setLatLng(center);
@@ -419,7 +429,8 @@ function applyFilterAndSort() {
     elements.customCategoryInput.addEventListener("input", () => {
       const hasCustomText = elements.customCategoryInput.value.trim() !== "";
       elements.primaryCategorySelect.disabled = hasCustomText;
-      elements.subCategorySelect.disabled = hasCustomText;
+      elements.subCategoryCheckboxContainer.querySelectorAll('input').forEach(cb => cb.disabled = hasCustomText);
+
       if (hasCustomText) {
         elements.primaryCategorySelect.value = "";
         elements.primaryCategorySelect.dispatchEvent(new Event("change"));
@@ -427,7 +438,7 @@ function applyFilterAndSort() {
     });
     elements.primaryCategorySelect.addEventListener("change", (event) => {
       const selectedCategory = event.target.value;
-      populateSubCategories(elements.subCategorySelect, elements.subCategoryGroup, selectedCategory, categories);
+      populateSubCategories(elements.subCategoryCheckboxContainer, elements.subCategoryGroup, selectedCategory, categories);
       const hasCategorySelection = selectedCategory !== "";
       elements.customCategoryInput.disabled = hasCategorySelection;
       if (hasCategorySelection) {
@@ -469,14 +480,11 @@ function applyFilterAndSort() {
         }
         clearTimeout(anchorPointAutocompleteTimer);
         anchorPointAutocompleteTimer = setTimeout(() => {
-            // --- THIS IS THE FIX ---
             fetchPlaceSuggestions(elements.anchorPointInput, elements.anchorPointSuggestionsEl, ['geocode'], handleAnchorPointSelection);
-            // --- END OF FIX ---
         }, 300);
     });
     elements.radiusSlider.addEventListener('input', () => {
-        const stepIndex = parseInt(elements.radiusSlider.value, 10);
-        const km = radiusSteps[stepIndex];
+        const km = elements.radiusSlider.value;
         elements.radiusValue.textContent = `${km} km`;
         if (selectedAnchorPoint) {
             drawSearchCircle(selectedAnchorPoint.center);
@@ -615,7 +623,7 @@ function applyFilterAndSort() {
 
     elements.filterInput.addEventListener("input", applyFilterAndSort);
     elements.ratingFilter.addEventListener("input", applyFilterAndSort);
-    elements.reviewCountFilter.addEventListener("input", applyFilterAndSort);
+    elements.reviewCountFilter.addEventListener("change", applyFilterAndSort);
     elements.resultsTableHeader.addEventListener("click", (e) => {
       const header = e.target.closest(".sortable");
       if (!header) return;
@@ -747,8 +755,7 @@ function startResearch() {
     if (selectedAnchorPoint) {
         const center = selectedAnchorPoint.center;
         payload.anchorPoint = `${center.lat},${center.lng}`;
-        const stepIndex = parseInt(elements.radiusSlider.value, 10);
-        payload.radiusKm = radiusSteps[stepIndex];
+        payload.radiusKm = parseInt(elements.radiusSlider.value, 10);
     } else {
         payload.location = elements.locationInput.value.trim();
         payload.postalCode = postalCodes;
@@ -756,15 +763,18 @@ function startResearch() {
 
     const customCategory = elements.customCategoryInput.value.trim();
     const primaryCategory = elements.primaryCategorySelect.value;
-    const subCategory = elements.subCategorySelect.value;
+    const selectedSubCategories = Array.from(elements.subCategoryCheckboxContainer.querySelectorAll('input[type="checkbox"]:checked'))
+                                          .map(cb => cb.value)
+                                          .filter(value => value !== 'select_all');
+
     if (businessNames.length > 0) {
       payload.count = -1;
     } else if (customCategory) {
       payload.category = customCategory;
-    } else if (subCategory === 'ALL') {
-      payload.categoriesToLoop = categories[primaryCategory].filter(sc => sc !== 'ALL' && sc !== '');
+    } else if (selectedSubCategories.length > 0) {
+      payload.categoriesToLoop = selectedSubCategories;
     } else {
-      payload.category = subCategory || primaryCategory;
+      payload.category = primaryCategory;
     }
     
     const hasLocation = payload.location || (payload.postalCode && payload.postalCode.length > 0) || (payload.anchorPoint && payload.radiusKm);
@@ -790,7 +800,7 @@ function startResearch() {
     
     currentSearchParameters = {
       primaryCategory: primaryCategory,
-      subCategory: subCategory,
+      subCategory: selectedSubCategories.length > 1 ? 'multiple_subcategories' : (selectedSubCategories[0] || ''),
       customCategory: customCategory,
       area: searchAreaKey, 
       postcodes: postalCodes,
@@ -812,7 +822,7 @@ function startResearch() {
     return {
       startButton: elements.startButton,
       primaryCategorySelect: elements.primaryCategorySelect,
-      subCategorySelect: elements.subCategorySelect,
+      subCategoryCheckboxContainer: elements.subCategoryCheckboxContainer,
       customCategoryInput: elements.customCategoryInput,
       locationInput: elements.locationInput,
       postalCodeInput: elements.postalCodeInput,

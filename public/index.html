@@ -50,8 +50,9 @@
                     </div>
     
                     <div class="form-group" id="subCategoryGroup" style="display: none;">
-                        <label for="subCategorySelect">Sub-Category (Optional)</label>
-                        <select id="subCategorySelect"></select>
+                        <label>Sub-Categories (Optional)</label>
+                        <div id="subCategoryCheckboxContainer" class="checkbox-container">
+                        </div>
                     </div>
 
                     <div class="form-group">
@@ -103,7 +104,7 @@
                     <div class="form-group">
                         <label for="radiusSlider"><i class="fas fa-circle-notch"></i> Search Radius</label>
                         <div class="slider-container">
-                            <input type="range" id="radiusSlider" min="0" max="10" value="1" step="1">
+                            <input type="range" id="radiusSlider" min="1" max="20" value="5" step="1">
                             <span id="radiusValue">5 km</span>
                         </div>
                     </div>
@@ -141,7 +142,6 @@
 <div class="collected-data card" id="collectedDataCard">
     <h2>Collected Data</h2>
 
-    <!-- BUTTONS MOVED HERE -->
     <div class="download-buttons-group">
         <button id="downloadFullExcelButton" class="btn btn-success" disabled>Download Selected (.xlsx)</button>
         <button id="downloadNotifyreCSVButton" class="btn btn-secondary" disabled>Generate SMS List (.csv)</button>
@@ -161,7 +161,13 @@
             <option value="3.5">3.5+ stars</option>
             <option value="3.0">3.0+ stars</option>
         </select>
-        <input type="number" id="reviewCountFilter" placeholder="Min Reviews" class="filter-control">
+        <select id="reviewCountFilter" class="filter-control">
+            <option value="">All Reviews</option>
+            <option value="<25">Less than 25</option>
+            <option value="<50">Less than 50</option>
+            <option value="<100">Less than 100</option>
+            <option value=">100">100 plus</option>
+        </select>
     </div>
 
     <div class="results-grid-container">

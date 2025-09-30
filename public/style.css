@@ -675,6 +675,45 @@ footer {
     flex-grow: 1;
 }
 
+/* New Checkbox Container Styles */
+.checkbox-container {
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 0.75rem;
+    background-color: #fff;
+}
+.checkbox-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.35rem 0.25rem;
+}
+.checkbox-item:not(:last-child) {
+    border-bottom: 1px solid #f1f3f5;
+}
+.checkbox-item:hover {
+    background-color: #f8f9fa;
+}
+.checkbox-item input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--accent-color);
+    flex-shrink: 0;
+}
+.checkbox-item label {
+    margin-bottom: 0;
+    font-weight: normal;
+    font-size: 0.95rem;
+    color: var(--primary-text);
+    cursor: pointer;
+}
+.checkbox-item.checkbox-item-all label {
+    font-weight: 600;
+}
+
+
 @media (max-width: 1200px) {
   .app-container {
       padding: 1.5rem;
