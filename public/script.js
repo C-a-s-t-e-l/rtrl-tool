@@ -233,16 +233,18 @@ function applyFilterAndSort() {
         filteredData = filteredData.filter(item => (parseFloat(item.StarRating) || 0) >= minRating);
     }
 
-    // Apply review count filter
+    // --- UPDATED REVIEW FILTER LOGIC ---
     if (reviewFilterValue) {
         filteredData = filteredData.filter(item => {
             const reviewCount = parseInt(item.ReviewCount, 10) || 0;
-            if (reviewFilterValue === '<50') {
-                return reviewCount < 50;
-            } else if (reviewFilterValue === '<100') {
-                return reviewCount < 100;
+            if (reviewFilterValue === '>50') {
+                return reviewCount > 50;
+            } else if (reviewFilterValue === '>100') {
+                return reviewCount > 100;
+            } else if (reviewFilterValue === '>250') {
+                return reviewCount > 250;
             }
-            return true;
+            return true; // Should not happen if value is selected, but good practice
         });
     }
 
