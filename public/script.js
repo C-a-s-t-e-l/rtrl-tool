@@ -239,10 +239,8 @@ function applyFilterAndSort() {
             const reviewCount = parseInt(item.ReviewCount, 10) || 0;
             if (reviewFilterValue === '<25') {
                 return reviewCount < 25;
-            } else if (reviewFilterValue === '<50') {
-                return reviewCount < 50;
-            } else if (reviewFilterValue === '<100') {
-                return reviewCount < 100;
+            } else if (reviewFilterValue === '50-100') {
+                return reviewCount >= 50 && reviewCount <= 100;
             } else if (reviewFilterValue === '>100') {
                 return reviewCount > 100;
             }
