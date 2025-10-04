@@ -20,7 +20,7 @@ function populateSubCategories(containerEl, groupEl, selectedCategory, categorie
     containerEl.innerHTML = '';
     const subCategories = categoriesData[selectedCategory];
 
-    if (subCategories && subCategories.length > 1 && selectedCategory) { // Only show if there's more than just "ALL"
+    if (subCategories && subCategories.length > 1 && selectedCategory) { 
         groupEl.style.display = 'block';
 
         const createCheckboxItem = (value, text, isBold = false) => {
@@ -48,29 +48,25 @@ function populateSubCategories(containerEl, groupEl, selectedCategory, categorie
             return;
         }
 
-        // Add "Select All" checkbox
         const { itemDiv: allDiv, checkbox: allCheckbox } = createCheckboxItem('select_all', 'Select All', true);
         containerEl.appendChild(allDiv);
 
         const individualCheckboxes = [];
 
-        // Add individual sub-category checkboxes
         allSubCategories.forEach(subCat => {
-            if (subCat) { // Ensure not empty string
+            if (subCat) { 
                 const { itemDiv, checkbox } = createCheckboxItem(subCat, subCat);
                 individualCheckboxes.push(checkbox);
                 containerEl.appendChild(itemDiv);
             }
         });
 
-        // "Select All" logic
         allCheckbox.addEventListener('change', () => {
             individualCheckboxes.forEach(cb => {
                 cb.checked = allCheckbox.checked;
             });
         });
 
-        // Logic to update "Select All" based on individual item changes
         individualCheckboxes.forEach(cb => {
             cb.addEventListener('change', () => {
                 if (!cb.checked) {
@@ -210,7 +206,6 @@ function setUiState(isBusy, elements) {
             }
         });
         
-        // Also disable/enable checkboxes based on individual search
         elements.subCategoryCheckboxContainer.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.disabled = isIndividualSearch);
     }
 

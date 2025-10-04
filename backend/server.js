@@ -8,6 +8,7 @@ const path = require('path');
 const fs = require('fs');
 const axios = require('axios');
 require('dotenv').config();
+const { sendResultsByEmail } = require('./emailService'); 
 
 puppeteer.use(StealthPlugin());
 
@@ -20,7 +21,6 @@ const io = new Server(server, {
     cors: { origin: FRONTEND_URL, methods: ["GET", "POST"] }
 });
 
-// --- ZOMBIE FIX 1 of 3: Create a global map to track active browsers ---
 const activeBrowsers = new Map();
 
 const PORT = process.env.PORT || 3000;
@@ -90,232 +90,282 @@ io.on('connection', (socket) => {
     console.log(`Client connected: ${socket.id} at ${new Date().toLocaleString()}`);
     socket.emit('log', `[Server] Connected to Real-time Scraper.`);
 
-socket.on('start_scrape', async ({ category, categoriesToLoop, location, postalCode, country, count, businessNames, anchorPoint, radiusKm }) => {
-    const isIndividualSearch = businessNames && businessNames.length > 0;
-    const searchItems = isIndividualSearch ? businessNames : (categoriesToLoop && categoriesToLoop.length > 0 ? categoriesToLoop : [category]);
-
-    const finalCount = isIndividualSearch ? -1 : count;
-    const isSearchAll = finalCount === -1;
-    const targetCount = isSearchAll ? Infinity : finalCount;
-    
-    let browser = null;
-    let collectionPage = null;
-
-    try {
-        const puppeteerArgs = [
-            '--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage',
-            '--disable-gpu', '--no-zygote', '--lang=en-US,en', '--ignore-certificate-errors',
-            '--window-size=1920,1080', '--disable-blink-features=AutomationControlled'
-        ];
+    socket.on('start_scrape', async ({ categoriesToLoop, location, postalCode, country, count, businessNames, anchorPoint, radiusKm, userEmail, searchParamsForEmail }) => {
         
-        const launchBrowser = async () => {
-            console.log('[Browser Lifecycle] Launching new browser instance...');
-            const newBrowser = await puppeteer.launch({ 
-                headless: true, 
-                args: puppeteerArgs,
-                protocolTimeout: 120000 
-            });
-            activeBrowsers.set(socket.id, newBrowser);
-            return newBrowser;
+        socket.scrapeProgress = {
+            results: [],
+            email: userEmail,
+            searchParams: searchParamsForEmail,
+            status: 'running'
         };
 
-        browser = await launchBrowser();
-        collectionPage = await browser.newPage();
-        socket.emit('log', '[Setup] Created a dedicated page for URL collection.');
+        const isIndividualSearch = businessNames && businessNames.length > 0;
+        const searchItems = isIndividualSearch ? businessNames : (categoriesToLoop && categoriesToLoop.length > 0 ? categoriesToLoop : []);
 
-        const allProcessedBusinesses = [];
-        const addedBusinessKeys = new Set();
-        const CONCURRENCY = 3;
-        const masterUrlMap = new Map();
-        socket.emit('log', `--- Starting URL Collection Phase ---`);
+        const finalCount = isIndividualSearch ? -1 : count;
+        const isSearchAll = finalCount === -1;
+        const targetCount = isSearchAll ? Infinity : finalCount;
+        
+        let browser = null;
+        let collectionPage = null;
 
-        // Reverted to the simple, reliable loop that calls the reliable function
-        for (const item of searchItems) {
-            socket.emit('log', isIndividualSearch ? `\n--- Searching for business: "${item}" ---` : `\n--- Searching for category: "${item}" ---`);
+        try {
+            const puppeteerArgs = [
+                '--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage',
+                '--disable-gpu', '--no-zygote', '--lang=en-US,en', '--ignore-certificate-errors',
+                '--window-size=1920,1080', '--disable-blink-features=AutomationControlled'
+            ];
             
-            let locationQueries = [];
-            if (anchorPoint && radiusKm) {
-                locationQueries = await getSearchQueriesForRadius(anchorPoint, radiusKm, country, GOOGLE_MAPS_API_KEY, socket);
-            } else {
-                let searchAreas = [];
-                if (postalCode && postalCode.length > 0) searchAreas = postalCode;
-                else if (location) searchAreas = [location];
-                if (searchAreas.length === 0) {
-                     socket.emit('log', 'No location/postcode provided, skipping item.', 'error');
-                     continue;
+            const launchBrowser = async () => {
+                console.log('[Browser Lifecycle] Launching new browser instance...');
+                const newBrowser = await puppeteer.launch({ 
+                    headless: true, 
+                    args: puppeteerArgs,
+                    protocolTimeout: 120000 
+                });
+                activeBrowsers.set(socket.id, newBrowser);
+                return newBrowser;
+            };
+
+            browser = await launchBrowser();
+            collectionPage = await browser.newPage();
+            socket.emit('log', '[Setup] Created a dedicated page for URL collection.');
+
+            const allProcessedBusinesses = [];
+            const addedBusinessKeys = new Set();
+            const CONCURRENCY = 3;
+            const masterUrlMap = new Map();
+            socket.emit('log', `--- Starting URL Collection Phase ---`);
+
+            for (const item of searchItems) {
+                socket.emit('log', isIndividualSearch ? `\n--- Searching for business: "${item}" ---` : `\n--- Searching for category: "${item}" ---`);
+                
+                let locationQueries = [];
+                if (anchorPoint && radiusKm) {
+                    locationQueries = await getSearchQueriesForRadius(anchorPoint, radiusKm, country, GOOGLE_MAPS_API_KEY, socket);
+                } else {
+                    let searchAreas = [];
+                    if (postalCode && postalCode.length > 0) searchAreas = postalCode;
+                    else if (location) searchAreas = [location];
+                    if (searchAreas.length === 0) {
+                         socket.emit('log', 'No location/postcode provided, skipping item.', 'error');
+                         continue;
+                    }
+                    for (const areaQuery of searchAreas) {
+                        const baseQuery = isIndividualSearch ? `${item}, ${areaQuery}, ${country}` : `${item} in ${areaQuery}, ${country}`;
+                        const queriesForArea = await getSearchQueriesForLocation(baseQuery, areaQuery, country, socket, isIndividualSearch);
+                        locationQueries.push(...queriesForArea);
+                    }
                 }
-                for (const areaQuery of searchAreas) {
-                    const baseQuery = isIndividualSearch ? `${item}, ${areaQuery}, ${country}` : `${item} in ${areaQuery}, ${country}`;
-                    const queriesForArea = await getSearchQueriesForLocation(baseQuery, areaQuery, country, socket, isIndividualSearch);
-                    locationQueries.push(...queriesForArea);
+
+                for (const query of locationQueries) {
+                    const finalSearchQuery = (isIndividualSearch || query.startsWith('near ')) ? `${item} ${query}` : query;
+                    const discoveredUrlsForThisSubArea = new Set();
+                    
+                    await collectGoogleMapsUrlsContinuously(collectionPage, finalSearchQuery, socket, discoveredUrlsForThisSubArea, country);
+                    
+                    let initialSize = masterUrlMap.size;
+                    discoveredUrlsForThisSubArea.forEach(url => {
+                        if (!masterUrlMap.has(url)) {
+                            masterUrlMap.set(url, item);
+                        }
+                    });
+                    let newUrlsFound = masterUrlMap.size - initialSize;
+                    socket.emit('log', `   -> Found ${newUrlsFound} new URLs in this area. Total unique URLs so far: ${masterUrlMap.size}`);
                 }
             }
 
-            for (const query of locationQueries) {
-                const finalSearchQuery = (isIndividualSearch || query.startsWith('near ')) ? `${item} ${query}` : query;
-                const discoveredUrlsForThisSubArea = new Set();
-                
-                await collectGoogleMapsUrlsContinuously(collectionPage, finalSearchQuery, socket, discoveredUrlsForThisSubArea, country);
-                
-                let initialSize = masterUrlMap.size;
-                discoveredUrlsForThisSubArea.forEach(url => {
-                    if (!masterUrlMap.has(url)) {
-                        masterUrlMap.set(url, item);
+            if (collectionPage) {
+                 try { await collectionPage.close(); } catch (e) {}
+            }
+
+            socket.emit('log', `\n--- URL Collection Complete. Found ${masterUrlMap.size} total unique businesses. ---`);
+            socket.emit('log', `[System] Restarting browser after URL collection for maximum stability...`);
+            
+            activeBrowsers.delete(socket.id);
+            await browser.close();
+            browser = await launchBrowser();
+            
+            socket.emit('log', `[System] New browser is ready for data processing.`);
+            socket.emit('log', `--- Starting Data Processing Phase ---`);
+
+            const urlsToProcess = Array.from(masterUrlMap, ([url, specificCategory]) => ({ url, category: specificCategory }));
+            const totalDiscoveredUrls = urlsToProcess.length;
+
+            let processedInThisBrowser = 0;
+            const BROWSER_RESTART_THRESHOLD = 50;
+
+            for (let i = 0; i < urlsToProcess.length; i += CONCURRENCY) {
+                if (allProcessedBusinesses.length >= targetCount) break;
+
+                if (processedInThisBrowser > 0 && processedInThisBrowser % BROWSER_RESTART_THRESHOLD === 0) {
+                    socket.emit('log', `[System] Browser has processed ${processedInThisBrowser} items. Restarting for stability...`);
+                    activeBrowsers.delete(socket.id);
+                    await browser.close();
+                    browser = await launchBrowser();
+                    socket.emit('log', `[System] New browser instance is ready.`);
+                }
+
+                const batch = urlsToProcess.slice(i, i + CONCURRENCY);
+                const promises = batch.map(async (processItem) => {
+                    let detailPage = null; 
+                    try {
+                        const scrapingTask = async () => {
+                            detailPage = await browser.newPage();
+                            await detailPage.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36');
+                            await detailPage.setRequestInterception(true);
+                            detailPage.on('request', (req) => { if (['image', 'stylesheet', 'font', 'media'].includes(req.resourceType())) req.abort(); else req.continue(); });
+                            let googleData = await scrapeGoogleMapsDetails(detailPage, processItem.url, socket, country);
+                            if (!googleData || !googleData.BusinessName) return null;
+                            let websiteData = {};
+                            if (googleData.Website) websiteData = await scrapeWebsiteForGoldData(detailPage, googleData.Website, socket);
+                            
+                            const fullBusinessData = { ...googleData, ...websiteData };
+                            
+                            if (isIndividualSearch) {
+                               fullBusinessData.Category = googleData.ScrapedCategory || 'N/A';
+                            } else {
+                               fullBusinessData.Category = processItem.category || 'N/A';
+                            }
+                            
+                            return fullBusinessData;
+                        };
+                        return await promiseWithTimeout(scrapingTask(), 120000);
+                    } catch (err) {
+                        socket.emit('log', `A task for ${processItem.url} failed or timed out: ${err.message}. Skipping.`, 'error');
+                        return null;
+                    } finally {
+                        processedInThisBrowser++;
+                        if (detailPage) {
+                            try { await detailPage.close(); } catch (detailPageCloseError) {}
+                        }
                     }
                 });
-                let newUrlsFound = masterUrlMap.size - initialSize;
-                socket.emit('log', `   -> Found ${newUrlsFound} new URLs in this area. Total unique URLs so far: ${masterUrlMap.size}`);
-            }
-        }
 
-        if (collectionPage) {
-             try {
-                await collectionPage.close();
-             } catch (e) {}
-        }
+                const results = await Promise.all(promises);
 
-        socket.emit('log', `\n--- URL Collection Complete. Found ${masterUrlMap.size} total unique businesses. ---`);
-        socket.emit('log', `[System] Restarting browser after URL collection for maximum stability...`);
-        
-        activeBrowsers.delete(socket.id);
-        await browser.close();
-        browser = await launchBrowser();
-        
-        socket.emit('log', `[System] New browser is ready for data processing.`);
-        socket.emit('log', `--- Starting Data Processing Phase ---`);
-
-        const urlsToProcess = Array.from(masterUrlMap, ([url, specificCategory]) => ({ url, category: specificCategory }));
-        const totalDiscoveredUrls = urlsToProcess.length;
-
-        let processedInThisBrowser = 0;
-        const BROWSER_RESTART_THRESHOLD = 50;
-
-        for (let i = 0; i < urlsToProcess.length; i += CONCURRENCY) {
-            if (allProcessedBusinesses.length >= targetCount) break;
-
-            if (processedInThisBrowser > 0 && processedInThisBrowser % BROWSER_RESTART_THRESHOLD === 0) {
-                socket.emit('log', `[System] Browser has processed ${processedInThisBrowser} items. Restarting for stability...`);
-                activeBrowsers.delete(socket.id);
-                await browser.close();
-                browser = await launchBrowser();
-                socket.emit('log', `[System] New browser instance is ready.`);
-            }
-
-            const batch = urlsToProcess.slice(i, i + CONCURRENCY);
-            const promises = batch.map(async (processItem) => {
-                let detailPage = null; 
-                try {
-                    const scrapingTask = async () => {
-                        detailPage = await browser.newPage();
-                        await detailPage.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36');
-                        await detailPage.setRequestInterception(true);
-                        detailPage.on('request', (req) => { if (['image', 'stylesheet', 'font', 'media'].includes(req.resourceType())) req.abort(); else req.continue(); });
-                        let googleData = await scrapeGoogleMapsDetails(detailPage, processItem.url, socket, country);
-                        if (!googleData || !googleData.BusinessName) return null;
-                        let websiteData = {};
-                        if (googleData.Website) websiteData = await scrapeWebsiteForGoldData(detailPage, googleData.Website, socket);
-                        
-                        const fullBusinessData = { ...googleData, ...websiteData };
-                        
-                        // Assign the correct, specific category from the URL collection phase
-                        if (isIndividualSearch) {
-                           fullBusinessData.Category = googleData.ScrapedCategory || 'N/A';
+                results.forEach(businessData => {
+                    if (businessData && allProcessedBusinesses.length < targetCount) {
+                        const name = businessData.BusinessName?.toLowerCase().trim() || '';
+                        const phone = normalizePhoneNumber(businessData.Phone);
+                        const address = normalizeAddress(businessData.StreetAddress);
+                        const email = businessData.Email1?.toLowerCase().trim() || '';
+                        let uniqueIdentifier = '';
+                        let reason = '';
+                        if (phone) {
+                            uniqueIdentifier = `phone::${name}::${phone}`;
+                            reason = `by Phone (${phone})`;
+                        } else if (address) {
+                            uniqueIdentifier = `address::${name}::${address}`;
+                            reason = `by Address (${businessData.StreetAddress})`;
+                        } else if (email) {
+                            uniqueIdentifier = `email::${name}::${email}`;
+                            reason = `by Email (${email})`;
                         } else {
-                           fullBusinessData.Category = processItem.category || 'N/A';
+                            uniqueIdentifier = `name_only::${name}`;
+                            reason = 'by Name Only';
                         }
-                        
-                        return fullBusinessData;
-                    };
-                    return await promiseWithTimeout(scrapingTask(), 120000);
-                } catch (err) {
-                    socket.emit('log', `A task for ${processItem.url} failed or timed out: ${err.message}. Skipping.`, 'error');
-                    return null;
-                } finally {
-                    processedInThisBrowser++;
-                    if (detailPage) {
-                        try {
-                            await detailPage.close();
-                        } catch (detailPageCloseError) {
-                            console.log(`[Cleanup] Non-critical error closing a detail page (browser likely already gone).`);
+                        if (addedBusinessKeys.has(uniqueIdentifier)) {
+                            socket.emit('log', `-> SKIPPED (Duplicate ${reason}): ${businessData.BusinessName}`);
+                        } else {
+                            addedBusinessKeys.add(uniqueIdentifier);
+                            allProcessedBusinesses.push(businessData);
+                            if (socket.scrapeProgress) {
+                                socket.scrapeProgress.results.push(businessData);
+                            }
+                            const status = isSearchAll ? `(Total Added: ${allProcessedBusinesses.length})` : `(${allProcessedBusinesses.length}/${finalCount})`;
+                            socket.emit('log', `-> ADDED: ${businessData.BusinessName}. ${status}`);
+                            socket.emit('business_found', businessData);
                         }
                     }
-                }
-            });
+                    socket.emit('progress_update', { processed: Math.min(i + batch.length, totalDiscoveredUrls), discovered: totalDiscoveredUrls, added: allProcessedBusinesses.length, target: finalCount });
+                });
+            }
 
-            const results = await Promise.all(promises);
+            if (socket.scrapeProgress && socket.scrapeProgress.status !== 'running') {
+                console.log('[Race Condition] Disconnect handler already processed this job. Aborting normal completion.');
+                return; 
+            }
 
-            results.forEach(businessData => {
-                if (businessData && allProcessedBusinesses.length < targetCount) {
-                    const name = businessData.BusinessName?.toLowerCase().trim() || '';
-                    const phone = normalizePhoneNumber(businessData.Phone);
-                    const address = normalizeAddress(businessData.StreetAddress);
-                    const email = businessData.Email1?.toLowerCase().trim() || '';
-                    let uniqueIdentifier = '';
-                    let reason = '';
-                    if (phone) {
-                        uniqueIdentifier = `phone::${name}::${phone}`;
-                        reason = `by Phone (${phone})`;
-                    } else if (address) {
-                        uniqueIdentifier = `address::${name}::${address}`;
-                        reason = `by Address (${businessData.StreetAddress})`;
-                    } else if (email) {
-                        uniqueIdentifier = `email::${name}::${email}`;
-                        reason = `by Email (${email})`;
-                    } else {
-                        uniqueIdentifier = `name_only::${name}`;
-                        reason = 'by Name Only';
-                    }
-                    if (addedBusinessKeys.has(uniqueIdentifier)) {
-                        socket.emit('log', `-> SKIPPED (Duplicate ${reason}): ${businessData.BusinessName}`);
-                    } else {
-                        addedBusinessKeys.add(uniqueIdentifier);
-                        allProcessedBusinesses.push(businessData);
-                        const status = isSearchAll ? `(Total Added: ${allProcessedBusinesses.length})` : `(${allProcessedBusinesses.length}/${finalCount})`;
-                        socket.emit('log', `-> ADDED: ${businessData.BusinessName}. ${status}`);
-                        socket.emit('business_found', businessData);
-                    }
-                }
-                socket.emit('progress_update', { processed: Math.min(i + batch.length, totalDiscoveredUrls), discovered: totalDiscoveredUrls, added: allProcessedBusinesses.length, target: finalCount });
-            });
-        }
+            socket.emit('log', `Scraping completed. Found and processed a total of ${allProcessedBusinesses.length} businesses.`);
+            
+            if (socket.scrapeProgress) {
+                socket.scrapeProgress.status = 'completing';
+            }
+            
+            if (userEmail && allProcessedBusinesses.length > 0) {
+                socket.emit('log', `[Email] Preparing to send results to ${userEmail}...`);
+                
+                const mainSearchArea = searchParamsForEmail.area || 'selected_area';
+                
+                const dataForEmail = allProcessedBusinesses.map(business => ({
+                    ...business,
+                    SuburbArea: business.Suburb || mainSearchArea.replace(/_/g, ' '),
+                }));
+                
+                const emailStatus = await sendResultsByEmail(userEmail, dataForEmail, searchParamsForEmail);
+                socket.emit('log', `[Email] ${emailStatus}`);
+            }
+            
+            socket.emit('scrape_complete');
 
-        socket.emit('log', `Scraping completed. Found and processed a total of ${allProcessedBusinesses.length} businesses.`);
-        socket.emit('scrape_complete');
-
-    } catch (error) {
-        console.error('A critical error occurred:', error);
-        socket.emit('scrape_error', { error: `Critical failure: ${error.message.split('\n')[0]}` });
-    } finally {
-        activeBrowsers.delete(socket.id);
-        if (browser) {
-            try {
-                await browser.close();
-            } catch (closeError) {
-                console.log(`[Cleanup] Harmless error during final browser close (likely already closed by disconnect handler): ${closeError.message}`);
+        } catch (error) {
+            console.error('A critical error occurred:', error);
+       
+            if (socket.scrapeProgress && socket.scrapeProgress.status === 'running') {
+                socket.emit('scrape_error', { error: `Critical failure: ${error.message.split('\n')[0]}` });
+            }
+        } finally {
+            if (socket.scrapeProgress) {
+                socket.scrapeProgress.status = 'finished';
+            }
+            activeBrowsers.delete(socket.id);
+            if (browser) {
+                try { await browser.close(); } catch (closeError) {}
             }
         }
-    }
-});
+    });
 
     socket.on('disconnect', () => {
         console.log(`Client disconnected: ${socket.id} at ${new Date().toLocaleString()}`);
+        
+        if (socket.scrapeProgress && socket.scrapeProgress.status === 'running' && socket.scrapeProgress.results.length > 0) {
+            console.log(`[Safety Net] Disconnect detected while running. Emailing ${socket.scrapeProgress.results.length} partial results.`);
+            
+            socket.scrapeProgress.status = 'completing';
+            
+            const mainSearchArea = socket.scrapeProgress.searchParams.area || 'selected_area';
+            const partialDataForEmail = socket.scrapeProgress.results.map(business => ({
+                ...business,
+                SuburbArea: business.Suburb || mainSearchArea.replace(/_/g, ' '),
+            }));
+            
+            const partialSearchParams = {
+                ...socket.scrapeProgress.searchParams,
+                subjectPrefix: '[INCOMPLETE] ',
+                bodyPrefix: 'The research was interrupted. Here are the partial results found before disconnection:\n\n'
+            };
+
+            sendResultsByEmail(
+                socket.scrapeProgress.email, 
+                partialDataForEmail, 
+                partialSearchParams
+            );
+        }
         
         if (activeBrowsers.has(socket.id)) {
             console.log(`[Cleanup] Found an orphaned browser for disconnected client ${socket.id}. Attempting to close it.`);
             const browserToClose = activeBrowsers.get(socket.id);
             try {
-                if (browserToClose) {
-                    browserToClose.close();
-                    console.log(`[Cleanup] Successfully closed orphaned browser for ${socket.id}.`);
-                }
-            } catch (error) {
-                console.log(`[Cleanup] Harmless error while closing orphaned browser (it was likely already closed): ${error.message}`);
-            } finally {
+                if (browserToClose) { browserToClose.close(); }
+            } catch (error) {} 
+            finally {
                 activeBrowsers.delete(socket.id);
             }
         }
     });
 });
+
 
 function degToRad(degrees) {
     return degrees * Math.PI / 180;
