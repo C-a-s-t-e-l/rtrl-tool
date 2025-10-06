@@ -6,10 +6,9 @@ function generateFilename(searchParams, fileSuffix, fileExtension) {
     if (searchParams.customCategory) {
         categoryString = searchParams.customCategory.replace(/[\s/&]/g, "_");
     } else if (searchParams.subCategory === 'multiple_subcategories' && searchParams.subCategoryList && searchParams.subCategoryList.length > 0) {
- 
-        categoryString = `${searchParams.primaryCategory.replace(/[\s/&]/g, "_")}_${searchParams.subCategoryList.map(s => s.replace(/[\s/&]/g, "_")).join('_')}`;
+        categoryString = `${(searchParams.primaryCategory || '').replace(/[\s/&]/g, "_")}_${searchParams.subCategoryList.map(s => s.replace(/[\s/&]/g, "_")).join('_')}`;
     } else if (searchParams.subCategory) {
-        categoryString = `${searchParams.primaryCategory.replace(/[\s/&]/g, "_")}_${searchParams.subCategory.replace(/[\s/&]/g, "_")}`;
+        categoryString = `${(searchParams.primaryCategory || '').replace(/[\s/&]/g, "_")}_${searchParams.subCategory.replace(/[\s/&]/g, "_")}`;
     } else {
         categoryString = searchParams.primaryCategory?.replace(/[\s/&]/g, "_") || 'businesses';
     }
@@ -32,9 +31,9 @@ function generateFileData(rawData, searchParams) {
     if (searchParams.customCategory) {
         categoryString = searchParams.customCategory.replace(/[\s/&]/g, "_");
     } else if (searchParams.subCategory === 'multiple_subcategories' && searchParams.subCategoryList && searchParams.subCategoryList.length > 0) {
-        categoryString = `${searchParams.primaryCategory.replace(/[\s/&]/g, "_")}_${searchParams.subCategoryList.map(s => s.replace(/[\s/&]/g, "_")).join('_')}`;
+        categoryString = `${(searchParams.primaryCategory || '').replace(/[\s/&]/g, "_")}_${searchParams.subCategoryList.map(s => s.replace(/[\s/&]/g, "_")).join('_')}`;
     } else if (searchParams.subCategory) {
-        categoryString = `${searchParams.primaryCategory.replace(/[\s/&]/g, "_")}_${searchParams.subCategory.replace(/[\s/&]/g, "_")}`;
+        categoryString = `${(searchParams.primaryCategory || '').replace(/[\s/&]/g, "_")}_${searchParams.subCategory.replace(/[\s/&]/g, "_")}`;
     } else {
         categoryString = searchParams.primaryCategory?.replace(/[\s/&]/g, "_") || 'general';
     }
@@ -94,8 +93,8 @@ function generateFileData(rawData, searchParams) {
             }
             return {
                 "Company": d.BusinessName || '',
-                "Address_(other)_Sub": d.SuburbArea || '',
-                "Address_(other)_State": state,
+                "Address_Suburb": d.SuburbArea || '',
+                "Address_State": state,
                 "Notes": notesContent, 
                 "facebook": d.FacebookURL || '',
                 "instagram": d.InstagramURL || '',
@@ -120,7 +119,7 @@ function generateFileData(rawData, searchParams) {
         contacts: {
             data: contactsData,
             filename: generateFilename(searchParams, 'emails', 'csv'),
-            headers: ["Company", "Address_(other)_Sub", "Address_(other)_State", "Notes", "facebook", "instagram", "linkedin", "email_1", "email_2", "email_3"]
+            headers: ["Company", "Address_Suburb", "Address_State", "Notes", "facebook", "instagram", "linkedin", "email_1", "email_2", "email_3"]
         }
     };
 }

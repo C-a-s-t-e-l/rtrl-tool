@@ -226,7 +226,7 @@ function setupEventListeners(elements, socket, categories, countries, allCollect
     const notesContent = `${date}_${categoryString}_${locationString}`;
     
     const newHeaders = [
-        "Company", "Address_(other)_Sub", "Address_(other)_State", "Notes", 
+        "Company", "Address_Suburb", "Address_State", "Notes", 
         "facebook", "instagram", "linkedin", 
         "email_1", "email_2", "email_3"
     ];
@@ -240,8 +240,8 @@ function setupEventListeners(elements, socket, categories, countries, allCollect
 
       return {
         "Company": d.BusinessName || '',
-        "Address_(other)_Sub": d.SuburbArea || '',
-        "Address_(other)_State": state, 
+        "Address_Suburb": d.SuburbArea || '',
+        "Address_State": state, 
         "Notes": notesContent,
         "facebook": d.FacebookURL || '',
         "instagram": d.InstagramURL || '',
