@@ -116,16 +116,29 @@ io.on('connection', (socket) => {
                 '--window-size=1920,1080', '--disable-blink-features=AutomationControlled'
             ];
             
-            const launchBrowser = async () => {
-                console.log('[Browser Lifecycle] Launching new browser instance...');
-                const newBrowser = await puppeteer.launch({ 
-                    headless: true, 
-                    args: puppeteerArgs,
-                    protocolTimeout: 120000 
-                });
-                activeBrowsers.set(socket.id, newBrowser);
-                return newBrowser;
-            };
+const launchBrowser = async () => {
+            console.log('[Browser Lifecycle] Launching new browser instance...');
+
+            // Create a unique, temporary user data directory for each launch.
+            // This is the key to preventing resource conflicts.
+            const userDataDir = path.join(__dirname, 'puppeteer_temp', `user_data_${Date.now()}`);
+            
+            const launchArgs = [
+                ...puppeteerArgs, // Your existing args
+                `--user-data-dir=${userDataDir}`, // Force a fresh, isolated profile
+                '--disable-extensions', // Disable any potentially interfering extensions
+                '--disable-component-extensions-with-background-pages',
+            ];
+
+            const newBrowser = await puppeteer.launch({ 
+                headless: true, 
+                args: launchArgs, // Use the new, more aggressive args
+                protocolTimeout: 120000,
+                userDataDir: userDataDir // Also specify it here for some versions
+            });
+            activeBrowsers.set(socket.id, newBrowser);
+            return newBrowser;
+        };
 
             browser = await launchBrowser();
             collectionPage = await browser.newPage();
@@ -184,6 +197,9 @@ io.on('connection', (socket) => {
             
             activeBrowsers.delete(socket.id);
             await browser.close();
+            console.log('[System] Pausing for 2 seconds to ensure complete browser cleanup...');
+            await new Promise(resolve => setTimeout(resolve, 2000));
+
             browser = await launchBrowser();
             
             socket.emit('log', `[System] New browser is ready for data processing.`);
