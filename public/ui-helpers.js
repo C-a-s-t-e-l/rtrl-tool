@@ -20,7 +20,7 @@ function populateSubCategories(containerEl, groupEl, selectedCategory, categorie
     containerEl.innerHTML = '';
     const subCategories = categoriesData[selectedCategory];
 
-    if (subCategories && subCategories.length > 1 && selectedCategory) { 
+    if (subCategories && subCategories.length > 1 && selectedCategory) {
         groupEl.style.display = 'block';
 
         const createCheckboxItem = (value, text, isBold = false) => {
@@ -54,7 +54,7 @@ function populateSubCategories(containerEl, groupEl, selectedCategory, categorie
         const individualCheckboxes = [];
 
         allSubCategories.forEach(subCat => {
-            if (subCat) { 
+            if (subCat) {
                 const { itemDiv, checkbox } = createCheckboxItem(subCat, subCat);
                 individualCheckboxes.push(checkbox);
                 containerEl.appendChild(itemDiv);
@@ -108,7 +108,7 @@ function renderSuggestions(inputElement, suggestionsContainer, items, displayKey
 
 function cleanDisplayValue(text) {
     if (!text) return '';
-    let cleaned = String(text).replace(/^[^a-zA-Z0-9\s.,'#\-+/&_]+/u, ''); 
+    let cleaned = String(text).replace(/^[^a-zA-Z0-9\s.,'#\-+/&_]+/u, '');
     cleaned = cleaned.replace(/\p{Z}/gu, ' ');
     cleaned = cleaned.replace(/[\u0000-\u001F\u007F-\u009F\uFEFF\n\r]/g, '');
     return cleaned.replace(/\s+/g, ' ').trim();
@@ -152,7 +152,7 @@ function addTableRow(gridBody, data, index) {
     checkbox.dataset.index = index;
     checkbox.checked = true;
     checkboxContainer.appendChild(checkbox);
-    
+
     const mapsLink = document.createElement('a');
     mapsLink.href = data.GoogleMapsURL || '#';
     mapsLink.target = '_blank';
@@ -177,14 +177,14 @@ function addTableRow(gridBody, data, index) {
         createLinkCell(data.FacebookURL, cleanDisplayValue(data.FacebookURL), 20),
         createCell(mapsLink)
     ];
-    
+
     cells.forEach(cell => row.appendChild(cell));
     gridBody.appendChild(row);
 }
 
 function setUiState(isBusy, elements) {
     const isIndividualSearch = elements.businessNamesInput.value.trim().length > 0;
-    
+
     for (const key in elements) {
         if (!elements.hasOwnProperty(key)) continue;
 
@@ -196,7 +196,7 @@ function setUiState(isBusy, elements) {
             }
         }
     }
-    
+
     if (!isBusy) {
         elements.countInput.disabled = elements.findAllBusinessesCheckbox.checked || isIndividualSearch;
 
@@ -205,7 +205,7 @@ function setUiState(isBusy, elements) {
                  el.disabled = isIndividualSearch;
             }
         });
-        
+
         elements.subCategoryCheckboxContainer.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.disabled = isIndividualSearch);
     }
 
@@ -222,7 +222,7 @@ function setDownloadButtonStates(isBusy, buttons, displayedData) {
 function logMessage(logEl, message, type = 'default') {
     const timestamp = new Date().toLocaleTimeString();
     const formattedMessage = `[${timestamp}] ${message}`;
-    
+
     const span = document.createElement('span');
     span.textContent = formattedMessage;
     span.classList.add('log-entry', `log-${type}`);
@@ -245,12 +245,12 @@ function updateProgressBar(progressBarEl, statusIconEl, processed, discovered, a
             percentage = (added / target) * 100;
         }
     }
-    
+
     if (percentage > 100) percentage = 100;
 
     progressBarEl.style.width = `${percentage}%`;
     progressBarEl.textContent = `${Math.round(percentage)}%`;
-    
+
     const isComplete = !isSearchAll ? (added >= target) : (processed === discovered && discovered > 0);
 
     if (isComplete) {
@@ -287,12 +287,12 @@ async function downloadExcel(data, searchParams, fileSuffix, fileType, logEl, sp
         if (!url || typeof url !== 'string' || !url.trim()) {
             return '';
         }
-       
+
         const formula = `HYPERLINK("${url}", "${url}")`;
         return {
-            f: formula, 
-            v: url,     
-            s: {        
+            f: formula,
+            v: url,
+            s: {
                 font: {
                     color: { rgb: "0563C1" },
                     underline: true
@@ -325,7 +325,7 @@ async function downloadExcel(data, searchParams, fileSuffix, fileType, logEl, sp
         exportData = data.map(item => ({
             BusinessName: item.BusinessName, Category: item.Category, 'Suburb/Area': item.SuburbArea,
             StreetAddress: item.StreetAddress, Website: createLinkObject(item.Website), OwnerName: item.OwnerName,
-            'Email 1': item.Email1, 'Email 2': item.Email2, 'Email 3': item.Email3, 
+            'Email 1': item.Email1, 'Email 2': item.Email2, 'Email 3': item.Email3,
             Phone: item.Phone, InstagramURL: createLinkObject(item.InstagramURL),
             FacebookURL: createLinkObject(item.FacebookURL), GoogleMapsURL: createLinkObject(item.GoogleMapsURL),
             SourceURLs: [item.GoogleMapsURL, item.Website].filter(Boolean).join(';'),
@@ -336,11 +336,11 @@ async function downloadExcel(data, searchParams, fileSuffix, fileType, logEl, sp
 
     const ws = XLSX.utils.json_to_sheet(exportData, { header: headers });
     ws['!cols'] = getColumnWidths(exportData, headers);
-    
+
     for (const cellAddress in ws) {
         if (ws.hasOwnProperty(cellAddress)) {
             const cell = ws[cellAddress];
-            if (cell && (cell.l || cell.f)) { 
+            if (cell && (cell.l || cell.f)) {
                 cell.t = 's';
             }
         }
@@ -351,13 +351,17 @@ async function downloadExcel(data, searchParams, fileSuffix, fileType, logEl, sp
 
     const date = new Date().toISOString().split('T')[0].replace(/-/g, '');
     const company = 'rtrl';
-    
-    const primaryCat = searchParams.primaryCategory?.replace(/[\s/&]/g, "_") || '';
-    const subCat = (searchParams.subCategory && searchParams.subCategory !== 'ALL') ? searchParams.subCategory.replace(/[\s/&]/g, "_") : '';
-    const customCat = searchParams.customCategory?.replace(/[\s/&]/g, "_") || '';
 
-    let categoryString = customCat || primaryCat;
-    if (subCat) { categoryString += `_${subCat}`; }
+    let categoryString;
+    if (searchParams.customCategory) {
+        categoryString = searchParams.customCategory.replace(/[\s/&]/g, "_");
+    } else if (searchParams.subCategory === 'multiple_subcategories' && searchParams.subCategoryList && searchParams.subCategoryList.length > 0) {
+        categoryString = `${(searchParams.primaryCategory || '').replace(/[\s/&]/g, "_")}_${searchParams.subCategoryList.map(s => s.replace(/[\s/&]/g, "_")).join('_')}`;
+    } else if (searchParams.subCategory) {
+        categoryString = `${(searchParams.primaryCategory || '').replace(/[\s/&]/g, "_")}_${searchParams.subCategory.replace(/[\s/&]/g, "_")}`;
+    } else {
+        categoryString = searchParams.primaryCategory?.replace(/[\s/&]/g, "_") || 'businesses';
+    }
 
     let locationString = searchParams.area || 'location';
     if (searchParams.postcodes && searchParams.postcodes.length > 0) {
@@ -365,7 +369,7 @@ async function downloadExcel(data, searchParams, fileSuffix, fileType, logEl, sp
             const postcodeToLookup = searchParams.postcodes[0];
             const response = await new Promise((resolve, reject) => {
                 geocoder.geocode({ address: `${postcodeToLookup}, ${countryName}` }, (results, status) => {
-                    if (status === 'OK' && results[0]) { resolve(results[0]); } 
+                    if (status === 'OK' && results[0]) { resolve(results[0]); }
                     else { reject(new Error(`Geocode failed: ${status}`)); }
                 });
             });
@@ -376,7 +380,7 @@ async function downloadExcel(data, searchParams, fileSuffix, fileType, logEl, sp
             locationString = searchParams.area;
         }
     }
-    
+
     const fileExtension = fileType === 'xlsx' ? 'xlsx' : 'csv';
     const fullFilename = `${date}_${company}_${categoryString}_${locationString}_${fileSuffix}.${fileExtension}`;
 
@@ -385,6 +389,6 @@ async function downloadExcel(data, searchParams, fileSuffix, fileType, logEl, sp
     } else {
         XLSX.writeFile(wb, fullFilename);
     }
-    
+
     logMessage(logEl, `${data.length} records exported to '${fullFilename}' successfully!`, 'success');
 }
