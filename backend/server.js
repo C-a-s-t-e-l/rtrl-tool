@@ -122,211 +122,127 @@ const runScrapeJob = async (jobId) => {
     .eq("id", jobId)
     .single();
   if (fetchError || !job) {
-    console.error(
-      `[Job: ${jobId}] Could not fetch job details. Aborting.`,
-      fetchError
-    );
+    console.error(`[Job: ${jobId}] Could not fetch job details. Aborting.`, fetchError);
     await updateJobStatus(jobId, "failed");
     return;
   }
 
   const { parameters } = job;
   const {
-    categoriesToLoop,
-    location,
-    postalCode,
-    country,
-    count,
-    businessNames,
-    anchorPoint,
-    radiusKm,
-    userEmail,
-    searchParamsForEmail,
+    categoriesToLoop, location, postalCode, country, count, businessNames, anchorPoint, radiusKm, userEmail, searchParamsForEmail,
   } = parameters;
 
   let browser = null;
   let allProcessedBusinesses = job.results || [];
-  const masterUrlMap = new Map();
+
+  // --- FAULT TOLERANCE CHANGE 1: LOAD PREVIOUSLY SAVED URLS ---
+  // We now initialize the master URL map directly from the database.
+  // This allows us to resume a partially completed URL collection.
+  const masterUrlMap = new Map(
+    (job.collected_urls || []).map(item => [item.url, item.category])
+  );
 
   try {
     const puppeteerArgs = [
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-      "--disable-dev-shm-usage",
-      "--disable-gpu",
-      "--no-zygote",
-      "--lang=en-US,en",
-      "--ignore-certificate-errors",
-      "--window-size=1920,1080",
+      "--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage",
+      "--disable-gpu", "--no-zygote", "--lang=en-US,en",
+      "--ignore-certificate-errors", "--window-size=1920,1080",
       "--disable-blink-features=AutomationControlled",
     ];
     const launchBrowser = async (logMessage) => {
       await addLog(jobId, logMessage);
-      const userDataDir = path.join(
-        __dirname,
-        "puppeteer_temp",
-        `user_data_${Date.now()}`
-      );
-      const launchArgs = [
-        ...puppeteerArgs,
-        `--user-data-dir=${userDataDir}`,
-        "--disable-extensions",
-        "--disable-component-extensions-with-background-pages",
-      ];
-      return await puppeteer.launch({
-        headless: true,
-        args: launchArgs,
-        protocolTimeout: 120000,
-        userDataDir: userDataDir,
-      });
+      const userDataDir = path.join(__dirname, "puppeteer_temp", `user_data_${Date.now()}`);
+      const launchArgs = [...puppeteerArgs, `--user-data-dir=${userDataDir}`, "--disable-extensions", "--disable-component-extensions-with-background-pages"];
+      return await puppeteer.launch({ headless: true, args: launchArgs, protocolTimeout: 120000, userDataDir: userDataDir });
     };
 
-    // --- PHASE 1: URL COLLECTION (RESUMABLE) ---
-    let collectedUrls = job.collected_urls || [];
-    if (collectedUrls.length === 0) {
-      await addLog(jobId, `--- Starting URL Collection Phase ---`);
-      browser = await launchBrowser(
-        "[Browser Lifecycle] Launching new browser for URL collection..."
-      );
-      let collectionPage = await browser.newPage();
-      await addLog(
-        jobId,
-        "[Setup] Created a dedicated page for URL collection."
-      );
-
-      const isIndividualSearch = businessNames && businessNames.length > 0;
-      const searchItems = isIndividualSearch
-        ? businessNames
-        : categoriesToLoop && categoriesToLoop.length > 0
-        ? categoriesToLoop
-        : [];
-
-      for (const item of searchItems) {
-        await addLog(
-          jobId,
-          isIndividualSearch
-            ? `\n--- Searching for business: "${item}" ---`
-            : `\n--- Searching for category: "${item}" ---`
-        );
-        let locationQueries = [];
-        if (anchorPoint && radiusKm)
-          locationQueries = await getSearchQueriesForRadius(
-            anchorPoint,
-            radiusKm,
-            country,
-            GOOGLE_MAPS_API_KEY,
-            jobId
-          );
-        else {
-          let searchAreas = [];
-          if (postalCode && postalCode.length > 0) searchAreas = postalCode;
-          else if (location) searchAreas = [location];
-          if (searchAreas.length === 0) {
-            await addLog(
-              jobId,
-              "No location/postcode provided, skipping item.",
-              "error"
-            );
-            continue;
-          }
-          for (const areaQuery of searchAreas) {
-            const baseQuery = isIndividualSearch
-              ? `${item}, ${areaQuery}, ${country}`
-              : `${item} in ${areaQuery}, ${country}`;
-            const queriesForArea = await getSearchQueriesForLocation(
-              baseQuery,
-              areaQuery,
-              country,
-              jobId,
-              isIndividualSearch
-            );
-            locationQueries.push(...queriesForArea);
-          }
-        }
-        for (const query of locationQueries) {
-          const finalSearchQuery =
-            isIndividualSearch || query.startsWith("near ")
-              ? `${item} ${query}`
-              : query;
-          const discoveredUrlsForThisSubArea = new Set();
-          await collectGoogleMapsUrlsContinuously(
-            collectionPage,
-            finalSearchQuery,
-            jobId,
-            discoveredUrlsForThisSubArea,
-            country
-          );
-          let initialSize = masterUrlMap.size;
-          discoveredUrlsForThisSubArea.forEach((url) => {
-            if (!masterUrlMap.has(url)) masterUrlMap.set(url, item);
-          });
-          let newUrlsFound = masterUrlMap.size - initialSize;
-          await addLog(
-            jobId,
-            `   -> Found ${newUrlsFound} new URLs in this area. Total unique URLs so far: ${masterUrlMap.size}`
-          );
-        }
-      }
-      if (collectionPage)
-        try {
-          await collectionPage.close();
-        } catch (e) {}
-      if (browser)
-        try {
-          await browser.close();
-        } catch (e) {}
-      browser = null; // Ensure browser is closed
-
-      collectedUrls = Array.from(masterUrlMap, ([url, specificCategory]) => ({
-        url,
-        category: specificCategory,
-      }));
-      await supabase
-        .from("jobs")
-        .update({ collected_urls: collectedUrls })
-        .eq("id", jobId);
-      await addLog(
-        jobId,
-        `\n--- URL Collection Complete. Found ${collectedUrls.length} total unique businesses. Saved progress. ---`
-      );
-    } else {
-      await addLog(
-        jobId,
-        `--- Resuming job with ${collectedUrls.length} previously collected URLs. Skipping URL collection phase. ---`
-      );
+    // --- PHASE 1: URL COLLECTION (NOW FULLY RESUMABLE) ---
+    await addLog(jobId, `--- Starting URL Collection Phase ---`);
+    if (masterUrlMap.size > 0) {
+      await addLog(jobId, `[Resume] Loaded ${masterUrlMap.size} URLs from previous session. Continuing collection.`);
     }
 
-    // --- PHASE 2: DATA PROCESSING ---
-    await addLog(jobId, `--- Starting Data Processing Phase ---`);
-    browser = await launchBrowser(
-      "[Browser Lifecycle] Launching new browser for data processing..."
-    );
+    browser = await launchBrowser("[Browser Lifecycle] Launching new browser for URL collection...");
+    let collectionPage = await browser.newPage();
+    await addLog(jobId, "[Setup] Created a dedicated page for URL collection.");
 
-    const finalCount =
-      businessNames && businessNames.length > 0 ? -1 : parameters.count || -1;
+    const isIndividualSearch = businessNames && businessNames.length > 0;
+    const searchItems = isIndividualSearch ? businessNames : (categoriesToLoop && categoriesToLoop.length > 0 ? categoriesToLoop : []);
+
+    for (const item of searchItems) {
+      await addLog(jobId, isIndividualSearch ? `\n--- Searching for business: "${item}" ---` : `\n--- Searching for category: "${item}" ---`);
+      
+      // This section remains the same...
+      let locationQueries = [];
+      if (anchorPoint && radiusKm)
+        locationQueries = await getSearchQueriesForRadius(anchorPoint, radiusKm, country, GOOGLE_MAPS_API_KEY, jobId);
+      else {
+        let searchAreas = [];
+        if (postalCode && postalCode.length > 0) searchAreas = postalCode;
+        else if (location) searchAreas = [location];
+        if (searchAreas.length === 0) {
+          await addLog(jobId, "No location/postcode provided, skipping item.", "error");
+          continue;
+        }
+        for (const areaQuery of searchAreas) {
+          const baseQuery = isIndividualSearch ? `${item}, ${areaQuery}, ${country}` : `${item} in ${areaQuery}, ${country}`;
+          const queriesForArea = await getSearchQueriesForLocation(baseQuery, areaQuery, country, jobId, isIndividualSearch);
+          locationQueries.push(...queriesForArea);
+        }
+      }
+
+      for (const query of locationQueries) {
+        const finalSearchQuery = isIndividualSearch || query.startsWith("near ") ? `${item} ${query}` : query;
+        const discoveredUrlsForThisSubArea = new Set();
+        await collectGoogleMapsUrlsContinuously(collectionPage, finalSearchQuery, jobId, discoveredUrlsForThisSubArea, country);
+        let initialSize = masterUrlMap.size;
+        discoveredUrlsForThisSubArea.forEach((url) => { if (!masterUrlMap.has(url)) masterUrlMap.set(url, item); });
+        let newUrlsFound = masterUrlMap.size - initialSize;
+        await addLog(jobId, `   -> Found ${newUrlsFound} new URLs in this area. Total unique URLs so far: ${masterUrlMap.size}`);
+      }
+
+      // --- FAULT TOLERANCE CHANGE 2: SAVE PROGRESS AFTER EACH MAJOR ITEM ---
+      // After processing all locations for a single category/business, we save our progress.
+      const currentUrlsToSave = Array.from(masterUrlMap, ([url, specificCategory]) => ({ url, category: specificCategory }));
+      const { error: saveError } = await supabase
+        .from("jobs")
+        .update({ collected_urls: currentUrlsToSave })
+        .eq("id", jobId);
+
+      if (saveError) {
+        await addLog(jobId, `[Warning] Failed to save URL collection progress: ${saveError.message}`, "error");
+      } else {
+        await addLog(jobId, `[Checkpoint] Saved ${currentUrlsToSave.length} total URLs to the database.`);
+      }
+    } // End of main `searchItems` loop
+
+    if (collectionPage) try { await collectionPage.close(); } catch (e) {}
+    if (browser) try { await browser.close(); } catch (e) {}
+    browser = null; 
+
+    const finalCollectedUrls = Array.from(masterUrlMap, ([url, specificCategory]) => ({ url, category: specificCategory }));
+    await addLog(jobId, `\n--- URL Collection Complete. Found ${finalCollectedUrls.length} total unique businesses. ---`);
+    
+    // --- PHASE 2: DATA PROCESSING (This part is mostly unchanged) ---
+    await addLog(jobId, `--- Starting Data Processing Phase ---`);
+    browser = await launchBrowser("[Browser Lifecycle] Launching new browser for data processing...");
+
+    const finalCount = businessNames && businessNames.length > 0 ? -1 : parameters.count || -1;
     const isSearchAll = finalCount === -1;
     const targetCount = isSearchAll ? Infinity : finalCount;
 
-    const processedUrls = new Set(
-      allProcessedBusinesses.map((b) => b.GoogleMapsURL)
-    );
-    const urlsToProcess = collectedUrls.filter(
-      (item) => !processedUrls.has(item.url)
-    );
+    const processedUrls = new Set(allProcessedBusinesses.map((b) => b.GoogleMapsURL));
+    // The list of URLs to process is now the final list from the resumable collection.
+    const urlsToProcess = finalCollectedUrls.filter(item => !processedUrls.has(item.url));
 
-    await addLog(
-      jobId,
-      `Total URLs to process: ${urlsToProcess.length}. Previously processed: ${processedUrls.size}.`
-    );
+    await addLog(jobId, `Total URLs to process: ${urlsToProcess.length}. Previously processed: ${processedUrls.size}.`);
 
-    const addedBusinessKeys = new Set(
-      allProcessedBusinesses.map((b) => {
-        const name = b.BusinessName?.toLowerCase().trim() || "";
-        const phone = normalizePhoneNumber(b.Phone);
-        if (phone) return `phone::${name}::${phone}`;
-        return `name_only::${name}`; // Fallback
-      })
-    );
+    const addedBusinessKeys = new Set(allProcessedBusinesses.map((b) => {
+      const name = b.BusinessName?.toLowerCase().trim() || "";
+      const phone = normalizePhoneNumber(b.Phone);
+      if (phone) return `phone::${name}::${phone}`;
+      return `name_only::${name}`;
+    }));
 
     const CONCURRENCY = 3;
     const BROWSER_RESTART_THRESHOLD = 50;
@@ -335,18 +251,10 @@ const runScrapeJob = async (jobId) => {
     for (let i = 0; i < urlsToProcess.length; i += CONCURRENCY) {
       if (allProcessedBusinesses.length >= targetCount) break;
 
-      if (
-        processedInThisSession > 0 &&
-        processedInThisSession % BROWSER_RESTART_THRESHOLD === 0
-      ) {
-        await addLog(
-          jobId,
-          `[System] Browser has processed ${processedInThisSession} items. Restarting for stability...`
-        );
+      if (processedInThisSession > 0 && processedInThisSession % BROWSER_RESTART_THRESHOLD === 0) {
+        await addLog(jobId, `[System] Browser has processed ${processedInThisSession} items. Restarting for stability...`);
         await browser.close();
-        browser = await launchBrowser(
-          "[System] New browser instance is ready."
-        );
+        browser = await launchBrowser("[System] New browser instance is ready.");
       }
 
       const batch = urlsToProcess.slice(i, i + CONCURRENCY);
@@ -355,54 +263,27 @@ const runScrapeJob = async (jobId) => {
         try {
           const scrapingTask = async () => {
             detailPage = await browser.newPage();
-            await detailPage.setUserAgent(
-              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36"
-            );
+            await detailPage.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36");
             await detailPage.setRequestInterception(true);
             detailPage.on("request", (req) => {
-              if (
-                ["image", "stylesheet", "font", "media"].includes(
-                  req.resourceType()
-                )
-              )
-                req.abort();
+              if (["image", "stylesheet", "font", "media"].includes(req.resourceType())) req.abort();
               else req.continue();
             });
-            let googleData = await scrapeGoogleMapsDetails(
-              detailPage,
-              processItem.url,
-              jobId,
-              country
-            );
+            let googleData = await scrapeGoogleMapsDetails(detailPage, processItem.url, jobId, country);
             if (!googleData || !googleData.BusinessName) return null;
             let websiteData = {};
-            if (googleData.Website)
-              websiteData = await scrapeWebsiteForGoldData(
-                detailPage,
-                googleData.Website,
-                jobId
-              );
+            if (googleData.Website) websiteData = await scrapeWebsiteForGoldData(detailPage, googleData.Website, jobId);
             const fullBusinessData = { ...googleData, ...websiteData };
-            fullBusinessData.Category =
-              businessNames && businessNames.length > 0
-                ? googleData.ScrapedCategory || "N/A"
-                : processItem.category || "N/A";
+            fullBusinessData.Category = businessNames && businessNames.length > 0 ? googleData.ScrapedCategory || "N/A" : processItem.category || "N/A";
             return fullBusinessData;
           };
           return await promiseWithTimeout(scrapingTask(), 120000);
         } catch (err) {
-          await addLog(
-            jobId,
-            `A task for ${processItem.url} failed or timed out: ${err.message}. Skipping.`,
-            "error"
-          );
+          await addLog(jobId, `A task for ${processItem.url} failed or timed out: ${err.message}. Skipping.`, "error");
           return null;
         } finally {
           processedInThisSession++;
-          if (detailPage)
-            try {
-              await detailPage.close();
-            } catch (e) {}
+          if (detailPage) try { await detailPage.close(); } catch (e) {}
         }
       });
 
@@ -413,87 +294,48 @@ const runScrapeJob = async (jobId) => {
           const phone = normalizePhoneNumber(businessData.Phone);
           const address = normalizeAddress(businessData.StreetAddress);
           const email = businessData.Email1?.toLowerCase().trim() || "";
-          let uniqueIdentifier = "",
-            reason = "";
-          if (phone) {
-            uniqueIdentifier = `phone::${name}::${phone}`;
-            reason = `by Phone (${phone})`;
-          } else if (address) {
-            uniqueIdentifier = `address::${name}::${address}`;
-            reason = `by Address (${businessData.StreetAddress})`;
-          } else if (email) {
-            uniqueIdentifier = `email::${name}::${email}`;
-            reason = `by Email (${email})`;
-          } else {
-            uniqueIdentifier = `name_only::${name}`;
-            reason = "by Name Only";
-          }
+          let uniqueIdentifier = "", reason = "";
+          if (phone) { uniqueIdentifier = `phone::${name}::${phone}`; reason = `by Phone (${phone})`; }
+          else if (address) { uniqueIdentifier = `address::${name}::${address}`; reason = `by Address (${businessData.StreetAddress})`; }
+          else if (email) { uniqueIdentifier = `email::${name}::${email}`; reason = `by Email (${email})`; }
+          else { uniqueIdentifier = `name_only::${name}`; reason = "by Name Only"; }
 
           if (addedBusinessKeys.has(uniqueIdentifier)) {
-            await addLog(
-              jobId,
-              `-> SKIPPED (Duplicate ${reason}): ${businessData.BusinessName}`
-            );
+            await addLog(jobId, `-> SKIPPED (Duplicate ${reason}): ${businessData.BusinessName}`);
           } else {
             addedBusinessKeys.add(uniqueIdentifier);
             allProcessedBusinesses.push(businessData);
             await appendJobResult(jobId, businessData);
-            const status = isSearchAll
-              ? `(Total Added: ${allProcessedBusinesses.length})`
-              : `(${allProcessedBusinesses.length}/${finalCount})`;
-            await addLog(
-              jobId,
-              `-> ADDED: ${businessData.BusinessName}. ${status}`
-            );
+            const status = isSearchAll ? `(Total Added: ${allProcessedBusinesses.length})` : `(${allProcessedBusinesses.length}/${finalCount})`;
+            await addLog(jobId, `-> ADDED: ${businessData.BusinessName}. ${status}`);
           }
         }
       }
       io.to(jobId).emit("progress_update", {
         processed: processedUrls.size + i + batch.length,
-        discovered: collectedUrls.length,
+        discovered: finalCollectedUrls.length,
         added: allProcessedBusinesses.length,
         target: finalCount,
       });
     }
 
-    await addLog(
-      jobId,
-      `Scraping completed. Found and processed a total of ${allProcessedBusinesses.length} businesses.`
-    );
+    await addLog(jobId, `Scraping completed. Found and processed a total of ${allProcessedBusinesses.length} businesses.`);
     if (userEmail && allProcessedBusinesses.length > 0) {
-      await addLog(
-        jobId,
-        `[Email] Preparing to send results to ${userEmail}...`
-      );
+      await addLog(jobId, `[Email] Preparing to send results to ${userEmail}...`);
       const mainSearchArea = searchParamsForEmail.area || "selected_area";
       const dataForEmail = allProcessedBusinesses.map((business) => ({
-        ...business,
-        SuburbArea: business.Suburb || mainSearchArea.replace(/_/g, " "),
+        ...business, SuburbArea: business.Suburb || mainSearchArea.replace(/_/g, " "),
       }));
-      const emailStatus = await sendResultsByEmail(
-        userEmail,
-        dataForEmail,
-        searchParamsForEmail
-      );
+      const emailStatus = await sendResultsByEmail(userEmail, dataForEmail, searchParamsForEmail);
       await addLog(jobId, `[Email] ${emailStatus}`);
     }
     await updateJobStatus(jobId, "completed");
   } catch (error) {
-    console.error(
-      `[Job: ${jobId}] A critical error occurred during scraping:`,
-      error
-    );
-    await addLog(
-      jobId,
-      `[ERROR] Critical failure: ${error.message.split("\n")[0]}`,
-      "error"
-    );
+    console.error(`[Job: ${jobId}] A critical error occurred during scraping:`, error);
+    await addLog(jobId, `[ERROR] Critical failure: ${error.message.split("\n")[0]}`, "error");
     await updateJobStatus(jobId, "failed");
   } finally {
-    if (browser)
-      try {
-        await browser.close();
-      } catch (e) {}
+    if (browser) try { await browser.close(); } catch (e) {}
   }
 };
 
@@ -523,7 +365,7 @@ const recoverStuckJobs = async () => {
 };
 
 io.on("connection", (socket) => {
-  console.log(`Client connected: ${socket.id}`);
+console.log(`[${new Date().toLocaleString()}] [Connection] Client connected: ${socket.id}`);
   socket.on("start_scrape_job", async (payload) => {
     const { authToken, ...scrapeParams } = payload;
     if (!authToken)
@@ -581,9 +423,9 @@ io.on("connection", (socket) => {
       );
     }
   });
-  socket.on("disconnect", () =>
-    console.log(`Client disconnected: ${socket.id}`)
-  );
+ socket.on("disconnect", () => {
+    console.log(`[${new Date().toLocaleString()}] [Disconnection] Client disconnected: ${socket.id}`);
+  });
 });
 
 app.use(cors());

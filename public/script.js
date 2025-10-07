@@ -56,6 +56,16 @@ function initializeMainApp() {
     extraHeaders: { "ngrok-skip-browser-warning": "true" },
   });
 
+    socket.on('connect', () => {
+    logMessage(elements.logEl, "Successfully connected to the server. Ready.", "success");
+  });
+
+  socket.on('disconnect', (reason) => {
+    // This event fires when the connection is lost.
+    logMessage(elements.logEl, "Connection to server lost. Attempting to reconnect...", "error");
+    console.error('Socket disconnected due to:', reason); 
+  });
+
   const elements = {
     startButton: document.getElementById("startButton"),
     ratingFilter: document.getElementById("ratingFilter"),
@@ -315,14 +325,17 @@ function initializeMainApp() {
     if (error) console.error("Error logging out:", error.message);
   });
 
-  socket.on("job_created", ({ jobId }) => {
+ socket.on("job_created", ({ jobId }) => {
     logMessage(
       elements.logEl,
       `Job successfully created with ID: ${jobId}. It is now in the queue.`,
       "success"
     );
     currentJobId = jobId;
-    localStorage.setItem("rtrl_active_job_id", jobId);
+    if (currentUserSession && currentUserSession.user) {
+        const userId = currentUserSession.user.id;
+        localStorage.setItem(`rtrl_last_job_id_${userId}`, jobId);
+    }
     allCollectedData = [];
     window.rtrlApp.applyFilterAndSort();
     if (subscribedJobId !== currentJobId) {
@@ -360,35 +373,34 @@ socket.on("job_update", (update) => {
     }
   });
 
+  
+
 socket.on('job_state', (job) => {
       if (!job) {
-        logMessage(elements.logEl, "Could not retrieve previous job state.", 'error');
-        localStorage.removeItem('rtrl_active_job_id');
+        logMessage(elements.logEl, "Could not retrieve job state. Ready for a new search.", 'error');
         return;
       }
-      logMessage(elements.logEl, "Successfully reconnected and restored full job state.", 'success');
-      
-      // --- START DIAGNOSTIC LOGGING ---
-      console.log("Received full job state on reconnect:", job);
-      console.log("Historical results from server:", job.results);
-      console.log(`Server sent ${job.results ? job.results.length : 0} historical results.`);
-      // --- END DIAGNOSTIC LOGGING ---
-
       allCollectedData.length = 0;
       if (job.results && job.results.length > 0) {
           allCollectedData.push(...job.results);
       }
-      
-      // --- MORE DIAGNOSTIC LOGGING ---
-      console.log(`'allCollectedData' array now contains ${allCollectedData.length} items.`);
-      // --- END DIAGNOSTIC LOGGING ---
+      window.rtrlApp.applyFilterAndSort(); 
+      if (allCollectedData.length > 0) {
+        elements.collectedDataCard.classList.add("has-results");
+      }
 
-      elements.logEl.textContent = job.logs.join('\n');
-      elements.logEl.scrollTop = elements.logEl.scrollHeight;
-      
-      window.rtrlApp.applyFilterAndSort();
-      if(allCollectedData.length > 0) elements.collectedDataCard.classList.add("has-results");
-      setUiState(job.status === 'running', getUiElementsForStateChange());
+      const isRunning = job.status === 'running' || job.status === 'queued';
+
+      if (isRunning) {
+          logMessage(elements.logEl, "Successfully reconnected and restored active job state.", 'success');
+          elements.logEl.textContent = job.logs.join('\n');
+          elements.logEl.scrollTop = elements.logEl.scrollHeight;
+      } else {
+          elements.logEl.innerHTML = ''; 
+          logMessage(elements.logEl, "Waiting to start research...", "default");
+      }
+
+      setUiState(isRunning, getUiElementsForStateChange());
   });
 
   socket.on("business_found", (business) => {
@@ -424,7 +436,8 @@ socket.on('job_state', (job) => {
       startButton.disabled = false;
       startButton.textContent = "Start Research";
 
-      const previousJobId = localStorage.getItem("rtrl_active_job_id");
+      const userId = session.user.id;
+      const previousJobId = localStorage.getItem(`rtrl_last_job_id_${userId}`);
       if (previousJobId) {
         currentJobId = previousJobId;
         if (subscribedJobId !== currentJobId) {
