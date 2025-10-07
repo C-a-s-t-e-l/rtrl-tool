@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="icon" type="image/x-icon" href="https://cdn-icons-png.flaticon.com/512/2248/2248814.png">
     <title>RTRL Property Prospector</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -29,6 +30,11 @@
             <div class="header-text">
                 <h1>RTRL Property Prospector</h1>
                 <p>Intelligent Client Prospecting for Commercial Real Estate</p>
+            </div>
+            <div id="auth-container" style="margin-left: auto;">
+                <span id="user-info" style="display: none; margin-right: 15px; font-weight: 600;"></span>
+                <button id="login-button" class="btn btn-secondary">Login with Google</button>
+                <button id="logout-button" class="btn btn-secondary" style="display: none;">Logout</button>
             </div>
         </header>
 
@@ -124,17 +130,16 @@
                 
            
                 <hr class="separator">
-<div class="form-group">
-    <label for="userEmailInput"><i class="fas fa-envelope"></i> Email Results To (Optional)</label>
-    
-    <div class="input-with-helper">
-        <input type="email" id="userEmailInput" placeholder="your.email@example.com" autocomplete="email">
-        <small class="form-text">If provided, files will be emailed upon completion.</small>
-    </div>
-  
-</div>
+                <div class="form-group">
+                    <label for="userEmailInput"><i class="fas fa-envelope"></i> Email Results To (Optional)</label>
+                    
+                    <div class="input-with-helper">
+                        <input type="email" id="userEmailInput" placeholder="your.email@example.com" autocomplete="email">
+                        <small class="form-text">If provided, files will be emailed upon completion.</small>
+                    </div>
+                
+                </div>
                
-
                 <button id="startButton" class="btn btn-primary"><i class="fas fa-play"></i> Start Research</button>
             </div>
 
@@ -152,64 +157,64 @@
                     <pre id="log" class="log-console">Waiting to start research...</pre>
                 </div>
                 
-<div class="collected-data card" id="collectedDataCard">
-    <h2>Collected Data</h2>
+                <div class="collected-data card" id="collectedDataCard">
+                    <h2>Collected Data</h2>
 
-    <div class="download-buttons-group">
-        <button id="downloadFullExcelButton" class="btn btn-success" disabled>Download Selected (.xlsx)</button>
-        <button id="downloadNotifyreCSVButton" class="btn btn-secondary" disabled>Generate SMS List (.csv)</button>
-        <button id="downloadContactsCSVButton" class="btn btn-secondary" disabled>Generate Contacts List (.csv)</button>
-    </div>
+                    <div class="download-buttons-group">
+                        <button id="downloadFullExcelButton" class="btn btn-success" disabled>Download Selected (.xlsx)</button>
+                        <button id="downloadNotifyreCSVButton" class="btn btn-secondary" disabled>Generate SMS List (.csv)</button>
+                        <button id="downloadContactsCSVButton" class="btn btn-secondary" disabled>Generate Contacts List (.csv)</button>
+                    </div>
 
-    <div class="placeholder-text">No data collected yet. Start a research to see results here.</div>
-    
-    <div class="filter-bar">
-        <i class="fas fa-filter"></i>
-        <input type="text" id="filterInput" placeholder="Filter by name, suburb, address...">
-        
-        <select id="ratingFilter" class="filter-control">
-            <option value="">Min Rating</option>
-            <option value="4.5">4.5+ stars</option>
-            <option value="4.0">4.0+ stars</option>
-            <option value="3.5">3.5+ stars</option>
-            <option value="3.0">3.0+ stars</option>
-        </select>
-        <select id="reviewCountFilter" class="filter-control">
-            <option value="">All Reviews</option>
-            <option value=">50">More than 50</option>
-            <option value=">100">More than 100</option>
-            <option value=">250">More than 250</option>
-        </select>
-    </div>
+                    <div class="placeholder-text">No data collected yet. Start a research to see results here.</div>
+                    
+                    <div class="filter-bar">
+                        <i class="fas fa-filter"></i>
+                        <input type="text" id="filterInput" placeholder="Filter by name, suburb, address...">
+                        
+                        <select id="ratingFilter" class="filter-control">
+                            <option value="">Min Rating</option>
+                            <option value="4.5">4.5+ stars</option>
+                            <option value="4.0">4.0+ stars</option>
+                            <option value="3.5">3.5+ stars</option>
+                            <option value="3.0">3.0+ stars</option>
+                        </select>
+                        <select id="reviewCountFilter" class="filter-control">
+                            <option value="">All Reviews</option>
+                            <option value=">50">More than 50</option>
+                            <option value=">100">More than 100</option>
+                            <option value=">250">More than 250</option>
+                        </select>
+                    </div>
 
-    <div class="results-grid-container">
-        <div class="results-grid" id="resultsGrid">
-            <div class="grid-header" id="resultsTableHeader">
-                <div class="checkbox-column"><input type="checkbox" id="selectAllCheckbox"></div>
-                <div class="sortable" data-sort-key="BusinessName">Business</div>
-                <div>Category</div>
-                <div class="sortable" data-sort-key="StarRating">Rating</div>
-                <div class="sortable" data-sort-key="ReviewCount">Reviews</div>
-                <div class="sortable" data-sort-key="SuburbArea">Suburb</div>
-                <div>Address</div>
-                <div>Website</div>
-                <div>Owner</div>
-                <div>Email 1</div>
-                <div>Email 2</div>
-                <div>Email 3</div>
-                <div>Phone</div>
-                <div>Insta</div>
-                <div>FB</div>
-                <div>Maps</div>
-            </div>
-            <div class="grid-body" id="resultsTableBody">
-            </div>
-        </div>
-    </div>
-</div>
+                    <div class="results-grid-container">
+                        <div class="results-grid" id="resultsGrid">
+                            <div class="grid-header" id="resultsTableHeader">
+                                <div class="checkbox-column"><input type="checkbox" id="selectAllCheckbox"></div>
+                                <div class="sortable" data-sort-key="BusinessName">Business</div>
+                                <div>Category</div>
+                                <div class="sortable" data-sort-key="StarRating">Rating</div>
+                                <div class="sortable" data-sort-key="ReviewCount">Reviews</div>
+                                <div class="sortable" data-sort-key="SuburbArea">Suburb</div>
+                                <div>Address</div>
+                                <div>Website</div>
+                                <div>Owner</div>
+                                <div>Email 1</div>
+                                <div>Email 2</div>
+                                <div>Email 3</div>
+                                <div>Phone</div>
+                                <div>Insta</div>
+                                <div>FB</div>
+                                <div>Maps</div>
+                            </div>
+                            <div class="grid-body" id="resultsTableBody">
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </main>
-                <div class="bottom-spacer"></div>
+        <div class="bottom-spacer"></div>
         <footer>
             <p>&copy; <span id="currentYear"></span> RTRL Property. All rights reserved.</p>
         </footer>
