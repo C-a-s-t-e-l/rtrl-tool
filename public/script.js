@@ -380,10 +380,19 @@ socket.on('job_state', (job) => {
         logMessage(elements.logEl, "Could not retrieve job state. Ready for a new search.", 'error');
         return;
       }
+
       allCollectedData.length = 0;
       if (job.results && job.results.length > 0) {
           allCollectedData.push(...job.results);
       }
+
+      if (job.parameters && job.parameters.searchParamsForEmail) {
+          window.rtrlApp.state.currentSearchParameters = job.parameters.searchParamsForEmail;
+      } else {
+  
+          window.rtrlApp.state.currentSearchParameters = {};
+      }
+
       window.rtrlApp.applyFilterAndSort(); 
       if (allCollectedData.length > 0) {
         elements.collectedDataCard.classList.add("has-results");
@@ -392,11 +401,12 @@ socket.on('job_state', (job) => {
       const isRunning = job.status === 'running' || job.status === 'queued';
 
       if (isRunning) {
+   
           logMessage(elements.logEl, "Successfully reconnected and restored active job state.", 'success');
           elements.logEl.textContent = job.logs.join('\n');
           elements.logEl.scrollTop = elements.logEl.scrollHeight;
       } else {
-          elements.logEl.innerHTML = ''; 
+          elements.logEl.innerHTML = '';
           logMessage(elements.logEl, "Waiting to start research...", "default");
       }
 
