@@ -342,7 +342,7 @@ function initializeMainApp() {
     setUiState(false, getUiElementsForStateChange());
   });
 
-  socket.on("job_update", (update) => {
+socket.on("job_update", (update) => {
     if (update.status) {
       logMessage(
         elements.logEl,
@@ -354,14 +354,13 @@ function initializeMainApp() {
           ? "fas fa-spinner fa-spin"
           : "fas fa-check-circle";
       if (update.status === "completed" || update.status === "failed") {
-        localStorage.removeItem("rtrl_active_job_id");
         currentJobId = null;
         setUiState(false, getUiElementsForStateChange());
       }
     }
   });
 
-  socket.on('job_state', (job) => {
+socket.on('job_state', (job) => {
       if (!job) {
         logMessage(elements.logEl, "Could not retrieve previous job state.", 'error');
         localStorage.removeItem('rtrl_active_job_id');
@@ -369,13 +368,21 @@ function initializeMainApp() {
       }
       logMessage(elements.logEl, "Successfully reconnected and restored full job state.", 'success');
       
-      // --- THE DEFINITIVE FIX FOR THE VISUAL/DOWNLOAD BUG ---
+      // --- START DIAGNOSTIC LOGGING ---
+      console.log("Received full job state on reconnect:", job);
+      console.log("Historical results from server:", job.results);
+      console.log(`Server sent ${job.results ? job.results.length : 0} historical results.`);
+      // --- END DIAGNOSTIC LOGGING ---
+
       allCollectedData.length = 0;
       if (job.results && job.results.length > 0) {
           allCollectedData.push(...job.results);
       }
-      // --- END OF FIX ---
       
+      // --- MORE DIAGNOSTIC LOGGING ---
+      console.log(`'allCollectedData' array now contains ${allCollectedData.length} items.`);
+      // --- END DIAGNOSTIC LOGGING ---
+
       elements.logEl.textContent = job.logs.join('\n');
       elements.logEl.scrollTop = elements.logEl.scrollHeight;
       

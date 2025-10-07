@@ -75,11 +75,43 @@ const addLog = async (jobId, message) => {
 };
 
 const appendJobResult = async (jobId, newResult) => {
-  await supabase.rpc("append_result", {
-    job_id: jobId,
-    new_result: JSON.stringify(newResult),
-  });
-  io.to(jobId).emit("business_found", newResult);
+  try {
+    // Step 1: READ the current results from the database.
+    const { data: currentJob, error: fetchError } = await supabase
+      .from("jobs")
+      .select("results")
+      .eq("id", jobId)
+      .single();
+
+    if (fetchError) {
+      throw new Error(`Failed to fetch current results: ${fetchError.message}`);
+    }
+
+    // Step 2: MODIFY the results array in memory.
+    // This handles the case where 'results' is null for a new job.
+    const existingResults = currentJob.results || [];
+    const updatedResults = [...existingResults, newResult];
+
+    // Step 3: WRITE the new, complete array back to the database.
+    const { error: updateError } = await supabase
+      .from("jobs")
+      .update({ results: updatedResults })
+      .eq("id", jobId);
+
+    if (updateError) {
+      throw new Error(`Failed to save updated results: ${updateError.message}`);
+    }
+
+    // If everything was successful, now we notify the client.
+    io.to(jobId).emit("business_found", newResult);
+
+  } catch (error) {
+    console.error(`[appendJobResult Error] For job ${jobId}:`, error);
+    // Even if saving fails, we can still send the result to the active user
+    // so their live view updates, but we'll log the critical save error.
+    io.to(jobId).emit("business_found", newResult);
+    await addLog(jobId, `[ERROR] Failed to permanently save result: ${newResult.BusinessName}. It will be missing on reload.`);
+  }
 };
 
 const runScrapeJob = async (jobId) => {
