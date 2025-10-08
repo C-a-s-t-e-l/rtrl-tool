@@ -323,10 +323,15 @@ const runScrapeJob = async (jobId) => {
     if (userEmail && allProcessedBusinesses.length > 0) {
       await addLog(jobId, `[Email] Preparing to send results to ${userEmail}...`);
       const mainSearchArea = searchParamsForEmail.area || "selected_area";
-      const dataForEmail = allProcessedBusinesses.map((business) => ({
+const dataForEmail = allProcessedBusinesses.map((business) => ({
         ...business, SuburbArea: business.Suburb || mainSearchArea.replace(/_/g, " "),
       }));
-      const emailStatus = await sendResultsByEmail(userEmail, dataForEmail, searchParamsForEmail);
+      const emailParams = { ...searchParamsForEmail };
+      if (parameters.radiusKm) {
+        emailParams.radiusKm = parameters.radiusKm;
+      }
+
+      const emailStatus = await sendResultsByEmail(userEmail, dataForEmail, emailParams);
       await addLog(jobId, `[Email] ${emailStatus}`);
     }
     await updateJobStatus(jobId, "completed");

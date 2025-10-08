@@ -69,11 +69,22 @@ async function sendResultsByEmail(recipientEmail, rawData, searchParams) {
             ? searchParams.subCategoryList.join(', ') 
             : (searchParams.subCategory || 'N/A');
         
+let locationSummary;
+        if (searchParams.radiusKm) {
+            // This is a radius search
+            locationSummary = `
+- Search Center: ${searchParams.area ? searchParams.area.replace(/_/g, ' ') : 'N/A'}
+- Radius: ${searchParams.radiusKm} km`;
+        } else {
+            // This is a standard location/postcode search
+            locationSummary = `- Location: ${searchParams.area ? searchParams.area.replace(/_/g, ' ') : 'N/A'}`;
+        }
+        
         const searchSummary = `
 Search Parameters:
 - Category/Keyword: ${searchParams.customCategory || searchParams.primaryCategory || 'N/A'}
 - Sub-Categories: ${subCategoryText}
-- Location: ${searchParams.area ? searchParams.area.replace(/_/g, ' ') : 'N/A'}
+${locationSummary}
 - Country: ${searchParams.country || 'N/A'}
         `;
 
