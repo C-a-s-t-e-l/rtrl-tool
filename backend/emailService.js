@@ -21,7 +21,7 @@ async function sendResultsByEmail(recipientEmail, rawData, searchParams) {
     console.log(`[Email] Generating files and preparing to send results to ${recipientEmail}...`);
 
     try {
-        const allFiles = generateFileData(rawData, searchParams);
+        const allFiles = await generateFileData(rawData, searchParams);
 
         const attachments = [];
         
@@ -61,6 +61,14 @@ async function sendResultsByEmail(recipientEmail, rawData, searchParams) {
             });
         }
 
+        if (allFiles.contactsSplits.data) {
+            attachments.push({
+                filename: allFiles.contactsSplits.filename,
+                content: allFiles.contactsSplits.data,
+                contentType: 'application/zip',
+            });
+        }
+
         if (attachments.length === 0) {
             return 'No data matched the criteria for any file type. No email sent.';
         }
@@ -69,22 +77,11 @@ async function sendResultsByEmail(recipientEmail, rawData, searchParams) {
             ? searchParams.subCategoryList.join(', ') 
             : (searchParams.subCategory || 'N/A');
         
-let locationSummary;
-        if (searchParams.radiusKm) {
-            // This is a radius search
-            locationSummary = `
-- Search Center: ${searchParams.area ? searchParams.area.replace(/_/g, ' ') : 'N/A'}
-- Radius: ${searchParams.radiusKm} km`;
-        } else {
-            // This is a standard location/postcode search
-            locationSummary = `- Location: ${searchParams.area ? searchParams.area.replace(/_/g, ' ') : 'N/A'}`;
-        }
-        
         const searchSummary = `
 Search Parameters:
 - Category/Keyword: ${searchParams.customCategory || searchParams.primaryCategory || 'N/A'}
 - Sub-Categories: ${subCategoryText}
-${locationSummary}
+- Location: ${searchParams.area ? searchParams.area.replace(/_/g, ' ') : 'N/A'}
 - Country: ${searchParams.country || 'N/A'}
         `;
 

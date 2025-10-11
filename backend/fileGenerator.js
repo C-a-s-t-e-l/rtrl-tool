@@ -1,3 +1,6 @@
+const JSZip = require('jszip');
+const XLSX = require('xlsx');
+
 function generateFilename(searchParams, fileSuffix, fileExtension) {
     const date = new Date().toISOString().split('T')[0].replace(/-/g, '');
     const company = 'rtrl';
@@ -24,7 +27,7 @@ const createLinkObject = (url) => {
     return { f: formula, v: url, t: 's' };
 };
 
-function generateFileData(rawData, searchParams) {
+async function generateFileData(rawData, searchParams) {
 
     const date = new Date().toISOString().split('T')[0].replace(/-/g, '');
     let categoryString;
@@ -104,6 +107,32 @@ function generateFileData(rawData, searchParams) {
                 "email_3": d.Email3 || ''
             };
         });
+        
+    const SPLIT_SIZE = 18;
+    let zipBuffer = null;
+
+    if (contactsData.length > 0) {
+        const zip = new JSZip();
+        const headers = ["Company", "Address_Suburb", "Address_State", "Notes", "facebook", "instagram", "linkedin", "email_1", "email_2", "email_3"];
+
+        for (let i = 0; i < contactsData.length; i += SPLIT_SIZE) {
+            const chunk = contactsData.slice(i, i + SPLIT_SIZE);
+            const splitIndex = Math.floor(i / SPLIT_SIZE) + 1;
+            
+            const splitNotesContent = `${notesContent}_split_${splitIndex}`;
+            const chunkWithSplitNotes = chunk.map(item => ({ ...item, Notes: splitNotesContent }));
+            
+            const splitFilename = generateFilename(searchParams, `emails_split_${splitIndex}`, 'csv');
+            
+            const ws = XLSX.utils.json_to_sheet(chunkWithSplitNotes, { header: headers });
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, `Contacts Split ${splitIndex}`);
+            const csvBuffer = XLSX.write(wb, { bookType: 'csv', type: 'buffer' });
+            
+            zip.file(splitFilename, csvBuffer);
+        }
+        zipBuffer = await zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" });
+    }
 
     return {
         full: {
@@ -120,6 +149,10 @@ function generateFileData(rawData, searchParams) {
             data: contactsData,
             filename: generateFilename(searchParams, 'emails', 'csv'),
             headers: ["Company", "Address_Suburb", "Address_State", "Notes", "facebook", "instagram", "linkedin", "email_1", "email_2", "email_3"]
+        },
+        contactsSplits: {
+            data: zipBuffer,
+            filename: generateFilename(searchParams, 'emails_splits', 'zip')
         }
     };
 }
