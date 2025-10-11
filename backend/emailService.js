@@ -60,7 +60,7 @@ async function sendResultsByEmail(recipientEmail, rawData, searchParams) {
                 contentType: 'text/csv',
             });
         }
-
+        
         if (allFiles.contactsSplits.data) {
             attachments.push({
                 filename: allFiles.contactsSplits.filename,
@@ -77,11 +77,20 @@ async function sendResultsByEmail(recipientEmail, rawData, searchParams) {
             ? searchParams.subCategoryList.join(', ') 
             : (searchParams.subCategory || 'N/A');
         
+        let locationSummary;
+        if (searchParams.radiusKm) {
+            locationSummary = `
+- Search Center: ${searchParams.area ? searchParams.area.replace(/_/g, ' ') : 'N/A'}
+- Radius: ${searchParams.radiusKm} km`;
+        } else {
+            locationSummary = `- Location: ${searchParams.area ? searchParams.area.replace(/_/g, ' ') : 'N/A'}`;
+        }
+        
         const searchSummary = `
 Search Parameters:
 - Category/Keyword: ${searchParams.customCategory || searchParams.primaryCategory || 'N/A'}
 - Sub-Categories: ${subCategoryText}
-- Location: ${searchParams.area ? searchParams.area.replace(/_/g, ' ') : 'N/A'}
+${locationSummary}
 - Country: ${searchParams.country || 'N/A'}
         `;
 

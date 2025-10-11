@@ -451,14 +451,26 @@ app.get(/(.*)/, (req, res) => {
   });
 });
 
+const cleanupTempDirs = () => {
+    const tempDirPath = path.join(__dirname, "puppeteer_temp");
+    if (fs.existsSync(tempDirPath)) {
+        console.log("[System] Cleaning up old Puppeteer temporary directories...");
+        fs.rm(tempDirPath, { recursive: true, force: true }, (err) => {
+            if (err) {
+                console.error("[System] Error cleaning up temp directories:", err);
+            } else {
+                console.log("[System] Temporary directory cleanup complete.");
+            }
+        });
+    }
+};
+
 server.listen(PORT, () => {
   console.log(`Scraping server running on http://localhost:${PORT}`);
   recoverStuckJobs();
 });
 
-// --- ALL ORIGINAL UTILITY AND SCRAPING FUNCTIONS ---
-// (Functions like normalizeStringForKey, getSearchQueriesForRadius, etc. are here)
-// Note: They are now passed `jobId` to use the `addLog` function.
+
 
 const countryBoundingBoxes = {
   australia: { minLat: -44.0, maxLat: -10.0, minLng: 112.0, maxLng: 154.0 },
