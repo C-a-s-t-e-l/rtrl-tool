@@ -1,5 +1,3 @@
-// public/script.js (Complete and Final Version)
-
 const BACKEND_URL = "https://brieflessly-unlovely-constance.ngrok-free.app";
 
 const SUPABASE_URL = "https://qbktnernawpprarckvzx.supabase.co";
@@ -52,9 +50,8 @@ function initializeMainApp() {
     }
   }
 
-const socket = io(BACKEND_URL, {
+  const socket = io(BACKEND_URL, {
     extraHeaders: { "ngrok-skip-browser-warning": "true" },
-
   });
 
     socket.on('connect', () => {
