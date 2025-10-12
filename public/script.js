@@ -50,8 +50,10 @@ function initializeMainApp() {
     }
   }
 
-  const socket = io(BACKEND_URL, {
+const socket = io(BACKEND_URL, {
     extraHeaders: { "ngrok-skip-browser-warning": "true" },
+    transports: ['websocket'], 
+    timeout: 70000,            
   });
 
     socket.on('connect', () => {
@@ -59,7 +61,6 @@ function initializeMainApp() {
   });
 
   socket.on('disconnect', (reason) => {
-    // This event fires when the connection is lost.
     logMessage(elements.logEl, "Connection to server lost. Attempting to reconnect...", "error");
     console.error('Socket disconnected due to:', reason); 
   });

@@ -22,6 +22,9 @@ const server = http.createServer(app);
 const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:3000";
 const io = new Server(server, {
   cors: { origin: FRONTEND_URL, methods: ["GET", "POST"] },
+  transports: ['websocket'], 
+  pingInterval: 25000,
+  pingTimeout: 60000,
 });
 
 const PORT = process.env.PORT || 3000;
@@ -127,6 +130,12 @@ const runScrapeJob = async (jobId) => {
     return;
   }
 
+  if (!job.parameters) {
+        await addLog(jobId, "[FATAL_ERROR] Job started with no parameters. Aborting.", "error");
+        await updateJobStatus(jobId, "failed");
+        return;
+    }
+
   const { parameters } = job;
   const {
     categoriesToLoop, location, postalCode, country, count, businessNames, anchorPoint, radiusKm, userEmail, searchParamsForEmail,
@@ -153,7 +162,7 @@ const runScrapeJob = async (jobId) => {
       await addLog(jobId, logMessage);
       const userDataDir = path.join(__dirname, "puppeteer_temp", `user_data_${Date.now()}`);
       const launchArgs = [...puppeteerArgs, `--user-data-dir=${userDataDir}`, "--disable-extensions", "--disable-component-extensions-with-background-pages"];
-      return await puppeteer.launch({ headless: true, args: launchArgs, protocolTimeout: 120000, userDataDir: userDataDir });
+      return await puppeteer.launch({ headless: true, args: launchArgs, protocolTimeout: 300000, userDataDir: userDataDir });
     };
 
     // --- PHASE 1: URL COLLECTION (NOW FULLY RESUMABLE) ---
@@ -258,16 +267,16 @@ const runScrapeJob = async (jobId) => {
       }
 
       const batch = urlsToProcess.slice(i, i + CONCURRENCY);
-      const promises = batch.map(async (processItem) => {
-        let detailPage = null;
-        try {
-          const scrapingTask = async () => {
+const promises = batch.map(async (processItem) => {
+    let detailPage = null;
+    try {
+        const scrapingTask = async () => {
             detailPage = await browser.newPage();
             await detailPage.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36");
             await detailPage.setRequestInterception(true);
             detailPage.on("request", (req) => {
-              if (["image", "stylesheet", "font", "media"].includes(req.resourceType())) req.abort();
-              else req.continue();
+                if (["image", "stylesheet", "font", "media"].includes(req.resourceType())) req.abort();
+                else req.continue();
             });
             let googleData = await scrapeGoogleMapsDetails(detailPage, processItem.url, jobId, country);
             if (!googleData || !googleData.BusinessName) return null;
@@ -276,16 +285,18 @@ const runScrapeJob = async (jobId) => {
             const fullBusinessData = { ...googleData, ...websiteData };
             fullBusinessData.Category = businessNames && businessNames.length > 0 ? googleData.ScrapedCategory || "N/A" : processItem.category || "N/A";
             return fullBusinessData;
-          };
-          return await promiseWithTimeout(scrapingTask(), 120000);
-        } catch (err) {
-          await addLog(jobId, `A task for ${processItem.url} failed or timed out: ${err.message}. Skipping.`, "error");
-          return null;
-        } finally {
-          processedInThisSession++;
-          if (detailPage) try { await detailPage.close(); } catch (e) {}
-        }
-      });
+        };
+
+        return await promiseWithRetry(scrapingTask, 3, 2000, jobId, processItem.url);
+
+    } catch (err) {
+        await addLog(jobId, `[FINAL_FAILURE] Skipped URL ${processItem.url} after all retries failed: ${err.message}`, "error");
+        return null; 
+    } finally {
+        processedInThisSession++;
+        if (detailPage) try { await detailPage.close(); } catch (e) {}
+    }
+});
 
       const results = await Promise.all(promises);
       for (const businessData of results) {
@@ -1026,4 +1037,21 @@ function promiseWithTimeout(promise, ms) {
     }, ms);
   });
   return Promise.race([promise, timeout]);
+}
+
+async function promiseWithRetry(task, maxRetries = 3, delay = 2000, jobId, url) {
+    for (let i = 0; i < maxRetries; i++) {
+        try {
+            // We still use a timeout for each individual attempt
+            return await promiseWithTimeout(task(), 120000); 
+        } catch (error) {
+            const isLastAttempt = i === maxRetries - 1;
+            if (isLastAttempt) {
+                // If all retries fail, we re-throw the error to be caught by the main loop
+                throw error;
+            }
+            await addLog(jobId, `   -> Task for ${url} failed (Attempt ${i + 1}/${maxRetries}): ${error.message}. Retrying in ${delay / 1000}s...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+        }
+    }
 }
