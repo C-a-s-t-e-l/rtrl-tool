@@ -1,4 +1,4 @@
-const BACKEND_URL = "https://brieflessly-unlovely-constance.ngrok-free.app";
+const BACKEND_URL = "https://backend.rtrlprospector.space";
 
 const SUPABASE_URL = "https://qbktnernawpprarckvzx.supabase.co";
 const SUPABASE_ANON_KEY =
