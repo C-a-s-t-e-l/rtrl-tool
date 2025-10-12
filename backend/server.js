@@ -22,9 +22,9 @@ const server = http.createServer(app);
 const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:3000";
 const io = new Server(server, {
   cors: { origin: FRONTEND_URL, methods: ["GET", "POST"] },
-  transports: ['websocket'], 
-  pingInterval: 25000,
-  pingTimeout: 60000,
+  // transports: ['websocket'], 
+  // pingInterval: 25000,
+  // pingTimeout: 60000,
 });
 
 const PORT = process.env.PORT || 3000;

@@ -54,9 +54,7 @@ function initializeMainApp() {
 
 const socket = io(BACKEND_URL, {
     extraHeaders: { "ngrok-skip-browser-warning": "true" },
-    // Add these options to match the server
-    transports: ['websocket'], // More stable than the default polling fallback
-    timeout: 70000,            // Match the server's pingTimeout
+
   });
 
     socket.on('connect', () => {
