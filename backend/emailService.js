@@ -1,3 +1,5 @@
+// backend/emailService.js
+
 const nodemailer = require('nodemailer');
 const XLSX = require('xlsx');
 const { generateFileData } = require('./fileGenerator');
@@ -10,28 +12,40 @@ const transporter = nodemailer.createTransport({
     },
 });
 
-async function sendResultsByEmail(recipientEmail, rawData, searchParams) {
+async function sendResultsByEmail(recipientEmail, rawData, searchParams, duplicatesData = []) {
     if (!recipientEmail) {
         return 'No recipient email provided. Skipping email.';
     }
-    if (!rawData || rawData.length === 0) {
+    if ((!rawData || rawData.length === 0) && (!duplicatesData || duplicatesData.length === 0)) {
         return 'No data to send. Skipping email.';
     }
 
     console.log(`[Email] Generating files and preparing to send results to ${recipientEmail}...`);
 
     try {
-        const allFiles = await generateFileData(rawData, searchParams);
+        const allFiles = await generateFileData(rawData, searchParams, duplicatesData);
 
         const attachments = [];
         
         if (allFiles.full.data.length > 0) {
             const wsFull = XLSX.utils.json_to_sheet(allFiles.full.data);
             const wbFull = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wbFull, wsFull, "Business List");
+            XLSX.utils.book_append_sheet(wbFull, wsFull, "Business List (Unique)");
             const excelBuffer = XLSX.write(wbFull, { bookType: 'xlsx', type: 'buffer' });
             attachments.push({
                 filename: allFiles.full.filename,
+                content: excelBuffer,
+                contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            });
+        }
+
+        if (allFiles.duplicates && allFiles.duplicates.data.length > 0) {
+            const wsDuplicates = XLSX.utils.json_to_sheet(allFiles.duplicates.data);
+            const wbDuplicates = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wbDuplicates, wsDuplicates, "Duplicates List");
+            const excelBuffer = XLSX.write(wbDuplicates, { bookType: 'xlsx', type: 'buffer' });
+            attachments.push({
+                filename: allFiles.duplicates.filename,
                 content: excelBuffer,
                 contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
             });
@@ -61,6 +75,15 @@ async function sendResultsByEmail(recipientEmail, rawData, searchParams) {
             });
         }
         
+        // --- ATTACH NEW TXT SPLITS ZIP FILE ---
+        if (allFiles.contactsTxtSplits && allFiles.contactsTxtSplits.data) {
+            attachments.push({
+                filename: allFiles.contactsTxtSplits.filename,
+                content: allFiles.contactsTxtSplits.data,
+                contentType: 'application/zip',
+            });
+        }
+        
         if (allFiles.contactsSplits.data) {
             attachments.push({
                 filename: allFiles.contactsSplits.filename,
@@ -68,6 +91,8 @@ async function sendResultsByEmail(recipientEmail, rawData, searchParams) {
                 contentType: 'application/zip',
             });
         }
+        // -----------------------------
+
 
         if (attachments.length === 0) {
             return 'No data matched the criteria for any file type. No email sent.';

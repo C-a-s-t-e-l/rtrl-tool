@@ -1,6 +1,12 @@
 const JSZip = require('jszip');
 const XLSX = require('xlsx');
 
+// --- NEW HELPER FUNCTION ADDED (FOR BOTH TXT BATCHING & DEDUPE V4 FILTERING) ---
+const isValidEmail = (email) => {
+    return email && typeof email === 'string' && email.includes('@') && email.includes('.');
+};
+// ---------------------------------
+
 function generateFilename(searchParams, fileSuffix, fileExtension) {
     const date = new Date().toISOString().split('T')[0].replace(/-/g, '');
     const company = 'rtrl';
@@ -27,7 +33,14 @@ const createLinkObject = (url) => {
     return { f: formula, v: url, t: 's' };
 };
 
-async function generateFileData(rawData, searchParams) {
+async function generateFileData(rawData, searchParams, duplicatesData = []) {
+
+    // --- SORTING LOGIC ---
+    rawData.sort((a, b) => (a.BusinessName || '').localeCompare(b.BusinessName || ''));
+    if (duplicatesData && duplicatesData.length > 0) {
+        duplicatesData.sort((a, b) => (a.BusinessName || '').localeCompare(b.BusinessName || ''));
+    }
+    // ----------------------
 
     const date = new Date().toISOString().split('T')[0].replace(/-/g, '');
     let categoryString;
@@ -86,8 +99,11 @@ async function generateFileData(rawData, searchParams) {
             };
         });
     
+    // Primary contact data (unique businesses with Email OR Phone)
     const contactsData = rawData
-        .filter(d => (d.Email1 && d.Email1.trim() !== "") || (d.Email2 && d.Email2.trim() !== ""))
+        .filter(d => 
+            (isValidEmail(d.Email1) || isValidEmail(d.Email2) || isValidEmail(d.Email3)) 
+        )
         .map(d => {
             let state = '';
             if (d.StreetAddress) {
@@ -99,32 +115,34 @@ async function generateFileData(rawData, searchParams) {
                 "Address_Suburb": d.SuburbArea || '',
                 "Address_State": state,
                 "Notes": notesContent, 
+                "Category": d.Category || '', 
+                "email_1": d.Email1 || '',
+                "email_2": d.Email2 || '',
+                "email_3": d.Email3 || '',
                 "facebook": d.FacebookURL || '',
                 "instagram": d.InstagramURL || '',
                 "linkedin": '',
-                "email_1": d.Email1 || '',
-                "email_2": d.Email2 || '',
-                "email_3": d.Email3 || ''
             };
         });
         
     const SPLIT_SIZE = 18;
     let zipBuffer = null;
+    let txtZipBuffer = null;
+    const allTxtFileNames = []; 
 
     if (contactsData.length > 0) {
         const zip = new JSZip();
-        const headers = ["Company", "Address_Suburb", "Address_State", "Notes", "facebook", "instagram", "linkedin", "email_1", "email_2", "email_3"];
+        const txtZip = new JSZip();
+        const headers = ["Company", "Address_Suburb", "Address_State", "Notes", "Category", "facebook", "instagram", "linkedin", "email_1", "email_2", "email_3"];
 
+        // --- STEP 1: CREATE STANDARD CSV SPLITS (Full details, split by 18) ---
         for (let i = 0; i < contactsData.length; i += SPLIT_SIZE) {
             const chunk = contactsData.slice(i, i + SPLIT_SIZE);
             const splitIndex = Math.floor(i / SPLIT_SIZE) + 1;
             
-            const splitNotesContent = `${notesContent}_split_${splitIndex}`;
-            const chunkWithSplitNotes = chunk.map(item => ({ ...item, Notes: splitNotesContent }));
+            const splitFilename = generateFilename(searchParams, `emails_csv_split_${splitIndex}`, 'csv');
             
-            const splitFilename = generateFilename(searchParams, `emails_split_${splitIndex}`, 'csv');
-            
-            const ws = XLSX.utils.json_to_sheet(chunkWithSplitNotes, { header: headers });
+            const ws = XLSX.utils.json_to_sheet(chunk, { header: headers });
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, `Contacts Split ${splitIndex}`);
             const csvBuffer = XLSX.write(wb, { bookType: 'csv', type: 'buffer' });
@@ -132,12 +150,67 @@ async function generateFileData(rawData, searchParams) {
             zip.file(splitFilename, csvBuffer);
         }
         zipBuffer = await zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" });
+
+
+        // --- STEP 2: CREATE TXT FILES, GROUPED BY CATEGORY (NEW FEATURE) ---
+        // Filter contacts to only include those with a primary email for the TXT export
+        const emailContacts = contactsData.filter(d => isValidEmail(d.email_1));
+
+        const contactsByCategory = emailContacts.reduce((acc, item) => {
+            // Grouping by Category as it is the most consistent field
+            const category = item.Category || 'Other'; 
+            if (!acc[category]) {
+                acc[category] = [];
+            }
+            acc[category].push(item);
+            return acc;
+        }, {});
+
+        for (const [category, items] of Object.entries(contactsByCategory)) {
+            // Further split the category if it exceeds the max size (18)
+            for (let i = 0; i < items.length; i += SPLIT_SIZE) {
+                const chunk = items.slice(i, i + SPLIT_SIZE);
+                const part = Math.floor(i / SPLIT_SIZE) + 1;
+                
+                // Collect all primary emails (email_1) into a simple text string
+                const emailList = chunk
+                    .map(item => item.email_1)
+                    .join('\n'); // New line for each email
+
+                // Clean the category for safe file naming (e.g., "Fast food" -> "fast_food")
+                const cleanCategory = category.replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_').toLowerCase();
+                const txtFilename = generateFilename(searchParams, `emails_txt_${cleanCategory}_part_${part}`, 'txt');
+                
+                txtZip.file(txtFilename, emailList);
+                allTxtFileNames.push(txtFilename); 
+            }
+        }
+        
+        txtZipBuffer = await txtZip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" });
     }
+
+    const duplicatesFormattedData = duplicatesData.map(item => ({
+        BusinessName: item.BusinessName,
+        Category: item.Category,
+        'Suburb/Area': item.SuburbArea,
+        StreetAddress: item.StreetAddress,
+        Website: createLinkObject(item.Website),
+        OwnerName: item.OwnerName,
+        'Email 1': item.Email1,
+        'Email 2': item.Email2,
+        'Email 3': item.Email3,
+        Phone: item.Phone,
+        InstagramURL: createLinkObject(item.InstagramURL),
+        FacebookURL: createLinkObject(item.FacebookURL),
+        GoogleMapsURL: createLinkObject(item.GoogleMapsURL),
+        StarRating: item.StarRating,
+        ReviewCount: item.ReviewCount
+    }));
 
     return {
         full: {
             data: fullData,
-            filename: generateFilename(searchParams, 'full', 'xlsx'),
+            filename: generateFilename(searchParams, 'full_unique', 'xlsx'),
             headers: ["BusinessName", "Category", "Suburb/Area", "StreetAddress", "Website", "OwnerName", "Email 1", "Email 2", "Email 3", "Phone", "InstagramURL", "FacebookURL", "GoogleMapsURL", "StarRating", "ReviewCount"]
         },
         sms: {
@@ -147,12 +220,21 @@ async function generateFileData(rawData, searchParams) {
         },
         contacts: {
             data: contactsData,
-            filename: generateFilename(searchParams, 'emails', 'csv'),
-            headers: ["Company", "Address_Suburb", "Address_State", "Notes", "facebook", "instagram", "linkedin", "email_1", "email_2", "email_3"]
+            filename: generateFilename(searchParams, 'contacts_primary', 'csv'),
+            headers: ["Company", "Address_Suburb", "Address_State", "Notes", "Category", "facebook", "instagram", "linkedin", "email_1", "email_2", "email_3"]
         },
         contactsSplits: {
             data: zipBuffer,
-            filename: generateFilename(searchParams, 'emails_splits', 'zip')
+            filename: generateFilename(searchParams, 'emails_csv_splits', 'zip') 
+        },
+        contactsTxtSplits: { 
+            data: txtZipBuffer,
+            filename: generateFilename(searchParams, 'emails_txt_splits', 'zip'),
+        },
+        duplicates: {
+            data: duplicatesFormattedData,
+            filename: generateFilename(searchParams, 'duplicates', 'xlsx'),
+            headers: ["BusinessName", "Category", "Suburb/Area", "StreetAddress", "Website", "OwnerName", "Email 1", "Email 2", "Email 3", "Phone", "InstagramURL", "FacebookURL", "GoogleMapsURL", "StarRating", "ReviewCount"]
         }
     };
 }

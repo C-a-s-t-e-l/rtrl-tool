@@ -1,4 +1,4 @@
-// backend/server.js (Complete and Final Version 2.0)
+// backend/server.js
 
 const express = require("express");
 const puppeteer = require("puppeteer-extra");
@@ -79,7 +79,6 @@ const addLog = async (jobId, message) => {
 
 const appendJobResult = async (jobId, newResult) => {
   try {
-    // Step 1: READ the current results from the database.
     const { data: currentJob, error: fetchError } = await supabase
       .from("jobs")
       .select("results")
@@ -90,12 +89,9 @@ const appendJobResult = async (jobId, newResult) => {
       throw new Error(`Failed to fetch current results: ${fetchError.message}`);
     }
 
-    // Step 2: MODIFY the results array in memory.
-    // This handles the case where 'results' is null for a new job.
     const existingResults = currentJob.results || [];
     const updatedResults = [...existingResults, newResult];
 
-    // Step 3: WRITE the new, complete array back to the database.
     const { error: updateError } = await supabase
       .from("jobs")
       .update({ results: updatedResults })
@@ -104,14 +100,10 @@ const appendJobResult = async (jobId, newResult) => {
     if (updateError) {
       throw new Error(`Failed to save updated results: ${updateError.message}`);
     }
-
-    // If everything was successful, now we notify the client.
     io.to(jobId).emit("business_found", newResult);
 
   } catch (error) {
     console.error(`[appendJobResult Error] For job ${jobId}:`, error);
-    // Even if saving fails, we can still send the result to the active user
-    // so their live view updates, but we'll log the critical save error.
     io.to(jobId).emit("business_found", newResult);
     await addLog(jobId, `[ERROR] Failed to permanently save result: ${newResult.BusinessName}. It will be missing on reload.`);
   }
@@ -143,10 +135,6 @@ const runScrapeJob = async (jobId) => {
 
   let browser = null;
   let allProcessedBusinesses = job.results || [];
-
-  // --- FAULT TOLERANCE CHANGE 1: LOAD PREVIOUSLY SAVED URLS ---
-  // We now initialize the master URL map directly from the database.
-  // This allows us to resume a partially completed URL collection.
   const masterUrlMap = new Map(
     (job.collected_urls || []).map(item => [item.url, item.category])
   );
@@ -165,7 +153,6 @@ const runScrapeJob = async (jobId) => {
       return await puppeteer.launch({ headless: true, args: launchArgs, protocolTimeout: 300000, userDataDir: userDataDir });
     };
 
-    // --- PHASE 1: URL COLLECTION (NOW FULLY RESUMABLE) ---
     await addLog(jobId, `--- Starting URL Collection Phase ---`);
     if (masterUrlMap.size > 0) {
       await addLog(jobId, `[Resume] Loaded ${masterUrlMap.size} URLs from previous session. Continuing collection.`);
@@ -181,7 +168,6 @@ const runScrapeJob = async (jobId) => {
     for (const item of searchItems) {
       await addLog(jobId, isIndividualSearch ? `\n--- Searching for business: "${item}" ---` : `\n--- Searching for category: "${item}" ---`);
       
-      // This section remains the same...
       let locationQueries = [];
       if (anchorPoint && radiusKm)
         locationQueries = await getSearchQueriesForRadius(anchorPoint, radiusKm, country, GOOGLE_MAPS_API_KEY, jobId);
@@ -210,8 +196,6 @@ const runScrapeJob = async (jobId) => {
         await addLog(jobId, `   -> Found ${newUrlsFound} new URLs in this area. Total unique URLs so far: ${masterUrlMap.size}`);
       }
 
-      // --- FAULT TOLERANCE CHANGE 2: SAVE PROGRESS AFTER EACH MAJOR ITEM ---
-      // After processing all locations for a single category/business, we save our progress.
       const currentUrlsToSave = Array.from(masterUrlMap, ([url, specificCategory]) => ({ url, category: specificCategory }));
       const { error: saveError } = await supabase
         .from("jobs")
@@ -223,7 +207,7 @@ const runScrapeJob = async (jobId) => {
       } else {
         await addLog(jobId, `[Checkpoint] Saved ${currentUrlsToSave.length} total URLs to the database.`);
       }
-    } // End of main `searchItems` loop
+    }
 
     if (collectionPage) try { await collectionPage.close(); } catch (e) {}
     if (browser) try { await browser.close(); } catch (e) {}
@@ -232,7 +216,6 @@ const runScrapeJob = async (jobId) => {
     const finalCollectedUrls = Array.from(masterUrlMap, ([url, specificCategory]) => ({ url, category: specificCategory }));
     await addLog(jobId, `\n--- URL Collection Complete. Found ${finalCollectedUrls.length} total unique businesses. ---`);
     
-    // --- PHASE 2: DATA PROCESSING (This part is mostly unchanged) ---
     await addLog(jobId, `--- Starting Data Processing Phase ---`);
     browser = await launchBrowser("[Browser Lifecycle] Launching new browser for data processing...");
 
@@ -241,7 +224,6 @@ const runScrapeJob = async (jobId) => {
     const targetCount = isSearchAll ? Infinity : finalCount;
 
     const processedUrls = new Set(allProcessedBusinesses.map((b) => b.GoogleMapsURL));
-    // The list of URLs to process is now the final list from the resumable collection.
     const urlsToProcess = finalCollectedUrls.filter(item => !processedUrls.has(item.url));
 
     await addLog(jobId, `Total URLs to process: ${urlsToProcess.length}. Previously processed: ${processedUrls.size}.`);
@@ -267,36 +249,36 @@ const runScrapeJob = async (jobId) => {
       }
 
       const batch = urlsToProcess.slice(i, i + CONCURRENCY);
-const promises = batch.map(async (processItem) => {
-    let detailPage = null;
-    try {
-        const scrapingTask = async () => {
-            detailPage = await browser.newPage();
-            await detailPage.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36");
-            await detailPage.setRequestInterception(true);
-            detailPage.on("request", (req) => {
-                if (["image", "stylesheet", "font", "media"].includes(req.resourceType())) req.abort();
-                else req.continue();
-            });
-            let googleData = await scrapeGoogleMapsDetails(detailPage, processItem.url, jobId, country);
-            if (!googleData || !googleData.BusinessName) return null;
-            let websiteData = {};
-            if (googleData.Website) websiteData = await scrapeWebsiteForGoldData(detailPage, googleData.Website, jobId);
-            const fullBusinessData = { ...googleData, ...websiteData };
-            fullBusinessData.Category = businessNames && businessNames.length > 0 ? googleData.ScrapedCategory || "N/A" : processItem.category || "N/A";
-            return fullBusinessData;
-        };
+      const promises = batch.map(async (processItem) => {
+          let detailPage = null;
+          try {
+              const scrapingTask = async () => {
+                  detailPage = await browser.newPage();
+                  await detailPage.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36");
+                  await detailPage.setRequestInterception(true);
+                  detailPage.on("request", (req) => {
+                      if (["image", "stylesheet", "font", "media"].includes(req.resourceType())) req.abort();
+                      else req.continue();
+                  });
+                  let googleData = await scrapeGoogleMapsDetails(detailPage, processItem.url, jobId, country);
+                  if (!googleData || !googleData.BusinessName) return null;
+                  let websiteData = {};
+                  if (googleData.Website) websiteData = await scrapeWebsiteForGoldData(detailPage, googleData.Website, jobId);
+                  const fullBusinessData = { ...googleData, ...websiteData };
+                  fullBusinessData.Category = businessNames && businessNames.length > 0 ? googleData.ScrapedCategory || "N/A" : processItem.category || "N/A";
+                  return fullBusinessData;
+              };
 
-        return await promiseWithRetry(scrapingTask, 3, 2000, jobId, processItem.url);
+              return await promiseWithRetry(scrapingTask, 3, 2000, jobId, processItem.url);
 
-    } catch (err) {
-        await addLog(jobId, `[FINAL_FAILURE] Skipped URL ${processItem.url} after all retries failed: ${err.message}`, "error");
-        return null; 
-    } finally {
-        processedInThisSession++;
-        if (detailPage) try { await detailPage.close(); } catch (e) {}
-    }
-});
+          } catch (err) {
+              await addLog(jobId, `[FINAL_FAILURE] Skipped URL ${processItem.url} after all retries failed: ${err.message}`, "error");
+              return null; 
+          } finally {
+              processedInThisSession++;
+              if (detailPage) try { await detailPage.close(); } catch (e) {}
+          }
+      });
 
       const results = await Promise.all(promises);
       for (const businessData of results) {
@@ -331,19 +313,35 @@ const promises = batch.map(async (processItem) => {
     }
 
     await addLog(jobId, `Scraping completed. Found and processed a total of ${allProcessedBusinesses.length} businesses.`);
-    if (userEmail && allProcessedBusinesses.length > 0) {
+    
+    // --- NEW DEDUPLICATION LOGIC ---
+    await addLog(jobId, `[Deduplication] Starting deduplication process...`);
+    const { uniqueBusinesses, duplicates } = deduplicateBusinesses(allProcessedBusinesses);
+    await addLog(jobId, `[Deduplication] Process complete. Found ${uniqueBusinesses.length} unique businesses and ${duplicates.length} duplicates.`);
+    
+    // Use the deduplicated list for the final output
+    if (userEmail && uniqueBusinesses.length > 0) {
       await addLog(jobId, `[Email] Preparing to send results to ${userEmail}...`);
       const mainSearchArea = searchParamsForEmail.area || "selected_area";
-const dataForEmail = allProcessedBusinesses.map((business) => ({
+      
+      const uniqueBusinessesForEmail = uniqueBusinesses.map((business) => ({
         ...business, SuburbArea: business.Suburb || mainSearchArea.replace(/_/g, " "),
       }));
+      
+      const duplicatesForEmail = duplicates.map((business) => ({
+        ...business, SuburbArea: business.Suburb || mainSearchArea.replace(/_/g, " "),
+      }));
+      
       const emailParams = { ...searchParamsForEmail };
       if (parameters.radiusKm) {
         emailParams.radiusKm = parameters.radiusKm;
       }
 
-      const emailStatus = await sendResultsByEmail(userEmail, dataForEmail, emailParams);
+      // Pass both unique and duplicate data to the email service
+      const emailStatus = await sendResultsByEmail(userEmail, uniqueBusinessesForEmail, emailParams, duplicatesForEmail);
       await addLog(jobId, `[Email] ${emailStatus}`);
+    } else if (userEmail) {
+        await addLog(jobId, `[Email] No unique businesses found after deduplication. Skipping email.`);
     }
     await updateJobStatus(jobId, "completed");
   } catch (error) {
@@ -481,8 +479,6 @@ server.listen(PORT, () => {
   recoverStuckJobs();
 });
 
-
-
 const countryBoundingBoxes = {
   australia: { minLat: -44.0, maxLat: -10.0, minLng: 112.0, maxLng: 154.0 },
   philippines: { minLat: 4.0, maxLat: 21.0, minLng: 116.0, maxLng: 127.0 },
@@ -527,6 +523,111 @@ function normalizeAddress(addressStr = "") {
   if (!addressStr) return "";
   return String(addressStr).toLowerCase().trim().replace(/\s+/g, " ");
 }
+
+const isValidEmail = (email) => {
+    return email && email.includes('@') && email.includes('.');
+};
+
+// Helper to clean the business name for a consistent key (e.g., removes suffixes)
+const getCleanBusinessName = (name) => {
+    if (!name) return '';
+    // Remove common franchise/location suffixes: Pizza, Fast Food, (Location), etc.
+    let cleaned = name.toLowerCase()
+        .replace(/\s(pizza|fast food|burger|cafe|restaurant|store|ltd|pty|inc|co)\.?\s*$/g, '')
+        .replace(/\s\s+/g, ' ')
+        .trim();
+    // Use first 15 characters for a robust key
+    return cleaned.substring(0, 15); 
+};
+
+// --- NEW DEDUPLICATION FUNCTION ---
+function deduplicateBusinesses(businesses) {
+    if (!businesses || businesses.length === 0) {
+        return { uniqueBusinesses: [], duplicates: [] };
+    }
+
+    const getSocialIdentifier = (url) => {
+        if (!url) return null;
+        try {
+            const path = new URL(url).pathname;
+            const parts = path.split('/').filter(p => p && !['p', 'pages', 'groups', 'company'].includes(p.toLowerCase()));
+            return parts.length > 0 ? parts[0].toLowerCase() : null;
+        } catch (e) { return null; }
+    };
+
+    const groupedBusinesses = new Map();
+
+    // Step 1: Group all businesses by a common signature
+    for (const business of businesses) {
+        const facebookId = getSocialIdentifier(business.FacebookURL);
+        const instagramId = getSocialIdentifier(business.InstagramURL);
+        const cleanName = getCleanBusinessName(business.BusinessName);
+        
+        let signature = null;
+
+        // Priority 1: Use Social Media IDs if both are present
+        if (facebookId && instagramId) {
+            signature = `SOCIAL_FB:${facebookId}_IG:${instagramId}`;
+        } 
+        // Priority 2: Use a cleaned Business Name if social media links are unreliable or missing
+        else if (cleanName) {
+            signature = `NAME:${cleanName}`;
+        }
+        // Fallback: Treat as fully unique if no strong grouping key can be generated
+        else {
+            signature = `UNIQUE_${business.GoogleMapsURL || Math.random()}`;
+        }
+
+        if (!groupedBusinesses.has(signature)) {
+            groupedBusinesses.set(signature, []);
+        }
+        groupedBusinesses.get(signature).push(business);
+    }
+
+    const uniqueBusinesses = [];
+    const duplicates = [];
+
+    // Step 2: Process each group to find the best representative and split the data
+    for (const group of groupedBusinesses.values()) {
+        if (group.length === 1) {
+            // If group size is 1, treat as unique.
+            uniqueBusinesses.push(group[0]);
+        } else {
+            // Group size > 1: This is a duplicate franchise/chain.
+            let bestEntry = group[0]; 
+            
+            // Prioritization logic:
+            // 1. Find the entry with the FIRST VALID email
+            const entryWithValidEmail = group.find(b => isValidEmail(b.Email1) || isValidEmail(b.Email2) || isValidEmail(b.Email3));
+            
+            // 2. Find the entry with any phone number
+            const entryWithPhone = group.find(b => b.Phone && b.Phone.trim() !== '');
+
+            if (entryWithValidEmail) {
+                bestEntry = entryWithValidEmail;
+            } else if (entryWithPhone) {
+                // Only select phone if we failed to find a valid email
+                bestEntry = entryWithPhone;
+            } 
+            // If neither email nor phone exists, it defaults to the first entry (group[0])
+
+            const bestEntryIndex = group.indexOf(bestEntry);
+            
+            // Add the selected best entry to the unique list
+            uniqueBusinesses.push(bestEntry);
+
+            // Add all other entries from the group to the duplicates list
+            for (let i = 0; i < group.length; i++) {
+                if (i !== bestEntryIndex) {
+                    duplicates.push(group[i]);
+                }
+            }
+        }
+    }
+
+    return { uniqueBusinesses, duplicates };
+}
+
 function degToRad(degrees) {
   return (degrees * Math.PI) / 180;
 }
@@ -1042,12 +1143,10 @@ function promiseWithTimeout(promise, ms) {
 async function promiseWithRetry(task, maxRetries = 3, delay = 2000, jobId, url) {
     for (let i = 0; i < maxRetries; i++) {
         try {
-            // We still use a timeout for each individual attempt
             return await promiseWithTimeout(task(), 120000); 
         } catch (error) {
             const isLastAttempt = i === maxRetries - 1;
             if (isLastAttempt) {
-                // If all retries fail, we re-throw the error to be caught by the main loop
                 throw error;
             }
             await addLog(jobId, `   -> Task for ${url} failed (Attempt ${i + 1}/${maxRetries}): ${error.message}. Retrying in ${delay / 1000}s...`);
