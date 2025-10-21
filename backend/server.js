@@ -454,6 +454,75 @@ app.use(express.json());
 app.get("/api/config", (req, res) =>
   res.json({ googleMapsApiKey: GOOGLE_MAPS_API_KEY })
 );
+
+// --- NEW EXCLUSION API ENDPOINTS ---
+// GET endpoint to fetch the user's exclusion list
+app.get("/api/exclusions", async (req, res) => {
+    try {
+        const authHeader = req.headers.authorization;
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            return res.status(401).json({ error: 'Authentication required.' });
+        }
+        const token = authHeader.split(' ')[1];
+
+        const { data: { user }, error: userError } = await supabase.auth.getUser(token);
+        if (userError || !user) {
+            return res.status(401).json({ error: 'Authentication failed.' });
+        }
+
+        const { data, error } = await supabase
+            .from('user_exclusions')
+            .select('excluded_retailers')
+            .eq('user_id', user.id)
+            .single();
+
+        if (error && error.code !== 'PGRST116') { // PGRST116 means no rows found, which is fine
+            throw error;
+        }
+
+        res.json({ exclusionList: data?.excluded_retailers || [] });
+    } catch (dbError) {
+        console.error("Error fetching exclusion list:", dbError);
+        res.status(500).json({ error: 'Failed to fetch exclusion list.' });
+    }
+});
+
+// POST endpoint to save the user's exclusion list
+app.post("/api/exclusions", async (req, res) => {
+    try {
+        const authHeader = req.headers.authorization;
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            return res.status(401).json({ error: 'Authentication required.' });
+        }
+        const token = authHeader.split(' ')[1];
+
+        const { data: { user }, error: userError } = await supabase.auth.getUser(token);
+        if (userError || !user) {
+            return res.status(401).json({ error: 'Authentication failed.' });
+        }
+        
+        const { exclusionList } = req.body;
+        if (!Array.isArray(exclusionList)) {
+            return res.status(400).json({ error: 'Invalid data format.' });
+        }
+
+        const { error } = await supabase
+            .from('user_exclusions')
+            .upsert({
+                user_id: user.id,
+                excluded_retailers: exclusionList
+            }, { onConflict: 'user_id' });
+
+        if (error) throw error;
+
+        res.status(200).json({ success: true, message: 'Exclusion list saved.' });
+    } catch (dbError) {
+        console.error("Error saving exclusion list:", dbError);
+        res.status(500).json({ error: 'Failed to save exclusion list.' });
+    }
+});
+
+// --- THIS MUST BE AFTER ALL API ROUTES ---
 const containerPublicPath = path.join(__dirname, "..", "public");
 app.use(express.static(containerPublicPath, { index: false }));
 app.get(/(.*)/, (req, res) => {
@@ -535,19 +604,15 @@ const isValidEmail = (email) => {
     return email && email.includes('@') && email.includes('.');
 };
 
-// Helper to clean the business name for a consistent key (e.g., removes suffixes)
 const getCleanBusinessName = (name) => {
     if (!name) return '';
-    // Remove common franchise/location suffixes: Pizza, Fast Food, (Location), etc.
     let cleaned = name.toLowerCase()
         .replace(/\s(pizza|fast food|burger|cafe|restaurant|store|ltd|pty|inc|co)\.?\s*$/g, '')
         .replace(/\s\s+/g, ' ')
         .trim();
-    // Use first 15 characters for a robust key
     return cleaned.substring(0, 15); 
 };
 
-// --- NEW DEDUPLICATION FUNCTION ---
 function deduplicateBusinesses(businesses) {
     if (!businesses || businesses.length === 0) {
         return { uniqueBusinesses: [], duplicates: [] };
@@ -564,7 +629,6 @@ function deduplicateBusinesses(businesses) {
 
     const groupedBusinesses = new Map();
 
-    // Step 1: Group all businesses by a common signature
     for (const business of businesses) {
         const facebookId = getSocialIdentifier(business.FacebookURL);
         const instagramId = getSocialIdentifier(business.InstagramURL);
@@ -572,15 +636,12 @@ function deduplicateBusinesses(businesses) {
         
         let signature = null;
 
-        // Priority 1: Use Social Media IDs if both are present
         if (facebookId && instagramId) {
             signature = `SOCIAL_FB:${facebookId}_IG:${instagramId}`;
         } 
-        // Priority 2: Use a cleaned Business Name if social media links are unreliable or missing
         else if (cleanName) {
             signature = `NAME:${cleanName}`;
         }
-        // Fallback: Treat as fully unique if no strong grouping key can be generated
         else {
             signature = `UNIQUE_${business.GoogleMapsURL || Math.random()}`;
         }
@@ -594,36 +655,26 @@ function deduplicateBusinesses(businesses) {
     const uniqueBusinesses = [];
     const duplicates = [];
 
-    // Step 2: Process each group to find the best representative and split the data
     for (const group of groupedBusinesses.values()) {
         if (group.length === 1) {
-            // If group size is 1, treat as unique.
             uniqueBusinesses.push(group[0]);
         } else {
-            // Group size > 1: This is a duplicate franchise/chain.
             let bestEntry = group[0]; 
             
-            // Prioritization logic:
-            // 1. Find the entry with the FIRST VALID email
             const entryWithValidEmail = group.find(b => isValidEmail(b.Email1) || isValidEmail(b.Email2) || isValidEmail(b.Email3));
             
-            // 2. Find the entry with any phone number
             const entryWithPhone = group.find(b => b.Phone && b.Phone.trim() !== '');
 
             if (entryWithValidEmail) {
                 bestEntry = entryWithValidEmail;
             } else if (entryWithPhone) {
-                // Only select phone if we failed to find a valid email
                 bestEntry = entryWithPhone;
             } 
-            // If neither email nor phone exists, it defaults to the first entry (group[0])
 
             const bestEntryIndex = group.indexOf(bestEntry);
             
-            // Add the selected best entry to the unique list
             uniqueBusinesses.push(bestEntry);
 
-            // Add all other entries from the group to the duplicates list
             for (let i = 0; i < group.length; i++) {
                 if (i !== bestEntryIndex) {
                     duplicates.push(group[i]);

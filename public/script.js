@@ -56,8 +56,16 @@ const socket = io(BACKEND_URL, {
     timeout: 70000,            
   });
 
-    socket.on('connect', () => {
+socket.on('connect', () => {
     logMessage(elements.logEl, "Successfully connected to the server. Ready.", "success");
+    
+    if (subscribedJobId && currentUserSession) {
+        logMessage(elements.logEl, `Re-subscribing to active job: ${subscribedJobId}...`, "info");
+        socket.emit("subscribe_to_job", {
+            jobId: subscribedJobId,
+            authToken: currentUserSession.access_token,
+        });
+    }
   });
 
   socket.on('disconnect', (reason) => {
