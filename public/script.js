@@ -13,7 +13,6 @@ let subscribedJobId = null;
 
 window.rtrlApp = {
   ...window.rtrlApp,
-  exclusionFeature: {},
   state: {},
   timers: {},
   startResearch: () => {},
