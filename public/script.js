@@ -433,45 +433,58 @@ socket.on('job_state', (job) => {
     elements.progressPercentage.textContent = `${roundedPercentage}%`;
   });
 
-  supabaseClient.auth.onAuthStateChange((event, session) => {
+supabaseClient.auth.onAuthStateChange(async (event, session) => {
     currentUserSession = session;
     if (session) {
-      loginButton.style.display = "none";
-      logoutButton.style.display = "block";
-      userInfoEl.style.display = "inline";
-      userInfoEl.textContent = `Welcome, ${
-        session.user.user_metadata.full_name || session.user.email
-      }`;
-      startButton.disabled = false;
-      startButton.textContent = "Start Research";
+        loginButton.style.display = "none";
+        logoutButton.style.display = "block";
+        userInfoEl.style.display = "inline";
+        userInfoEl.textContent = `Welcome, ${
+            session.user.user_metadata.full_name || session.user.email
+        }`;
+        startButton.disabled = false;
+        startButton.textContent = "Start Research";
 
-      const userId = session.user.id;
-      const previousJobId = localStorage.getItem(`rtrl_last_job_id_${userId}`);
-      if (previousJobId) {
-        currentJobId = previousJobId;
-        if (subscribedJobId !== currentJobId) {
-          logMessage(
-            elements.logEl,
-            `Reconnecting to previous job: ${previousJobId}...`
-          );
-          socket.emit("subscribe_to_job", {
-            jobId: previousJobId,
-            authToken: session.access_token,
-          });
-          subscribedJobId = currentJobId;
+        try {
+            const response = await fetch(`${BACKEND_URL}/api/exclusions`, {
+                headers: { 'Authorization': `Bearer ${session.access_token}` }
+            });
+            if (response.ok) {
+                const { exclusionList } = await response.json();
+                window.rtrlApp.exclusionFeature.populateTags(exclusionList);
+            }
+        } catch (error) {
+            console.error("Could not fetch exclusion list:", error);
         }
-      }
+
+        const userId = session.user.id;
+        const previousJobId = localStorage.getItem(`rtrl_last_job_id_${userId}`);
+        if (previousJobId) {
+            currentJobId = previousJobId;
+            if (subscribedJobId !== currentJobId) {
+                logMessage(
+                    elements.logEl,
+                    `Reconnecting to previous job: ${previousJobId}...`
+                );
+                socket.emit("subscribe_to_job", {
+                    jobId: previousJobId,
+                    authToken: session.access_token,
+                });
+                subscribedJobId = currentJobId;
+            }
+        }
     } else {
-      loginButton.style.display = "block";
-      logoutButton.style.display = "none";
-      userInfoEl.style.display = "none";
-      startButton.disabled = true;
-      startButton.textContent = "Login to Start Research";
-      currentJobId = null;
-      subscribedJobId = null;
-      localStorage.removeItem("rtrl_active_job_id");
+        loginButton.style.display = "block";
+        logoutButton.style.display = "none";
+        userInfoEl.style.display = "none";
+        startButton.disabled = true;
+        startButton.textContent = "Login to Start Research";
+        currentJobId = null;
+        subscribedJobId = null;
+        
+        window.rtrlApp.exclusionFeature.populateTags([]);
     }
-  });
+});
 
   async function getPlaceDetails(placeId) {
     return new Promise((resolve, reject) => {
@@ -563,7 +576,7 @@ function initializeApp() {
 
     populatePrimaryCategories(elements.primaryCategorySelect, categories, "");
     initializeMap();
-    window.rtrlApp.exclusionFeature.init();
+    window.rtrlApp.exclusionFeature.init(() => currentUserSession?.access_token);
     elements.startButton.addEventListener("click", () =>
       window.rtrlApp.startScrapeJob()
     );

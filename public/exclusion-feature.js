@@ -3,40 +3,72 @@ window.rtrlApp = window.rtrlApp || {};
 window.rtrlApp.exclusionFeature = (function () {
     let exclusionList = [];
     let containerEl, inputEl;
+    let tokenProvider = () => null;
+    let saveTimeout;
+
+    function renderTags() {
+        // Clear existing tags except for the input
+        containerEl.querySelectorAll('.tag').forEach(tag => tag.remove());
+
+        exclusionList.forEach(name => {
+            const tagEl = document.createElement("span");
+            tagEl.className = "tag";
+            tagEl.innerHTML = `<span>${name}</span> <span class="tag-close-btn" data-value="${name}">&times;</span>`;
+            containerEl.insertBefore(tagEl, inputEl);
+        });
+    }
+    
+    async function saveExclusionList() {
+        const token = tokenProvider();
+        if (!token) return; // Can't save if not logged in
+
+        try {
+            await fetch(`${BACKEND_URL}/api/exclusions`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ exclusionList: exclusionList })
+            });
+        } catch (error) {
+            console.error('Failed to save exclusion list:', error);
+        }
+    }
+
+    function debouncedSave() {
+        clearTimeout(saveTimeout);
+        saveTimeout = setTimeout(saveExclusionList, 1000); // Save 1 second after last change
+    }
 
     function addExclusionTag(name) {
         const cleanedName = name.trim();
-        if (!cleanedName || exclusionList.includes(cleanedName.toLowerCase())) {
+        if (!cleanedName || exclusionList.map(n => n.toLowerCase()).includes(cleanedName.toLowerCase())) {
             inputEl.value = '';
             return;
         }
 
-        exclusionList.push(cleanedName.toLowerCase());
-
-        const tagEl = document.createElement("span");
-        tagEl.className = "tag";
-        tagEl.innerHTML = `<span>${cleanedName}</span> <span class="tag-close-btn" data-value="${cleanedName}">&times;</span>`;
-        
-        containerEl.insertBefore(tagEl, inputEl);
+        exclusionList.push(cleanedName);
+        renderTags();
+        debouncedSave();
         inputEl.value = '';
     }
 
     function removeExclusionTag(name) {
-        const index = exclusionList.indexOf(name.toLowerCase());
-        if (index > -1) {
-            exclusionList.splice(index, 1);
-        }
+        exclusionList = exclusionList.filter(item => item.toLowerCase() !== name.toLowerCase());
+        renderTags();
+        debouncedSave();
     }
 
-    function init() {
+    function init(provider) {
         containerEl = document.getElementById('exclusionContainer');
         inputEl = document.getElementById('exclusionInput');
+        tokenProvider = provider;
 
         containerEl.addEventListener('click', (e) => {
             if (e.target.classList.contains('tag-close-btn')) {
                 const name = e.target.dataset.value;
                 removeExclusionTag(name);
-                e.target.parentElement.remove();
             } else {
                 inputEl.focus();
             }
@@ -46,18 +78,13 @@ window.rtrlApp.exclusionFeature = (function () {
             if (e.key === 'Enter') {
                 e.preventDefault();
                 addExclusionTag(inputEl.value);
-            } else if (e.key === 'Backspace' && inputEl.value === '') {
-                if (exclusionList.length > 0) {
-                    const lastTag = containerEl.querySelector('.tag:last-of-type');
-                    if (lastTag) {
-                        const closeBtn = lastTag.querySelector('.tag-close-btn');
-                        const name = closeBtn.dataset.value;
-                        removeExclusionTag(name);
-                        lastTag.remove();
-                    }
-                }
             }
         });
+    }
+
+    function populateTags(list) {
+        exclusionList = Array.isArray(list) ? list : [];
+        renderTags();
     }
 
     function getExclusionList() {
@@ -66,6 +93,7 @@ window.rtrlApp.exclusionFeature = (function () {
 
     return {
         init,
-        getExclusionList
+        getExclusionList,
+        populateTags
     };
 })();
