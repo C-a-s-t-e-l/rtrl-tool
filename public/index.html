@@ -128,6 +128,18 @@
                     </div>
                 </div>
                 
+                <hr class="separator">
+
+                <div id="exclusionSearchContainer">
+                    <h4>Exclude Retailers</h4>
+                    <div class="form-group">
+                        <label for="exclusionInput"><i class="fas fa-ban"></i> Retailers to Exclude</label>
+                        <div id="exclusionContainer" class="tag-container">
+                            <input type="text" id="exclusionInput" placeholder="e.g., Woolworths, Coles...">
+                        </div>
+                        <small class="form-text">Press Enter to add a retailer to the exclusion list.</small>
+                    </div>
+                </div>
            
                 <hr class="separator">
                 <div class="form-group">
@@ -222,6 +234,7 @@
 
     <script src="ui-helpers.js"></script>
     <script src="event-handlers.js"></script> 
+    <script src="exclusion-feature.js"></script>
     <script src="script.js"></script>
 </body>
 </html>

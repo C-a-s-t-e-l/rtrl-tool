@@ -130,7 +130,7 @@ const runScrapeJob = async (jobId) => {
 
   const { parameters } = job;
   const {
-    categoriesToLoop, location, postalCode, country, count, businessNames, anchorPoint, radiusKm, userEmail, searchParamsForEmail,
+    categoriesToLoop, location, postalCode, country, count, businessNames, anchorPoint, radiusKm, userEmail, searchParamsForEmail, exclusionList,
   } = parameters;
 
   let browser = null;
@@ -283,6 +283,16 @@ const runScrapeJob = async (jobId) => {
       const results = await Promise.all(promises);
       for (const businessData of results) {
         if (businessData && allProcessedBusinesses.length < targetCount) {
+          if (exclusionList && exclusionList.length > 0) {
+              const businessNameLower = businessData.BusinessName?.toLowerCase() || '';
+              const isExcluded = exclusionList.some(excludedName => 
+                  businessNameLower.includes(excludedName.toLowerCase())
+              );
+              if (isExcluded) {
+                  await addLog(jobId, `-> SKIPPED (On exclusion list): ${businessData.BusinessName}`);
+                  continue;
+              }
+          }
           const name = businessData.BusinessName?.toLowerCase().trim() || "";
           const phone = normalizePhoneNumber(businessData.Phone);
           const address = normalizeAddress(businessData.StreetAddress);
@@ -314,12 +324,10 @@ const runScrapeJob = async (jobId) => {
 
     await addLog(jobId, `Scraping completed. Found and processed a total of ${allProcessedBusinesses.length} businesses.`);
     
-    // --- NEW DEDUPLICATION LOGIC ---
     await addLog(jobId, `[Deduplication] Starting deduplication process...`);
     const { uniqueBusinesses, duplicates } = deduplicateBusinesses(allProcessedBusinesses);
     await addLog(jobId, `[Deduplication] Process complete. Found ${uniqueBusinesses.length} unique businesses and ${duplicates.length} duplicates.`);
     
-    // Use the deduplicated list for the final output
     if (userEmail && uniqueBusinesses.length > 0) {
       await addLog(jobId, `[Email] Preparing to send results to ${userEmail}...`);
       const mainSearchArea = searchParamsForEmail.area || "selected_area";
@@ -337,7 +345,6 @@ const runScrapeJob = async (jobId) => {
         emailParams.radiusKm = parameters.radiusKm;
       }
 
-      // Pass both unique and duplicate data to the email service
       const emailStatus = await sendResultsByEmail(userEmail, uniqueBusinessesForEmail, emailParams, duplicatesForEmail);
       await addLog(jobId, `[Email] ${emailStatus}`);
     } else if (userEmail) {

@@ -13,6 +13,7 @@ let subscribedJobId = null;
 
 window.rtrlApp = {
   ...window.rtrlApp,
+  exclusionFeature: {},
   state: {},
   timers: {},
   startResearch: () => {},
@@ -555,7 +556,7 @@ socket.on('job_state', (job) => {
     }).addTo(map);
   }
 
-  function initializeApp() {
+function initializeApp() {
     document.getElementById("currentYear").textContent =
       new Date().getFullYear();
     const savedEmail = localStorage.getItem("rtrl_last_used_email");
@@ -563,6 +564,7 @@ socket.on('job_state', (job) => {
 
     populatePrimaryCategories(elements.primaryCategorySelect, categories, "");
     initializeMap();
+    window.rtrlApp.exclusionFeature.init();
     elements.startButton.addEventListener("click", () =>
       window.rtrlApp.startScrapeJob()
     );
@@ -583,7 +585,7 @@ socket.on('job_state', (job) => {
       elements.countInput.value = "";
     }
     loadGoogleMaps();
-  }
+}
 
   function renderTable() {
     elements.resultsTableBody.innerHTML = "";
@@ -847,7 +849,7 @@ socket.on('job_state', (job) => {
     });
   };
 
-  window.rtrlApp.startScrapeJob = () => {
+window.rtrlApp.startScrapeJob = () => {
     if (!currentUserSession) {
       logMessage(
         elements.logEl,
@@ -880,11 +882,14 @@ socket.on('job_state', (job) => {
     )
       .map((cb) => cb.value)
       .filter((v) => v !== "select_all");
+    
+    const exclusionList = window.rtrlApp.exclusionFeature.getExclusionList();
 
     const scrapeParams = {
       country: elements.countryInput.value,
       businessNames: businessNames.length > 0 ? businessNames : [],
       userEmail: elements.userEmailInput.value.trim(),
+      exclusionList: exclusionList,
     };
 
     if (window.rtrlApp.state.selectedAnchorPoint) {
@@ -959,7 +964,7 @@ socket.on('job_state', (job) => {
       authToken: currentUserSession.access_token,
       ...scrapeParams,
     });
-  };
+};
 
   function handleScrapeError(error) {
     logMessage(
