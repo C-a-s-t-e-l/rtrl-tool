@@ -50,30 +50,30 @@ function initializeMainApp() {
     }
   }
 
-const socket = io(BACKEND_URL, {
+  const socket = io(BACKEND_URL, {
     extraHeaders: { "ngrok-skip-browser-warning": "true" },
-    transports: ['websocket'], 
-    timeout: 70000,            
+    transports: ['websocket'],
+    timeout: 70000,
   });
 
-socket.on('connect', () => {
+  socket.on('connect', () => {
     logMessage(elements.logEl, "Successfully connected to the server. Ready.", "success");
-    
+
     if (subscribedJobId && currentUserSession) {
-        logMessage(elements.logEl, `Re-subscribing to active job: ${subscribedJobId}...`, "info");
-        socket.emit("subscribe_to_job", {
-            jobId: subscribedJobId,
-            authToken: currentUserSession.access_token,
-        });
+      logMessage(elements.logEl, `Re-subscribing to active job: ${subscribedJobId}...`, "info");
+      socket.emit("subscribe_to_job", {
+        jobId: subscribedJobId,
+        authToken: currentUserSession.access_token,
+      });
     }
   });
 
   socket.on('disconnect', (reason) => {
     logMessage(elements.logEl, "Connection to server lost. Attempting to reconnect...", "error");
-    console.error('Socket disconnected due to:', reason); 
+    console.error('Socket disconnected due to:', reason);
   });
 
-const elements = {
+  const elements = {
     startButton: document.getElementById("startButton"),
     ratingFilter: document.getElementById("ratingFilter"),
     reviewCountFilter: document.getElementById("reviewCountFilter"),
@@ -127,6 +127,128 @@ const elements = {
   let displayedData = [];
   let postalCodes = [];
   let map, searchCircle;
+  let savedPostcodeLists = [];
+
+  // --- Postcode List Management Functions ---
+
+  function populatePostcodeListDropdown(lists) {
+    savedPostcodeLists = lists;
+    elements.postcodeListSelect.innerHTML = '<option value="">Load a saved list...</option>';
+    lists.forEach(list => {
+      const option = document.createElement('option');
+      option.value = list.id;
+      option.textContent = list.list_name;
+      elements.postcodeListSelect.appendChild(option);
+    });
+    elements.deletePostcodeListButton.style.display = 'none';
+  }
+
+  async function fetchPostcodeLists() {
+    if (!currentUserSession) return;
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/postcode-lists`, {
+        headers: { 'Authorization': `Bearer ${currentUserSession.access_token}` }
+      });
+      if (response.ok) {
+        const lists = await response.json();
+        populatePostcodeListDropdown(lists);
+      } else {
+        logMessage(elements.logEl, 'Failed to load saved postcode lists.', 'error');
+      }
+    } catch (error) {
+      console.error('Error fetching postcode lists:', error);
+      logMessage(elements.logEl, 'Error fetching postcode lists.', 'error');
+    }
+  }
+
+  async function saveCurrentPostcodeList() {
+    if (!currentUserSession || postalCodes.length === 0) return;
+
+    const listName = prompt("Please enter a name for this postcode list:", "");
+    if (!listName || listName.trim() === "") {
+      logMessage(elements.logEl, 'Save cancelled: List name cannot be empty.', 'info');
+      return;
+    }
+
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/postcode-lists`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${currentUserSession.access_token}`
+        },
+        body: JSON.stringify({ list_name: listName.trim(), postcodes: postalCodes })
+      });
+
+      if (response.status === 201) {
+        logMessage(elements.logEl, `Successfully saved list "${listName.trim()}".`, 'success');
+        await fetchPostcodeLists(); // Refresh the dropdown
+      } else {
+        const { error } = await response.json();
+        logMessage(elements.logEl, `Error saving list: ${error}`, 'error');
+      }
+    } catch (error) {
+      console.error('Failed to save postcode list:', error);
+      logMessage(elements.logEl, 'A network error occurred while saving the list.', 'error');
+    }
+  }
+
+  async function deleteSelectedPostcodeList() {
+    const selectedId = elements.postcodeListSelect.value;
+    if (!selectedId || !currentUserSession) return;
+
+    const selectedList = savedPostcodeLists.find(l => l.id == selectedId);
+    if (!selectedList) return;
+
+    if (!confirm(`Are you sure you want to delete the list "${selectedList.list_name}"?`)) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/postcode-lists/${selectedId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${currentUserSession.access_token}` }
+      });
+
+      if (response.ok) {
+        logMessage(elements.logEl, `Successfully deleted list "${selectedList.list_name}".`, 'success');
+        await fetchPostcodeLists(); // Refresh the dropdown
+      } else {
+        logMessage(elements.logEl, 'Failed to delete the list.', 'error');
+      }
+    } catch (error) {
+      console.error('Failed to delete postcode list:', error);
+      logMessage(elements.logEl, 'A network error occurred while deleting the list.', 'error');
+    }
+  }
+
+  function setupPostcodeListHandlers() {
+    elements.postcodeListSelect.addEventListener('change', () => {
+      const selectedId = elements.postcodeListSelect.value;
+      const selectedList = savedPostcodeLists.find(list => list.id == selectedId);
+
+      postalCodes.length = 0;
+      elements.postalCodeContainer.querySelectorAll('.tag').forEach(tag => tag.remove());
+
+      if (selectedList) {
+        selectedList.postcodes.forEach(pc => window.rtrlApp.validateAndAddTag(pc));
+        elements.deletePostcodeListButton.style.display = 'inline-flex';
+      } else {
+        elements.deletePostcodeListButton.style.display = 'none';
+      }
+    });
+
+    const observer = new MutationObserver(() => {
+      const hasTags = elements.postalCodeContainer.querySelector('.tag') !== null;
+      elements.savePostcodeListButton.disabled = !hasTags;
+    });
+    observer.observe(elements.postalCodeContainer, { childList: true });
+
+    elements.savePostcodeListButton.addEventListener('click', saveCurrentPostcodeList);
+    elements.deletePostcodeListButton.addEventListener('click', deleteSelectedPostcodeList);
+  }
+
+  // --- End of Postcode Functions ---
 
   window.rtrlApp.state = {
     selectedAnchorPoint: null,
@@ -335,7 +457,7 @@ const elements = {
     if (error) console.error("Error logging out:", error.message);
   });
 
- socket.on("job_created", ({ jobId }) => {
+  socket.on("job_created", ({ jobId }) => {
     logMessage(
       elements.logEl,
       `Job successfully created with ID: ${jobId}. It is now in the queue.`,
@@ -343,8 +465,8 @@ const elements = {
     );
     currentJobId = jobId;
     if (currentUserSession && currentUserSession.user) {
-        const userId = currentUserSession.user.id;
-        localStorage.setItem(`rtrl_last_job_id_${userId}`, jobId);
+      const userId = currentUserSession.user.id;
+      localStorage.setItem(`rtrl_last_job_id_${userId}`, jobId);
     }
     allCollectedData = [];
     window.rtrlApp.applyFilterAndSort();
@@ -365,7 +487,7 @@ const elements = {
     setUiState(false, getUiElementsForStateChange());
   });
 
-socket.on("job_update", (update) => {
+  socket.on("job_update", (update) => {
     if (update.status) {
       logMessage(
         elements.logEl,
@@ -383,44 +505,42 @@ socket.on("job_update", (update) => {
     }
   });
 
-  
+  socket.on('job_state', (job) => {
+    if (!job) {
+      logMessage(elements.logEl, "Could not retrieve job state. Ready for a new search.", 'error');
+      return;
+    }
 
-socket.on('job_state', (job) => {
-      if (!job) {
-        logMessage(elements.logEl, "Could not retrieve job state. Ready for a new search.", 'error');
-        return;
-      }
+    allCollectedData.length = 0;
+    if (job.results && job.results.length > 0) {
+      allCollectedData.push(...job.results);
+    }
 
-      allCollectedData.length = 0;
-      if (job.results && job.results.length > 0) {
-          allCollectedData.push(...job.results);
-      }
+    if (job.parameters && job.parameters.searchParamsForEmail) {
+      window.rtrlApp.state.currentSearchParameters = job.parameters.searchParamsForEmail;
+    } else {
 
-      if (job.parameters && job.parameters.searchParamsForEmail) {
-          window.rtrlApp.state.currentSearchParameters = job.parameters.searchParamsForEmail;
-      } else {
-  
-          window.rtrlApp.state.currentSearchParameters = {};
-      }
+      window.rtrlApp.state.currentSearchParameters = {};
+    }
 
-      window.rtrlApp.applyFilterAndSort(); 
-      if (allCollectedData.length > 0) {
-        elements.collectedDataCard.classList.add("has-results");
-      }
+    window.rtrlApp.applyFilterAndSort();
+    if (allCollectedData.length > 0) {
+      elements.collectedDataCard.classList.add("has-results");
+    }
 
-      const isRunning = job.status === 'running' || job.status === 'queued';
+    const isRunning = job.status === 'running' || job.status === 'queued';
 
-      if (isRunning) {
-   
-          logMessage(elements.logEl, "Successfully reconnected and restored active job state.", 'success');
-          elements.logEl.textContent = job.logs.join('\n');
-          elements.logEl.scrollTop = elements.logEl.scrollHeight;
-      } else {
-          elements.logEl.innerHTML = '';
-          logMessage(elements.logEl, "Waiting to start research...", "default");
-      }
+    if (isRunning) {
 
-      setUiState(isRunning, getUiElementsForStateChange());
+      logMessage(elements.logEl, "Successfully reconnected and restored active job state.", 'success');
+      elements.logEl.textContent = job.logs.join('\n');
+      elements.logEl.scrollTop = elements.logEl.scrollHeight;
+    } else {
+      elements.logEl.innerHTML = '';
+      logMessage(elements.logEl, "Waiting to start research...", "default");
+    }
+
+    setUiState(isRunning, getUiElementsForStateChange());
   });
 
   socket.on("business_found", (business) => {
@@ -444,58 +564,60 @@ socket.on('job_state', (job) => {
     elements.progressPercentage.textContent = `${roundedPercentage}%`;
   });
 
-supabaseClient.auth.onAuthStateChange(async (event, session) => {
+  supabaseClient.auth.onAuthStateChange(async (event, session) => {
     currentUserSession = session;
     if (session) {
-        loginButton.style.display = "none";
-        logoutButton.style.display = "block";
-        userInfoEl.style.display = "inline";
-        userInfoEl.textContent = `Welcome, ${
-            session.user.user_metadata.full_name || session.user.email
+      loginButton.style.display = "none";
+      logoutButton.style.display = "block";
+      userInfoEl.style.display = "inline";
+      userInfoEl.textContent = `Welcome, ${
+        session.user.user_metadata.full_name || session.user.email
         }`;
-        startButton.disabled = false;
-        startButton.textContent = "Start Research";
+      startButton.disabled = false;
+      startButton.textContent = "Start Research";
 
-        await fetchPostcodeLists();
-        try {
-            const response = await fetch(`${BACKEND_URL}/api/exclusions`, {
-                headers: { 'Authorization': `Bearer ${session.access_token}` }
-            });
-            if (response.ok) {
-                const { exclusionList } = await response.json();
-                window.rtrlApp.exclusionFeature.populateTags(exclusionList);
-            }
-        } catch (error) {
-            console.error("Could not fetch exclusion list:", error);
+      // Fetch user-specific data after login
+      await fetchPostcodeLists();
+      try {
+        const response = await fetch(`${BACKEND_URL}/api/exclusions`, {
+          headers: { 'Authorization': `Bearer ${session.access_token}` }
+        });
+        if (response.ok) {
+          const { exclusionList } = await response.json();
+          window.rtrlApp.exclusionFeature.populateTags(exclusionList);
         }
+      } catch (error) {
+        console.error("Could not fetch exclusion list:", error);
+      }
 
-        const userId = session.user.id;
-        const previousJobId = localStorage.getItem(`rtrl_last_job_id_${userId}`);
-        if (previousJobId) {
-            currentJobId = previousJobId;
-            if (subscribedJobId !== currentJobId) {
-                logMessage(
-                    elements.logEl,
-                    `Reconnecting to previous job: ${previousJobId}...`
-                );
-                socket.emit("subscribe_to_job", {
-                    jobId: previousJobId,
-                    authToken: session.access_token,
-                });
-                subscribedJobId = currentJobId;
-            }
+      const userId = session.user.id;
+      const previousJobId = localStorage.getItem(`rtrl_last_job_id_${userId}`);
+      if (previousJobId) {
+        currentJobId = previousJobId;
+        if (subscribedJobId !== currentJobId) {
+          logMessage(
+            elements.logEl,
+            `Reconnecting to previous job: ${previousJobId}...`
+          );
+          socket.emit("subscribe_to_job", {
+            jobId: previousJobId,
+            authToken: session.access_token,
+          });
+          subscribedJobId = currentJobId;
         }
+      }
     } else {
-        loginButton.style.display = "block";
-        logoutButton.style.display = "none";
-        userInfoEl.style.display = "none";
-        startButton.disabled = true;
-        startButton.textContent = "Login to Start Research";
-        currentJobId = null;
-        subscribedJobId = null;
-        
-        window.rtrlApp.exclusionFeature.populateTags([]);
-        populatePostcodeListDropdown([]);
+      loginButton.style.display = "block";
+      logoutButton.style.display = "none";
+      userInfoEl.style.display = "none";
+      startButton.disabled = true;
+      startButton.textContent = "Login to Start Research";
+      currentJobId = null;
+      subscribedJobId = null;
+
+      // Clear UI on logout
+      window.rtrlApp.exclusionFeature.populateTags([]);
+      populatePostcodeListDropdown([]);
     }
   });
 
@@ -581,7 +703,7 @@ supabaseClient.auth.onAuthStateChange(async (event, session) => {
     }).addTo(map);
   }
 
-function initializeApp() {
+  function initializeApp() {
     document.getElementById("currentYear").textContent =
       new Date().getFullYear();
     const savedEmail = localStorage.getItem("rtrl_last_used_email");
@@ -590,7 +712,7 @@ function initializeApp() {
     populatePrimaryCategories(elements.primaryCategorySelect, categories, "");
     initializeMap();
     window.rtrlApp.exclusionFeature.init(() => currentUserSession?.access_token);
-    setupPostcodeListHandlers(); // Add this line
+    setupPostcodeListHandlers();
     elements.startButton.addEventListener("click", () =>
       window.rtrlApp.startScrapeJob()
     );
@@ -610,7 +732,7 @@ function initializeApp() {
       elements.countInput.disabled = true;
       elements.countInput.value = "";
     }
-    loadGoogleMaps();
+    loadGoogleMaps(); // This call is now safe
   }
 
   function renderTable() {
@@ -875,7 +997,7 @@ function initializeApp() {
     });
   };
 
-window.rtrlApp.startScrapeJob = () => {
+  window.rtrlApp.startScrapeJob = () => {
     if (!currentUserSession) {
       logMessage(
         elements.logEl,
@@ -908,7 +1030,7 @@ window.rtrlApp.startScrapeJob = () => {
     )
       .map((cb) => cb.value)
       .filter((v) => v !== "select_all");
-    
+
     const exclusionList = window.rtrlApp.exclusionFeature.getExclusionList();
 
     const scrapeParams = {
@@ -990,7 +1112,7 @@ window.rtrlApp.startScrapeJob = () => {
       authToken: currentUserSession.access_token,
       ...scrapeParams,
     });
-};
+  };
 
   function handleScrapeError(error) {
     logMessage(

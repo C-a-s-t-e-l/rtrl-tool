@@ -11,13 +11,21 @@ function setupEventListeners(elements, socket, categories, countries, allCollect
   }
   
   function setupTagInput() {
+    // This function will check the postalCodes array and update the button state
+    function updateSaveButtonState() {
+        elements.savePostcodeListButton.disabled = postalCodes.length === 0;
+    }
+
     elements.postalCodeContainer.addEventListener("click", (e) => {
       if (e.target.classList.contains("tag-close-btn")) {
         const postcode = e.target.dataset.value;
         const index = postalCodes.indexOf(postcode);
         if (index > -1) postalCodes.splice(index, 1);
         e.target.parentElement.remove();
-        if (postalCodes.length === 0 && !elements.locationInput.value.trim()) window.rtrlApp.setRadiusInputsState(false); 
+        if (postalCodes.length === 0 && !elements.locationInput.value.trim()) window.rtrlApp.setRadiusInputsState(false);
+        
+        // --- ADD THIS LINE ---
+        updateSaveButtonState(); // Update button state on removal
       } else {
         elements.postalCodeInput.focus();
       }
@@ -26,7 +34,12 @@ function setupEventListeners(elements, socket, categories, countries, allCollect
       if (e.key === "Enter" || e.key === ",") {
         e.preventDefault();
         const value = elements.postalCodeInput.value.trim();
-        if (value) await window.rtrlApp.validateAndAddTag(value);
+        if (value) {
+            // validateAndAddTag will add the tag and populate the postalCodes array
+            await window.rtrlApp.validateAndAddTag(value); 
+            // --- ADD THIS LINE ---
+            updateSaveButtonState(); // Update button state after adding
+        }
       } else if (e.key === "Backspace" && elements.postalCodeInput.value === "") {
         if (postalCodes.length > 0) {
           const lastTag = elements.postalCodeContainer.querySelector(".tag:last-of-type");
@@ -36,6 +49,8 @@ function setupEventListeners(elements, socket, categories, countries, allCollect
             const index = postalCodes.indexOf(postcode);
             if (index > -1) postalCodes.splice(index, 1);
             lastTag.remove();
+            // --- ADD THIS LINE ---
+            updateSaveButtonState(); // Update button state on removal
           }
         }
       }
