@@ -73,7 +73,7 @@ socket.on('connect', () => {
     console.error('Socket disconnected due to:', reason); 
   });
 
-  const elements = {
+const elements = {
     startButton: document.getElementById("startButton"),
     ratingFilter: document.getElementById("ratingFilter"),
     reviewCountFilter: document.getElementById("reviewCountFilter"),
@@ -118,6 +118,9 @@ socket.on('connect', () => {
     progressPercentage: document.getElementById("progressPercentage"),
     collectedDataCard: document.getElementById("collectedDataCard"),
     filterInput: document.getElementById("filterInput"),
+    postcodeListSelect: document.getElementById("postcodeListSelect"),
+    savePostcodeListButton: document.getElementById("savePostcodeListButton"),
+    deletePostcodeListButton: document.getElementById("deletePostcodeListButton"),
   };
 
   let allCollectedData = [];
@@ -453,6 +456,7 @@ supabaseClient.auth.onAuthStateChange(async (event, session) => {
         startButton.disabled = false;
         startButton.textContent = "Start Research";
 
+        await fetchPostcodeLists();
         try {
             const response = await fetch(`${BACKEND_URL}/api/exclusions`, {
                 headers: { 'Authorization': `Bearer ${session.access_token}` }
@@ -491,8 +495,9 @@ supabaseClient.auth.onAuthStateChange(async (event, session) => {
         subscribedJobId = null;
         
         window.rtrlApp.exclusionFeature.populateTags([]);
+        populatePostcodeListDropdown([]);
     }
-});
+  });
 
   async function getPlaceDetails(placeId) {
     return new Promise((resolve, reject) => {
@@ -585,6 +590,7 @@ function initializeApp() {
     populatePrimaryCategories(elements.primaryCategorySelect, categories, "");
     initializeMap();
     window.rtrlApp.exclusionFeature.init(() => currentUserSession?.access_token);
+    setupPostcodeListHandlers(); // Add this line
     elements.startButton.addEventListener("click", () =>
       window.rtrlApp.startScrapeJob()
     );
@@ -605,7 +611,7 @@ function initializeApp() {
       elements.countInput.value = "";
     }
     loadGoogleMaps();
-}
+  }
 
   function renderTable() {
     elements.resultsTableBody.innerHTML = "";
@@ -1025,6 +1031,125 @@ window.rtrlApp.startScrapeJob = () => {
 
   initializeApp();
 }
+
+  let savedPostcodeLists = [];
+
+  function populatePostcodeListDropdown(lists) {
+      savedPostcodeLists = lists;
+      elements.postcodeListSelect.innerHTML = '<option value="">Load a saved list...</option>';
+      lists.forEach(list => {
+          const option = document.createElement('option');
+          option.value = list.id;
+          option.textContent = list.list_name;
+          elements.postcodeListSelect.appendChild(option);
+      });
+      elements.deletePostcodeListButton.style.display = 'none';
+  }
+
+  async function fetchPostcodeLists() {
+      if (!currentUserSession) return;
+      try {
+          const response = await fetch(`${BACKEND_URL}/api/postcode-lists`, {
+              headers: { 'Authorization': `Bearer ${currentUserSession.access_token}` }
+          });
+          if (response.ok) {
+              const lists = await response.json();
+              populatePostcodeListDropdown(lists);
+          } else {
+              logMessage(elements.logEl, 'Failed to load saved postcode lists.', 'error');
+          }
+      } catch (error) {
+          console.error('Error fetching postcode lists:', error);
+          logMessage(elements.logEl, 'Error fetching postcode lists.', 'error');
+      }
+  }
+
+  async function saveCurrentPostcodeList() {
+      if (!currentUserSession || postalCodes.length === 0) return;
+
+      const listName = prompt("Please enter a name for this postcode list:", "");
+      if (!listName || listName.trim() === "") {
+          logMessage(elements.logEl, 'Save cancelled: List name cannot be empty.', 'info');
+          return;
+      }
+
+      try {
+          const response = await fetch(`${BACKEND_URL}/api/postcode-lists`, {
+              method: 'POST',
+              headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${currentUserSession.access_token}`
+              },
+              body: JSON.stringify({ list_name: listName.trim(), postcodes: postalCodes })
+          });
+          
+          if (response.status === 201) {
+              logMessage(elements.logEl, `Successfully saved list "${listName.trim()}".`, 'success');
+              await fetchPostcodeLists(); 
+          } else {
+              const { error } = await response.json();
+              logMessage(elements.logEl, `Error saving list: ${error}`, 'error');
+          }
+      } catch (error) {
+          console.error('Failed to save postcode list:', error);
+          logMessage(elements.logEl, 'A network error occurred while saving the list.', 'error');
+      }
+  }
+  
+  async function deleteSelectedPostcodeList() {
+      const selectedId = elements.postcodeListSelect.value;
+      if (!selectedId || !currentUserSession) return;
+
+      const selectedList = savedPostcodeLists.find(l => l.id == selectedId);
+      if (!selectedList) return;
+
+      if (!confirm(`Are you sure you want to delete the list "${selectedList.list_name}"?`)) {
+          return;
+      }
+
+      try {
+          const response = await fetch(`${BACKEND_URL}/api/postcode-lists/${selectedId}`, {
+              method: 'DELETE',
+              headers: { 'Authorization': `Bearer ${currentUserSession.access_token}` }
+          });
+
+          if (response.ok) {
+              logMessage(elements.logEl, `Successfully deleted list "${selectedList.list_name}".`, 'success');
+              await fetchPostcodeLists(); 
+          } else {
+              logMessage(elements.logEl, 'Failed to delete the list.', 'error');
+          }
+      } catch (error) {
+          console.error('Failed to delete postcode list:', error);
+          logMessage(elements.logEl, 'A network error occurred while deleting the list.', 'error');
+      }
+  }
+
+  function setupPostcodeListHandlers() {
+      elements.postcodeListSelect.addEventListener('change', () => {
+          const selectedId = elements.postcodeListSelect.value;
+          const selectedList = savedPostcodeLists.find(list => list.id == selectedId);
+          
+          postalCodes.length = 0;
+          elements.postalCodeContainer.querySelectorAll('.tag').forEach(tag => tag.remove());
+
+          if (selectedList) {
+              selectedList.postcodes.forEach(pc => window.rtrlApp.validateAndAddTag(pc));
+              elements.deletePostcodeListButton.style.display = 'inline-flex';
+          } else {
+              elements.deletePostcodeListButton.style.display = 'none';
+          }
+      });
+
+      const observer = new MutationObserver(() => {
+          const hasTags = elements.postalCodeContainer.querySelector('.tag') !== null;
+          elements.savePostcodeListButton.disabled = !hasTags;
+      });
+      observer.observe(elements.postalCodeContainer, { childList: true });
+
+      elements.savePostcodeListButton.addEventListener('click', saveCurrentPostcodeList);
+      elements.deletePostcodeListButton.addEventListener('click', deleteSelectedPostcodeList);
+  }
 
 const socketIoScript = document.createElement("script");
 socketIoScript.src =

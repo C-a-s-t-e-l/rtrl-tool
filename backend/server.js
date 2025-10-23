@@ -526,6 +526,104 @@ app.post("/api/exclusions", async (req, res) => {
     }
 });
 
+app.get("/api/postcode-lists", async (req, res) => {
+    try {
+        const authHeader = req.headers.authorization;
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            return res.status(401).json({ error: 'Authentication required.' });
+        }
+        const token = authHeader.split(' ')[1];
+
+        const { data: { user }, error: userError } = await supabase.auth.getUser(token);
+        if (userError || !user) {
+            return res.status(401).json({ error: 'Authentication failed.' });
+        }
+
+        const { data, error } = await supabase
+            .from('postcode_lists')
+            .select('id, list_name, postcodes')
+            .eq('user_id', user.id)
+            .order('list_name');
+
+        if (error) throw error;
+        res.json(data || []);
+    } catch (dbError) {
+        console.error("Error fetching postcode lists:", dbError);
+        res.status(500).json({ error: 'Failed to fetch postcode lists.' });
+    }
+});
+
+// POST endpoint to save a new postcode list
+app.post("/api/postcode-lists", async (req, res) => {
+    try {
+        const authHeader = req.headers.authorization;
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            return res.status(401).json({ error: 'Authentication required.' });
+        }
+        const token = authHeader.split(' ')[1];
+        
+        const { data: { user }, error: userError } = await supabase.auth.getUser(token);
+        if (userError || !user) {
+            return res.status(401).json({ error: 'Authentication failed.' });
+        }
+        
+        const { list_name, postcodes } = req.body;
+        if (!list_name || !Array.isArray(postcodes) || postcodes.length === 0) {
+            return res.status(400).json({ error: 'Invalid data: list name and postcodes are required.' });
+        }
+
+        const { data, error } = await supabase
+            .from('postcode_lists')
+            .insert({
+                user_id: user.id,
+                list_name: list_name,
+                postcodes: postcodes
+            })
+            .select()
+            .single();
+
+        if (error) {
+            if (error.code === '23505') { // Unique constraint violation
+                 return res.status(409).json({ error: 'A list with this name already exists.' });
+            }
+            throw error;
+        }
+        res.status(201).json(data);
+    } catch (dbError) {
+        console.error("Error saving postcode list:", dbError);
+        res.status(500).json({ error: 'Failed to save postcode list.' });
+    }
+});
+
+// DELETE endpoint to remove a specific postcode list
+app.delete("/api/postcode-lists/:id", async (req, res) => {
+    try {
+        const authHeader = req.headers.authorization;
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            return res.status(401).json({ error: 'Authentication required.' });
+        }
+        const token = authHeader.split(' ')[1];
+        
+        const { data: { user }, error: userError } = await supabase.auth.getUser(token);
+        if (userError || !user) {
+            return res.status(401).json({ error: 'Authentication failed.' });
+        }
+
+        const { id } = req.params;
+        const { error } = await supabase
+            .from('postcode_lists')
+            .delete()
+            .eq('user_id', user.id) // Extra security: ensure user owns the list they're deleting
+            .eq('id', id);
+
+        if (error) throw error;
+        res.status(200).json({ success: true, message: 'List deleted successfully.' });
+    } catch (dbError) {
+        console.error("Error deleting postcode list:", dbError);
+        res.status(500).json({ error: 'Failed to delete postcode list.' });
+    }
+});
+
 // --- THIS MUST BE AFTER ALL API ROUTES ---
 const containerPublicPath = path.join(__dirname, "..", "public");
 app.use(express.static(containerPublicPath, { index: false }));
