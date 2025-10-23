@@ -11,7 +11,6 @@ function setupEventListeners(elements, socket, categories, countries, allCollect
   }
   
   function setupTagInput() {
-    // This function will check the postalCodes array and update the button state
     function updateSaveButtonState() {
         elements.savePostcodeListButton.disabled = postalCodes.length === 0;
     }
@@ -24,8 +23,7 @@ function setupEventListeners(elements, socket, categories, countries, allCollect
         e.target.parentElement.remove();
         if (postalCodes.length === 0 && !elements.locationInput.value.trim()) window.rtrlApp.setRadiusInputsState(false);
         
-        // --- ADD THIS LINE ---
-        updateSaveButtonState(); // Update button state on removal
+        updateSaveButtonState(); 
       } else {
         elements.postalCodeInput.focus();
       }
@@ -35,10 +33,8 @@ function setupEventListeners(elements, socket, categories, countries, allCollect
         e.preventDefault();
         const value = elements.postalCodeInput.value.trim();
         if (value) {
-            // validateAndAddTag will add the tag and populate the postalCodes array
             await window.rtrlApp.validateAndAddTag(value); 
-            // --- ADD THIS LINE ---
-            updateSaveButtonState(); // Update button state after adding
+            updateSaveButtonState(); 
         }
       } else if (e.key === "Backspace" && elements.postalCodeInput.value === "") {
         if (postalCodes.length > 0) {
@@ -49,8 +45,7 @@ function setupEventListeners(elements, socket, categories, countries, allCollect
             const index = postalCodes.indexOf(postcode);
             if (index > -1) postalCodes.splice(index, 1);
             lastTag.remove();
-            // --- ADD THIS LINE ---
-            updateSaveButtonState(); // Update button state on removal
+            updateSaveButtonState(); 
           }
         }
       }
