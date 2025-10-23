@@ -283,16 +283,19 @@ const runScrapeJob = async (jobId) => {
       const results = await Promise.all(promises);
       for (const businessData of results) {
         if (businessData && allProcessedBusinesses.length < targetCount) {
-          if (exclusionList && exclusionList.length > 0) {
-              const businessNameLower = businessData.BusinessName?.toLowerCase() || '';
-              const isExcluded = exclusionList.some(excludedName => 
-                  businessNameLower.includes(excludedName.toLowerCase())
-              );
-              if (isExcluded) {
-                  await addLog(jobId, `-> SKIPPED (On exclusion list): ${businessData.BusinessName}`);
-                  continue;
-              }
-          }
+if (exclusionList && exclusionList.length > 0) {
+    const normalizedBusinessName = normalizeForExclusionCheck(businessData.BusinessName);
+    
+    const isExcluded = exclusionList.some(excludedItem => {
+        const normalizedExcludedItem = normalizeForExclusionCheck(excludedItem);
+        return normalizedBusinessName.includes(normalizedExcludedItem);
+    });
+
+    if (isExcluded) {
+        await addLog(jobId, `-> SKIPPED (On exclusion list): ${businessData.BusinessName}`);
+        continue; 
+    }
+}
           const name = businessData.BusinessName?.toLowerCase().trim() || "";
           const phone = normalizePhoneNumber(businessData.Phone);
           const address = normalizeAddress(businessData.StreetAddress);
@@ -357,6 +360,7 @@ const runScrapeJob = async (jobId) => {
     await updateJobStatus(jobId, "failed");
   } finally {
     if (browser) try { await browser.close(); } catch (e) {}
+    cleanupTempDirs();
   }
 };
 
@@ -1211,4 +1215,12 @@ async function promiseWithRetry(task, maxRetries = 3, delay = 2000, jobId, url) 
             await new Promise(resolve => setTimeout(resolve, delay));
         }
     }
+}
+
+function normalizeForExclusionCheck(str = "") {
+  if (!str) return "";
+  return str
+    .toLowerCase()
+    .replace(/['’`.,()&]/g, "") 
+    .replace(/\s+/g, "");      
 }
