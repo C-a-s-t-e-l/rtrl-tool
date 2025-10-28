@@ -92,6 +92,7 @@ function initializeMainApp() {
     ),
     customCategoryGroup: document.getElementById("customCategoryGroup"),
     customCategoryInput: document.getElementById("customCategoryInput"),
+    customKeywordContainer: document.getElementById("customKeywordContainer"),
     locationInput: document.getElementById("locationInput"),
     locationSuggestionsEl: document.getElementById("locationSuggestions"),
     postalCodeInput: document.getElementById("postalCodeInput"),
