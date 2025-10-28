@@ -10,7 +10,6 @@ const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 let currentUserSession = null;
 let currentJobId = null;
 let subscribedJobId = null;
-let customKeywords = []; 
 
 window.rtrlApp = {
   ...window.rtrlApp,
@@ -128,6 +127,7 @@ function initializeMainApp() {
   let allCollectedData = [];
   let displayedData = [];
   let postalCodes = [];
+  let customKeywords = []; 
   let map, searchCircle;
   let savedPostcodeLists = [];
 
@@ -722,6 +722,7 @@ function initializeMainApp() {
       allCollectedData,
       displayedData,
       postalCodes,
+      customKeywords,
       map,
       searchCircle
     );
