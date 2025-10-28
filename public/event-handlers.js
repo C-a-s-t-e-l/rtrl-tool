@@ -1,4 +1,4 @@
-function setupEventListeners(elements, socket, categories, countries, allCollectedData, displayedData, postalCodes, map, searchCircle) {
+function setupEventListeners(elements, socket, categories, countries, allCollectedData, displayedData, postalCodes, customKeywords, map, searchCircle) {
 
   const state = window.rtrlApp.state;
 
@@ -56,23 +56,75 @@ function setupEventListeners(elements, socket, categories, countries, allCollect
     });
   }
 
+  function setupKeywordTagInput() {
+    elements.customKeywordContainer.addEventListener("click", (e) => {
+        if (e.target.classList.contains("tag-close-btn")) {
+            const keyword = e.target.dataset.value;
+            const index = customKeywords.indexOf(keyword);
+            if (index > -1) customKeywords.splice(index, 1);
+            e.target.parentElement.remove();
+            
+            const hasCustomText = customKeywords.length > 0;
+            elements.primaryCategorySelect.disabled = hasCustomText;
+            elements.subCategoryCheckboxContainer.querySelectorAll('input').forEach(cb => cb.disabled = hasCustomText);
+        } else {
+            elements.customCategoryInput.focus();
+        }
+    });
+
+    elements.customCategoryInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+            e.preventDefault();
+            const value = elements.customCategoryInput.value.trim();
+            if (value && !customKeywords.some(k => k.toLowerCase() === value.toLowerCase())) {
+                customKeywords.push(value);
+                const tagEl = document.createElement("span");
+                tagEl.className = "tag";
+                tagEl.innerHTML = `<span>${value}</span> <span class="tag-close-btn" data-value="${value}">&times;</span>`;
+                elements.customKeywordContainer.insertBefore(tagEl, elements.customCategoryInput);
+                elements.customCategoryInput.value = "";
+            } else {
+                elements.customCategoryInput.value = "";
+            }
+        } else if (e.key === "Backspace" && elements.customCategoryInput.value === "" && customKeywords.length > 0) {
+            customKeywords.pop();
+            const lastTagEl = elements.customKeywordContainer.querySelector(`.tag:last-of-type`);
+            if (lastTagEl) lastTagEl.remove();
+        }
+
+        const hasCustomText = customKeywords.length > 0 || elements.customCategoryInput.value.trim() !== '';
+        elements.primaryCategorySelect.disabled = hasCustomText;
+        elements.subCategoryCheckboxContainer.querySelectorAll('input').forEach(cb => cb.disabled = hasCustomText);
+        if (hasCustomText) {
+            elements.primaryCategorySelect.value = "";
+            elements.primaryCategorySelect.dispatchEvent(new Event("change"));
+        }
+    });
+
+    elements.customCategoryInput.addEventListener("input", () => {
+        const hasCustomText = customKeywords.length > 0 || elements.customCategoryInput.value.trim() !== '';
+        elements.primaryCategorySelect.disabled = hasCustomText;
+        elements.subCategoryCheckboxContainer.querySelectorAll('input').forEach(cb => cb.disabled = hasCustomText);
+        if (hasCustomText) {
+            elements.primaryCategorySelect.value = "";
+            elements.primaryCategorySelect.dispatchEvent(new Event("change"));
+        }
+    });
+  }
+
   setupTagInput();
-  elements.customCategoryInput.addEventListener("input", () => {
-    const hasCustomText = elements.customCategoryInput.value.trim() !== "";
-    elements.primaryCategorySelect.disabled = hasCustomText;
-    elements.subCategoryCheckboxContainer.querySelectorAll('input').forEach(cb => cb.disabled = hasCustomText);
-    if (hasCustomText) {
-      elements.primaryCategorySelect.value = "";
-      elements.primaryCategorySelect.dispatchEvent(new Event("change"));
-    }
-  });
+  setupKeywordTagInput();
 
   elements.primaryCategorySelect.addEventListener("change", (event) => {
     const selectedCategory = event.target.value;
     populateSubCategories(elements.subCategoryCheckboxContainer, elements.subCategoryGroup, selectedCategory, categories);
     const hasCategorySelection = selectedCategory !== "";
     elements.customCategoryInput.disabled = hasCategorySelection;
-    if (hasCategorySelection) elements.customCategoryInput.value = "";
+    if (hasCategorySelection) {
+        elements.customCategoryInput.value = "";
+        customKeywords.length = 0;
+        elements.customKeywordContainer.querySelectorAll('.tag').forEach(tag => tag.remove());
+    }
   });
 
   elements.findAllBusinessesCheckbox.addEventListener("change", (e) => {
@@ -155,11 +207,9 @@ function setupEventListeners(elements, socket, categories, countries, allCollect
       emailSaveTimeout = setTimeout(() => {
           if (email) {
               localStorage.setItem('rtrl_last_used_email', email);
-              console.log('Saved email to localStorage.');
           } else {
              
               localStorage.removeItem('rtrl_last_used_email');
-              console.log('Removed email from localStorage.');
           }
       }, 500); 
   });
@@ -218,7 +268,6 @@ function setupEventListeners(elements, socket, categories, countries, allCollect
                 locationString = suburbComponent.long_name.replace(/[\s/]/g, "_").toLowerCase();
             }
         } catch (error) {
-            console.warn("Could not geocode for Notes field, using default.", error);
             locationString = state.currentSearchParameters.area;
         }
     }

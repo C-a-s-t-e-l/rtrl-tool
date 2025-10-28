@@ -10,6 +10,7 @@ const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 let currentUserSession = null;
 let currentJobId = null;
 let subscribedJobId = null;
+let customKeywords = []; 
 
 window.rtrlApp = {
   ...window.rtrlApp,
@@ -993,7 +994,7 @@ function initializeMainApp() {
     });
   };
 
-  window.rtrlApp.startScrapeJob = () => {
+ window.rtrlApp.startScrapeJob = () => {
     if (!currentUserSession) {
       logMessage(
         elements.logEl,
@@ -1017,7 +1018,6 @@ function initializeMainApp() {
       .split("\n")
       .map((n) => n.trim())
       .filter(Boolean);
-    const customCategory = elements.customCategoryInput.value.trim();
     const primaryCategory = elements.primaryCategorySelect.value;
     const selectedSubCategories = Array.from(
       elements.subCategoryCheckboxContainer.querySelectorAll(
@@ -1045,12 +1045,16 @@ function initializeMainApp() {
       scrapeParams.postalCode = postalCodes;
     }
 
-    if (businessNames.length > 0) scrapeParams.count = -1;
-    else if (customCategory) scrapeParams.categoriesToLoop = [customCategory];
-    else if (selectedSubCategories.length > 0)
-      scrapeParams.categoriesToLoop = selectedSubCategories;
-    else scrapeParams.categoriesToLoop = [primaryCategory];
-
+    if (businessNames.length > 0) {
+        scrapeParams.count = -1; 
+    } else if (customKeywords.length > 0) {
+        scrapeParams.categoriesToLoop = customKeywords;
+    } else if (selectedSubCategories.length > 0) {
+        scrapeParams.categoriesToLoop = selectedSubCategories;
+    } else {
+        scrapeParams.categoriesToLoop = [primaryCategory];
+    }
+    
     const hasLocation =
       scrapeParams.location ||
       (scrapeParams.postalCode && scrapeParams.postalCode.length > 0) ||
@@ -1098,7 +1102,7 @@ function initializeMainApp() {
           ? "multiple_subcategories"
           : selectedSubCategories[0] || "",
       subCategoryList: selectedSubCategories,
-      customCategory: customCategory,
+      customCategory: customKeywords.join(', '), 
       area: searchAreaKey,
       postcodes: postalCodes,
       country: elements.countryInput.value,
