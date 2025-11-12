@@ -638,7 +638,6 @@ function initializeMainApp() {
       userInfoSpan.textContent =
         session.user.user_metadata.full_name || session.user.email;
       startButton.disabled = false;
-      startButton.textContent = "Start Research";
 
       await fetchPostcodeLists();
       try {
@@ -673,7 +672,6 @@ function initializeMainApp() {
       loginBtn.style.display = "block";
       userMenu.style.display = "none";
       startButton.disabled = true;
-      startButton.textContent = "Login to Start Research";
       currentJobId = null;
       subscribedJobId = null;
       window.rtrlApp.exclusionFeature.populateTags([]);
@@ -764,15 +762,19 @@ function initializeMainApp() {
   }
 
   function initializeApp() {
-    document.getElementById("currentYear").textContent =
-      new Date().getFullYear();
-    const savedEmail = localStorage.getItem("rtrl_last_used_email");
-    if (savedEmail) elements.userEmailInput.value = savedEmail;
-    populatePrimaryCategories(elements.primaryCategorySelect, categories, "");
-    initializeMap();
+    // FIX 2: Initialize features that depend on the DOM before any async operations that might use them.
     window.rtrlApp.exclusionFeature.init(
       () => currentUserSession?.access_token
     );
+
+    // FIX 1: Removed reference to "currentYear" element which no longer exists.
+    // document.getElementById("currentYear").textContent = new Date().getFullYear();
+
+    const savedEmail = localStorage.getItem("rtrl_last_used_email");
+    if (savedEmail) elements.userEmailInput.value = savedEmail;
+
+    populatePrimaryCategories(elements.primaryCategorySelect, categories, "");
+    initializeMap();
     setupPostcodeListHandlers();
     setupEventListeners(
       elements,
@@ -786,6 +788,7 @@ function initializeMainApp() {
       map,
       searchCircle
     );
+
     if (elements.findAllBusinessesCheckbox.checked) {
       elements.countInput.disabled = true;
       elements.countInput.value = "";
