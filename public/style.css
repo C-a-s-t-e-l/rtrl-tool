@@ -189,6 +189,7 @@ header {
   font-size: 0.9rem;
 }
 .collapsible-section {
+  border: 1px solid var(--border-color);
   border-radius: 8px;
   background-color: var(--card-bg);
 }
@@ -218,14 +219,16 @@ header {
   padding: 0 1rem 1rem 1rem;
   max-height: 2000px;
   overflow: hidden;
-  transition: max-height 0.4s ease-in-out, padding 0.3s ease;
+  transition: max-height 0.4s ease-in-out, padding 0.3s ease,
+    border-top 0.3s ease;
   border-top: 1px solid var(--border-color);
 }
 .collapsible-content.collapsed {
   max-height: 0;
   padding-top: 0;
   padding-bottom: 0;
-  border-top: none;
+  border-top: 1px solid transparent;
+  overflow: hidden;
 }
 
 /* Icon Colors */
@@ -256,8 +259,10 @@ label {
   display: block;
   margin-bottom: 0.5rem;
   font-weight: 500;
-  font-size: 0.85rem;
-  color: var(--primary-text);
+  font-size: 0.75rem;
+  color: var(--secondary-text);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 input,
 textarea,
@@ -284,6 +289,84 @@ select {
   background-repeat: no-repeat;
   background-position: right 1rem center;
   background-size: 16px 12px;
+}
+.checkbox-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.checkbox-group label {
+  text-transform: none;
+  color: var(--primary-text);
+  font-size: 0.9rem;
+  letter-spacing: 0;
+}
+.checkbox-group input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent-color);
+}
+
+/* --- TAG UI FIX --- */
+.tag-container {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background-color: #fff;
+  cursor: text;
+  transition: all 0.2s;
+}
+.tag-container:focus-within {
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 3px rgba(0, 191, 165, 0.2);
+}
+.tag-container input {
+  flex-grow: 1;
+  border: none;
+  outline: none;
+  padding: 4px 2px;
+  font-size: 0.9rem;
+  background: transparent;
+  min-width: 120px;
+}
+.tag {
+  display: inline-flex;
+  align-items: center;
+  background-color: #e9ecef;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+.tag-close-btn {
+  margin-left: 6px;
+  cursor: pointer;
+  color: var(--secondary-text);
+}
+.tag-close-btn:hover {
+  color: var(--primary-text);
+}
+#postcodeListContainer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin-top: 1rem;
+}
+#postcodeListContainer .form-group {
+  flex-grow: 1;
+  margin: 0;
+}
+#postcodeListContainer .btn-secondary {
+  width: auto;
+  flex-grow: 1;
+}
+#postcodeListContainer .btn-icon {
+  flex-shrink: 0;
 }
 
 /* --- BUTTONS --- */
@@ -317,7 +400,7 @@ select {
   color: var(--primary-text);
   border: 1px solid var(--border-color);
   font-size: 0.8rem;
-  padding: 0.5rem 1rem;
+  padding: 0.6rem 1rem;
 }
 .btn-secondary:hover {
   background-color: #e9ecef;
@@ -349,12 +432,6 @@ select {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
-}
-label {
-  font-size: 0.8rem;
-  text-transform: uppercase;
-  color: var(--secondary-text);
-  font-weight: 600;
 }
 .progress-bar-container {
   display: flex;
@@ -507,37 +584,17 @@ label {
   opacity: 1;
   color: var(--accent-color);
 }
+
+/* --- CHECKBOX FIX --- */
 .checkbox-column {
   justify-content: center;
 }
 .checkbox-column input[type="checkbox"] {
-  appearance: none;
-  background: transparent;
-  margin: 0;
-  width: 18px;
-  height: 18px;
-  border: 2px solid #ccc;
-  border-radius: 50%;
-  display: grid;
-  place-content: center;
-  cursor: pointer;
-  transition: all 0.2s;
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent-color);
 }
-.checkbox-column input[type="checkbox"]::before {
-  content: "";
-  width: 10px;
-  height: 10px;
-  transform: scale(0);
-  transition: 120ms transform ease-in-out;
-  background-color: var(--accent-color);
-  border-radius: 50%;
-}
-.checkbox-column input[type="checkbox"]:checked {
-  border-color: var(--accent-color);
-}
-.checkbox-column input[type="checkbox"]:checked::before {
-  transform: scale(1);
-}
+
 .grid-row > span:nth-child(4)::after {
   content: "★";
   color: #ffc107;
@@ -561,6 +618,87 @@ span a:hover {
   height: 8px;
   background-color: var(--success-color);
   border-radius: 50%;
+}
+
+/* --- MAP & RADIUS FIX --- */
+#map {
+  height: 250px;
+  width: 100%;
+  border-radius: 8px;
+  margin-top: 1rem;
+  border: 1px solid var(--border-color);
+  z-index: 1;
+}
+.slider-container {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+#radiusSlider {
+  flex-grow: 1;
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  background: #e9ecef;
+  outline: none;
+  border-radius: 3px;
+}
+#radiusSlider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  background: var(--accent-color);
+  cursor: pointer;
+  border-radius: 50%;
+}
+#radiusSlider::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  background: var(--accent-color);
+  cursor: pointer;
+  border-radius: 50%;
+  border: none;
+}
+#radiusValue {
+  font-weight: 500;
+  color: var(--primary-text);
+  white-space: nowrap;
+  min-width: 50px;
+  font-size: 0.9rem;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* --- AUTOCOMPLETE FIX --- */
+.autocomplete-suggestions {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  background-color: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  box-shadow: var(--shadow);
+  max-height: 250px;
+  overflow-y: auto;
+  display: none;
+}
+.autocomplete-suggestions ul {
+  list-style: none;
+  padding: 0.5rem 0;
+  margin: 0;
+}
+.autocomplete-suggestions li {
+  padding: 0.75rem 1.25rem;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+.autocomplete-suggestions li:hover {
+  background-color: #f8f9fa;
 }
 
 /* --- RESPONSIVENESS --- */
