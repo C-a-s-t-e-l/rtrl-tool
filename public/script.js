@@ -52,15 +52,23 @@ function initializeMainApp() {
 
   const socket = io(BACKEND_URL, {
     extraHeaders: { "ngrok-skip-browser-warning": "true" },
-    transports: ['websocket'],
+    transports: ["websocket"],
     timeout: 70000,
   });
 
-  socket.on('connect', () => {
-    logMessage(elements.logEl, "Successfully connected to the server. Ready.", "success");
+  socket.on("connect", () => {
+    logMessage(
+      elements.logEl,
+      "Successfully connected to the server. Ready.",
+      "success"
+    );
 
     if (subscribedJobId && currentUserSession) {
-      logMessage(elements.logEl, `Re-subscribing to active job: ${subscribedJobId}...`, "info");
+      logMessage(
+        elements.logEl,
+        `Re-subscribing to active job: ${subscribedJobId}...`,
+        "info"
+      );
       socket.emit("subscribe_to_job", {
         jobId: subscribedJobId,
         authToken: currentUserSession.access_token,
@@ -68,9 +76,13 @@ function initializeMainApp() {
     }
   });
 
-  socket.on('disconnect', (reason) => {
-    logMessage(elements.logEl, "Connection to server lost. Attempting to reconnect...", "error");
-    console.error('Socket disconnected due to:', reason);
+  socket.on("disconnect", (reason) => {
+    logMessage(
+      elements.logEl,
+      "Connection to server lost. Attempting to reconnect...",
+      "error"
+    );
+    console.error("Socket disconnected due to:", reason);
   });
 
   const elements = {
@@ -121,44 +133,50 @@ function initializeMainApp() {
     filterInput: document.getElementById("filterInput"),
     postcodeListSelect: document.getElementById("postcodeListSelect"),
     savePostcodeListButton: document.getElementById("savePostcodeListButton"),
-    deletePostcodeListButton: document.getElementById("deletePostcodeListButton"),
+    deletePostcodeListButton: document.getElementById(
+      "deletePostcodeListButton"
+    ),
   };
 
   let allCollectedData = [];
   let displayedData = [];
   let postalCodes = [];
-  let customKeywords = []; 
+  let customKeywords = [];
   let map, searchCircle;
   let savedPostcodeLists = [];
 
-
   function populatePostcodeListDropdown(lists) {
     savedPostcodeLists = lists;
-    elements.postcodeListSelect.innerHTML = '<option value="">Load a saved list...</option>';
-    lists.forEach(list => {
-      const option = document.createElement('option');
+    elements.postcodeListSelect.innerHTML =
+      '<option value="">Load a saved list...</option>';
+    lists.forEach((list) => {
+      const option = document.createElement("option");
       option.value = list.id;
       option.textContent = list.list_name;
       elements.postcodeListSelect.appendChild(option);
     });
-    elements.deletePostcodeListButton.style.display = 'none';
+    elements.deletePostcodeListButton.style.display = "none";
   }
 
   async function fetchPostcodeLists() {
     if (!currentUserSession) return;
     try {
       const response = await fetch(`${BACKEND_URL}/api/postcode-lists`, {
-        headers: { 'Authorization': `Bearer ${currentUserSession.access_token}` }
+        headers: { Authorization: `Bearer ${currentUserSession.access_token}` },
       });
       if (response.ok) {
         const lists = await response.json();
         populatePostcodeListDropdown(lists);
       } else {
-        logMessage(elements.logEl, 'Failed to load saved postcode lists.', 'error');
+        logMessage(
+          elements.logEl,
+          "Failed to load saved postcode lists.",
+          "error"
+        );
       }
     } catch (error) {
-      console.error('Error fetching postcode lists:', error);
-      logMessage(elements.logEl, 'Error fetching postcode lists.', 'error');
+      console.error("Error fetching postcode lists:", error);
+      logMessage(elements.logEl, "Error fetching postcode lists.", "error");
     }
   }
 
@@ -167,30 +185,45 @@ function initializeMainApp() {
 
     const listName = prompt("Please enter a name for this postcode list:", "");
     if (!listName || listName.trim() === "") {
-      logMessage(elements.logEl, 'Save cancelled: List name cannot be empty.', 'info');
+      logMessage(
+        elements.logEl,
+        "Save cancelled: List name cannot be empty.",
+        "info"
+      );
       return;
     }
 
     try {
       const response = await fetch(`${BACKEND_URL}/api/postcode-lists`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${currentUserSession.access_token}`
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${currentUserSession.access_token}`,
         },
-        body: JSON.stringify({ list_name: listName.trim(), postcodes: postalCodes })
+        body: JSON.stringify({
+          list_name: listName.trim(),
+          postcodes: postalCodes,
+        }),
       });
 
       if (response.status === 201) {
-        logMessage(elements.logEl, `Successfully saved list "${listName.trim()}".`, 'success');
-        await fetchPostcodeLists(); 
+        logMessage(
+          elements.logEl,
+          `Successfully saved list "${listName.trim()}".`,
+          "success"
+        );
+        await fetchPostcodeLists();
       } else {
         const { error } = await response.json();
-        logMessage(elements.logEl, `Error saving list: ${error}`, 'error');
+        logMessage(elements.logEl, `Error saving list: ${error}`, "error");
       }
     } catch (error) {
-      console.error('Failed to save postcode list:', error);
-      logMessage(elements.logEl, 'A network error occurred while saving the list.', 'error');
+      console.error("Failed to save postcode list:", error);
+      logMessage(
+        elements.logEl,
+        "A network error occurred while saving the list.",
+        "error"
+      );
     }
   }
 
@@ -198,57 +231,86 @@ function initializeMainApp() {
     const selectedId = elements.postcodeListSelect.value;
     if (!selectedId || !currentUserSession) return;
 
-    const selectedList = savedPostcodeLists.find(l => l.id == selectedId);
+    const selectedList = savedPostcodeLists.find((l) => l.id == selectedId);
     if (!selectedList) return;
 
-    if (!confirm(`Are you sure you want to delete the list "${selectedList.list_name}"?`)) {
+    if (
+      !confirm(
+        `Are you sure you want to delete the list "${selectedList.list_name}"?`
+      )
+    ) {
       return;
     }
 
     try {
-      const response = await fetch(`${BACKEND_URL}/api/postcode-lists/${selectedId}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${currentUserSession.access_token}` }
-      });
+      const response = await fetch(
+        `${BACKEND_URL}/api/postcode-lists/${selectedId}`,
+        {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${currentUserSession.access_token}`,
+          },
+        }
+      );
 
       if (response.ok) {
-        logMessage(elements.logEl, `Successfully deleted list "${selectedList.list_name}".`, 'success');
-        await fetchPostcodeLists(); 
+        logMessage(
+          elements.logEl,
+          `Successfully deleted list "${selectedList.list_name}".`,
+          "success"
+        );
+        await fetchPostcodeLists();
       } else {
-        logMessage(elements.logEl, 'Failed to delete the list.', 'error');
+        logMessage(elements.logEl, "Failed to delete the list.", "error");
       }
     } catch (error) {
-      console.error('Failed to delete postcode list:', error);
-      logMessage(elements.logEl, 'A network error occurred while deleting the list.', 'error');
+      console.error("Failed to delete postcode list:", error);
+      logMessage(
+        elements.logEl,
+        "A network error occurred while deleting the list.",
+        "error"
+      );
     }
   }
 
   function setupPostcodeListHandlers() {
-    elements.postcodeListSelect.addEventListener('change', () => {
+    elements.postcodeListSelect.addEventListener("change", () => {
       const selectedId = elements.postcodeListSelect.value;
-      const selectedList = savedPostcodeLists.find(list => list.id == selectedId);
+      const selectedList = savedPostcodeLists.find(
+        (list) => list.id == selectedId
+      );
 
       postalCodes.length = 0;
-      elements.postalCodeContainer.querySelectorAll('.tag').forEach(tag => tag.remove());
+      elements.postalCodeContainer
+        .querySelectorAll(".tag")
+        .forEach((tag) => tag.remove());
 
       if (selectedList) {
-        selectedList.postcodes.forEach(pc => window.rtrlApp.validateAndAddTag(pc));
-        elements.deletePostcodeListButton.style.display = 'inline-flex';
+        selectedList.postcodes.forEach((pc) =>
+          window.rtrlApp.validateAndAddTag(pc)
+        );
+        elements.deletePostcodeListButton.style.display = "inline-flex";
       } else {
-        elements.deletePostcodeListButton.style.display = 'none';
+        elements.deletePostcodeListButton.style.display = "none";
       }
     });
 
     const observer = new MutationObserver(() => {
-      const hasTags = elements.postalCodeContainer.querySelector('.tag') !== null;
+      const hasTags =
+        elements.postalCodeContainer.querySelector(".tag") !== null;
       elements.savePostcodeListButton.disabled = !hasTags;
     });
     observer.observe(elements.postalCodeContainer, { childList: true });
 
-    elements.savePostcodeListButton.addEventListener('click', saveCurrentPostcodeList);
-    elements.deletePostcodeListButton.addEventListener('click', deleteSelectedPostcodeList);
+    elements.savePostcodeListButton.addEventListener(
+      "click",
+      saveCurrentPostcodeList
+    );
+    elements.deletePostcodeListButton.addEventListener(
+      "click",
+      deleteSelectedPostcodeList
+    );
   }
-
 
   window.rtrlApp.state = {
     selectedAnchorPoint: null,
@@ -442,7 +504,6 @@ function initializeMainApp() {
 
   const loginButton = document.getElementById("login-button");
   const logoutButton = document.getElementById("logout-button");
-  const userInfoEl = document.getElementById("user-info");
   const startButton = document.getElementById("startButton");
 
   loginButton.addEventListener("click", async () => {
@@ -495,51 +556,52 @@ function initializeMainApp() {
         "info"
       );
       elements.researchStatusIcon.className =
-        update.status === "running"
-          ? "fas fa-spinner fa-spin"
-          : "fas fa-check-circle";
+        update.status === "running" ? "fas fa-spinner fa-spin" : "fas fa-tasks";
       if (update.status === "completed" || update.status === "failed") {
         currentJobId = null;
         setUiState(false, getUiElementsForStateChange());
+        if (update.status === "completed")
+          elements.researchStatusIcon.className = "fas fa-check-circle";
       }
     }
   });
 
-  socket.on('job_state', (job) => {
+  socket.on("job_state", (job) => {
     if (!job) {
-      logMessage(elements.logEl, "Could not retrieve job state. Ready for a new search.", 'error');
+      logMessage(
+        elements.logEl,
+        "Could not retrieve job state. Ready for a new search.",
+        "error"
+      );
       return;
     }
-
     allCollectedData.length = 0;
     if (job.results && job.results.length > 0) {
       allCollectedData.push(...job.results);
     }
-
     if (job.parameters && job.parameters.searchParamsForEmail) {
-      window.rtrlApp.state.currentSearchParameters = job.parameters.searchParamsForEmail;
+      window.rtrlApp.state.currentSearchParameters =
+        job.parameters.searchParamsForEmail;
     } else {
-
       window.rtrlApp.state.currentSearchParameters = {};
     }
-
     window.rtrlApp.applyFilterAndSort();
     if (allCollectedData.length > 0) {
       elements.collectedDataCard.classList.add("has-results");
     }
-
-    const isRunning = job.status === 'running' || job.status === 'queued';
-
+    const isRunning = job.status === "running" || job.status === "queued";
     if (isRunning) {
-
-      logMessage(elements.logEl, "Successfully reconnected and restored active job state.", 'success');
-      elements.logEl.textContent = job.logs.join('\n');
+      logMessage(
+        elements.logEl,
+        "Successfully reconnected and restored active job state.",
+        "success"
+      );
+      elements.logEl.textContent = job.logs.join("\n");
       elements.logEl.scrollTop = elements.logEl.scrollHeight;
     } else {
-      elements.logEl.innerHTML = '';
+      elements.logEl.innerHTML = "";
       logMessage(elements.logEl, "Waiting to start research...", "default");
     }
-
     setUiState(isRunning, getUiElementsForStateChange());
   });
 
@@ -566,20 +628,22 @@ function initializeMainApp() {
 
   supabaseClient.auth.onAuthStateChange(async (event, session) => {
     currentUserSession = session;
+    const loginBtn = document.getElementById("login-button");
+    const userMenu = document.getElementById("user-menu");
+
     if (session) {
-      loginButton.style.display = "none";
-      logoutButton.style.display = "block";
-      userInfoEl.style.display = "inline";
-      userInfoEl.textContent = `Welcome, ${
-        session.user.user_metadata.full_name || session.user.email
-        }`;
+      loginBtn.style.display = "none";
+      userMenu.style.display = "block";
+      const userInfoSpan = userMenu.querySelector("#user-info");
+      userInfoSpan.textContent =
+        session.user.user_metadata.full_name || session.user.email;
       startButton.disabled = false;
       startButton.textContent = "Start Research";
 
       await fetchPostcodeLists();
       try {
         const response = await fetch(`${BACKEND_URL}/api/exclusions`, {
-          headers: { 'Authorization': `Bearer ${session.access_token}` }
+          headers: { Authorization: `Bearer ${session.access_token}` },
         });
         if (response.ok) {
           const { exclusionList } = await response.json();
@@ -606,14 +670,12 @@ function initializeMainApp() {
         }
       }
     } else {
-      loginButton.style.display = "block";
-      logoutButton.style.display = "none";
-      userInfoEl.style.display = "none";
+      loginBtn.style.display = "block";
+      userMenu.style.display = "none";
       startButton.disabled = true;
       startButton.textContent = "Login to Start Research";
       currentJobId = null;
       subscribedJobId = null;
-
       window.rtrlApp.exclusionFeature.populateTags([]);
       populatePostcodeListDropdown([]);
     }
@@ -706,14 +768,12 @@ function initializeMainApp() {
       new Date().getFullYear();
     const savedEmail = localStorage.getItem("rtrl_last_used_email");
     if (savedEmail) elements.userEmailInput.value = savedEmail;
-
     populatePrimaryCategories(elements.primaryCategorySelect, categories, "");
     initializeMap();
-    window.rtrlApp.exclusionFeature.init(() => currentUserSession?.access_token);
-    setupPostcodeListHandlers();
-    elements.startButton.addEventListener("click", () =>
-      window.rtrlApp.startScrapeJob()
+    window.rtrlApp.exclusionFeature.init(
+      () => currentUserSession?.access_token
     );
+    setupPostcodeListHandlers();
     setupEventListeners(
       elements,
       socket,
@@ -726,7 +786,6 @@ function initializeMainApp() {
       map,
       searchCircle
     );
-
     if (elements.findAllBusinessesCheckbox.checked) {
       elements.countInput.disabled = true;
       elements.countInput.value = "";
@@ -749,7 +808,6 @@ function initializeMainApp() {
     const minRating = parseFloat(elements.ratingFilter.value);
     const reviewFilterValue = elements.reviewCountFilter.value;
     let filteredData;
-
     if (filterText) {
       filteredData = allCollectedData.filter(
         (item) =>
@@ -761,13 +819,11 @@ function initializeMainApp() {
     } else {
       filteredData = [...allCollectedData];
     }
-
     if (!isNaN(minRating) && minRating > 0) {
       filteredData = filteredData.filter(
         (item) => (parseFloat(item.StarRating) || 0) >= minRating
       );
     }
-
     if (reviewFilterValue) {
       filteredData = filteredData.filter((item) => {
         const reviewCount = parseInt(item.ReviewCount, 10) || 0;
@@ -777,7 +833,6 @@ function initializeMainApp() {
         return true;
       });
     }
-
     const { key, direction } = window.rtrlApp.state.currentSort;
     if (key) {
       filteredData.sort((a, b) => {
@@ -795,7 +850,6 @@ function initializeMainApp() {
         return direction === "asc" ? comparison : -comparison;
       });
     }
-
     displayedData = filteredData;
     renderTable();
   };
@@ -996,7 +1050,7 @@ function initializeMainApp() {
     });
   };
 
- window.rtrlApp.startScrapeJob = () => {
+  window.rtrlApp.startResearch = () => {
     if (!currentUserSession) {
       logMessage(
         elements.logEl,
@@ -1005,7 +1059,6 @@ function initializeMainApp() {
       );
       return;
     }
-
     setUiState(true, getUiElementsForStateChange());
     allCollectedData = [];
     displayedData = [];
@@ -1014,7 +1067,6 @@ function initializeMainApp() {
     elements.progressBar.style.width = "0%";
     elements.progressPercentage.textContent = "0%";
     elements.collectedDataCard.classList.remove("has-results");
-
     const namesText = elements.businessNamesInput.value.trim();
     const businessNames = namesText
       .split("\n")
@@ -1028,16 +1080,13 @@ function initializeMainApp() {
     )
       .map((cb) => cb.value)
       .filter((v) => v !== "select_all");
-
     const exclusionList = window.rtrlApp.exclusionFeature.getExclusionList();
-
     const scrapeParams = {
       country: elements.countryInput.value,
       businessNames: businessNames.length > 0 ? businessNames : [],
       userEmail: elements.userEmailInput.value.trim(),
       exclusionList: exclusionList,
     };
-
     if (window.rtrlApp.state.selectedAnchorPoint) {
       const { lat, lng } = window.rtrlApp.state.selectedAnchorPoint.center;
       scrapeParams.anchorPoint = `${lat},${lng}`;
@@ -1046,17 +1095,15 @@ function initializeMainApp() {
       scrapeParams.location = elements.locationInput.value.trim();
       scrapeParams.postalCode = postalCodes;
     }
-
     if (businessNames.length > 0) {
-        scrapeParams.count = -1; 
+      scrapeParams.count = -1;
     } else if (customKeywords.length > 0) {
-        scrapeParams.categoriesToLoop = customKeywords;
+      scrapeParams.categoriesToLoop = customKeywords;
     } else if (selectedSubCategories.length > 0) {
-        scrapeParams.categoriesToLoop = selectedSubCategories;
+      scrapeParams.categoriesToLoop = selectedSubCategories;
     } else {
-        scrapeParams.categoriesToLoop = [primaryCategory];
+      scrapeParams.categoriesToLoop = [primaryCategory];
     }
-    
     const hasLocation =
       scrapeParams.location ||
       (scrapeParams.postalCode && scrapeParams.postalCode.length > 0) ||
@@ -1066,7 +1113,6 @@ function initializeMainApp() {
       (scrapeParams.categoriesToLoop &&
         scrapeParams.categoriesToLoop.length > 0 &&
         scrapeParams.categoriesToLoop[0]);
-
     if (
       (!hasSearchTerm || !hasLocation || !scrapeParams.country) &&
       businessNames.length === 0
@@ -1087,7 +1133,6 @@ function initializeMainApp() {
         countValue <= 0;
       scrapeParams.count = find_all ? -1 : countValue;
     }
-
     let searchAreaKey;
     if (window.rtrlApp.state.selectedAnchorPoint)
       searchAreaKey = elements.anchorPointInput.value.trim().split(",")[0];
@@ -1096,7 +1141,6 @@ function initializeMainApp() {
         postalCodes.length > 0
           ? postalCodes.join("_")
           : elements.locationInput.value.trim().split(",")[0];
-
     scrapeParams.searchParamsForEmail = {
       primaryCategory: primaryCategory,
       subCategory:
@@ -1104,12 +1148,11 @@ function initializeMainApp() {
           ? "multiple_subcategories"
           : selectedSubCategories[0] || "",
       subCategoryList: selectedSubCategories,
-      customCategory: customKeywords.join(', '), 
+      customCategory: customKeywords.join(", "),
       area: searchAreaKey,
       postcodes: postalCodes,
       country: elements.countryInput.value,
     };
-
     socket.emit("start_scrape_job", {
       authToken: currentUserSession.access_token,
       ...scrapeParams,
@@ -1155,7 +1198,6 @@ function initializeMainApp() {
 
   initializeApp();
 }
-
 
 const socketIoScript = document.createElement("script");
 socketIoScript.src =

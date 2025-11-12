@@ -10,6 +10,35 @@ function setupEventListeners(elements, socket, categories, countries, allCollect
     return window.rtrlApp.getDisplayedData().filter((_, index) => selectedIndices.includes(index));
   }
   
+  function updateSelectedCount() {
+    const count = elements.resultsTableBody.querySelectorAll(".row-checkbox:checked").length;
+    document.getElementById('resultsCount').textContent = `(${count} selected)`;
+  }
+  
+  document.querySelectorAll('.collapsible-header').forEach(header => {
+    header.addEventListener('click', () => {
+        const content = header.nextElementSibling;
+        const icon = header.querySelector('.toggle-icon');
+        
+        content.classList.toggle('collapsed');
+        icon.classList.toggle('open');
+    });
+  });
+
+  const userMenuButton = document.getElementById('user-menu-button');
+  const userMenuDropdown = document.getElementById('user-menu-dropdown');
+  if (userMenuButton) {
+      userMenuButton.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const isVisible = userMenuDropdown.style.display === 'block';
+          userMenuDropdown.style.display = isVisible ? 'none' : 'block';
+      });
+  }
+  document.addEventListener('click', () => {
+      if(userMenuDropdown) userMenuDropdown.style.display = 'none';
+  });
+
+
   function setupTagInput() {
     function updateSaveButtonState() {
         elements.savePostcodeListButton.disabled = postalCodes.length === 0;
@@ -189,26 +218,25 @@ function setupEventListeners(elements, socket, categories, countries, allCollect
 
   elements.businessNamesInput.addEventListener("input", (e) => {
     const isIndividualSearch = e.target.value.trim().length > 0;
-    elements.bulkSearchContainer.querySelectorAll(".form-group, .form-row").forEach((el) => {
-      el.style.opacity = isIndividualSearch ? "0.5" : "1";
-      el.querySelectorAll("input, select").forEach(input => input.disabled = isIndividualSearch);
+    document.querySelectorAll('.collapsible-card').forEach(card => {
+        const content = card.querySelector('.collapsible-content');
+        if (content && content.id !== 'individualSearchContainer' && card.querySelector('h3').textContent.includes('Specific Name')) {
+            
+        }
     });
+
     window.rtrlApp.setRadiusInputsState(isIndividualSearch); 
     window.rtrlApp.setLocationInputsState(isIndividualSearch); 
   });
 
-    let emailSaveTimeout;
+  let emailSaveTimeout;
   elements.userEmailInput.addEventListener('input', (e) => {
-    
       clearTimeout(emailSaveTimeout);
-      
       const email = e.target.value;
-
       emailSaveTimeout = setTimeout(() => {
           if (email) {
               localStorage.setItem('rtrl_last_used_email', email);
           } else {
-             
               localStorage.removeItem('rtrl_last_used_email');
           }
       }, 500); 
@@ -216,6 +244,13 @@ function setupEventListeners(elements, socket, categories, countries, allCollect
 
   elements.selectAllCheckbox.addEventListener("change", (e) => {
     elements.resultsTableBody.querySelectorAll(".row-checkbox").forEach(checkbox => checkbox.checked = e.target.checked);
+    updateSelectedCount();
+  });
+  
+  elements.resultsTableBody.addEventListener('change', (e) => {
+      if (e.target.classList.contains('row-checkbox')) {
+          updateSelectedCount();
+      }
   });
 
   elements.downloadFullExcelButton.addEventListener("click", async () => {
@@ -284,11 +319,7 @@ function setupEventListeners(elements, socket, categories, countries, allCollect
     
     const notesContent = `${date}_${categoryString}_${locationString}`;
     
-    const newHeaders = [
-        "Company", "Address_Suburb", "Address_State", "Notes", 
-        "facebook", "instagram", "linkedin", 
-        "email_1", "email_2", "email_3"
-    ];
+    const newHeaders = [ "Company", "Address_Suburb", "Address_State", "Notes", "Category", "facebook", "instagram", "linkedin", "email_1", "email_2", "email_3" ];
 
     const contactsData = dataWithEmails.map((d) => {
       let state = '';
@@ -296,18 +327,11 @@ function setupEventListeners(elements, socket, categories, countries, allCollect
           const stateMatch = d.StreetAddress.match(/\b([A-Z]{2,3})\b(?= \d{4,})/);
           state = stateMatch ? stateMatch[1] : ''; 
       }
-
       return {
-        "Company": d.BusinessName || '',
-        "Address_Suburb": d.SuburbArea || '',
-        "Address_State": state, 
-        "Notes": notesContent,
-        "facebook": d.FacebookURL || '',
-        "instagram": d.InstagramURL || '',
-        "linkedin": '', 
-        "email_1": d.Email1 || '',
-        "email_2": d.Email2 || '',
-        "email_3": d.Email3 || ''
+        "Company": d.BusinessName || '', "Address_Suburb": d.SuburbArea || '', "Address_State": state, 
+        "Notes": notesContent, "Category": d.Category || '', "facebook": d.FacebookURL || '',
+        "instagram": d.InstagramURL || '', "linkedin": '', "email_1": d.Email1 || '',
+        "email_2": d.Email2 || '', "email_3": d.Email3 || ''
       };
     });
 
