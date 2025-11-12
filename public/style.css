@@ -218,7 +218,6 @@ header {
 .collapsible-content {
   padding: 0 1rem 1rem 1rem;
   max-height: 2000px;
-  overflow: hidden;
   transition: max-height 0.4s ease-in-out, padding 0.3s ease,
     border-top 0.3s ease;
   border-top: 1px solid var(--border-color);
@@ -254,6 +253,7 @@ header {
 /* --- FORMS --- */
 .form-group {
   margin-top: 1rem;
+  position: relative;
 }
 label {
   display: block;
@@ -307,7 +307,7 @@ select {
   accent-color: var(--accent-color);
 }
 
-/* --- TAG UI FIX --- */
+/* --- TAG UI --- */
 .tag-container {
   display: flex;
   flex-wrap: wrap;
@@ -367,6 +367,45 @@ select {
 }
 #postcodeListContainer .btn-icon {
   flex-shrink: 0;
+}
+
+/* --- CHECKBOX LIST FIX --- */
+.checkbox-container {
+  max-height: 200px;
+  overflow-y: auto;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 0.5rem;
+  background-color: #fff;
+}
+.checkbox-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem;
+  border-radius: 4px;
+}
+.checkbox-item:hover {
+  background-color: #f8f9fa;
+}
+.checkbox-item input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent-color);
+  order: 2;
+}
+.checkbox-item label {
+  margin-bottom: 0;
+  font-weight: 500;
+  font-size: 0.9rem;
+  color: var(--primary-text);
+  cursor: pointer;
+  text-transform: none;
+  letter-spacing: normal;
+  order: 1;
+}
+.checkbox-item.checkbox-item-all label {
+  font-weight: 600;
 }
 
 /* --- BUTTONS --- */
@@ -584,8 +623,6 @@ select {
   opacity: 1;
   color: var(--accent-color);
 }
-
-/* --- CHECKBOX FIX --- */
 .checkbox-column {
   justify-content: center;
 }
@@ -594,7 +631,6 @@ select {
   height: 16px;
   accent-color: var(--accent-color);
 }
-
 .grid-row > span:nth-child(4)::after {
   content: "★";
   color: #ffc107;
@@ -620,7 +656,7 @@ span a:hover {
   border-radius: 50%;
 }
 
-/* --- MAP & RADIUS FIX --- */
+/* --- MAP & RADIUS --- */
 #map {
   height: 250px;
   width: 100%;
@@ -675,9 +711,9 @@ span a:hover {
 /* --- AUTOCOMPLETE FIX --- */
 .autocomplete-suggestions {
   position: absolute;
-  top: calc(100% + 4px);
+  top: 100%;
   left: 0;
-  right: 0;
+  width: 100%;
   z-index: 1000;
   background-color: var(--card-bg);
   border: 1px solid var(--border-color);
@@ -686,6 +722,7 @@ span a:hover {
   max-height: 250px;
   overflow-y: auto;
   display: none;
+  margin-top: 4px;
 }
 .autocomplete-suggestions ul {
   list-style: none;
