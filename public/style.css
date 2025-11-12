@@ -37,7 +37,6 @@ body {
   padding: 2rem;
 }
 
-/* --- HEADER --- */
 header {
   display: flex;
   align-items: center;
@@ -72,7 +71,6 @@ header {
   margin: 0;
 }
 
-/* --- AUTH & USER MENU --- */
 #auth-container {
   position: relative;
 }
@@ -133,7 +131,6 @@ header {
   margin: 0.5rem 0;
 }
 
-/* --- LAYOUT & CARDS --- */
 .main-layout {
   display: flex;
   gap: 2rem;
@@ -173,7 +170,6 @@ header {
   margin: 0;
 }
 
-/* --- SEARCH CONTROLS --- */
 .search-controls-header {
   margin-bottom: 1rem;
 }
@@ -250,7 +246,6 @@ header {
   color: #79879c;
 }
 
-/* --- FORMS --- */
 .form-group {
   margin-top: 1rem;
   position: relative;
@@ -307,7 +302,6 @@ select {
   accent-color: var(--accent-color);
 }
 
-/* --- TAG UI --- */
 .tag-container {
   display: flex;
   flex-wrap: wrap;
@@ -369,7 +363,6 @@ select {
   flex-shrink: 0;
 }
 
-/* --- CHECKBOX LIST FIX --- */
 .checkbox-container {
   max-height: 200px;
   overflow-y: auto;
@@ -408,7 +401,6 @@ select {
   font-weight: 600;
 }
 
-/* --- BUTTONS --- */
 .btn {
   display: inline-flex;
   align-items: center;
@@ -453,7 +445,6 @@ select {
   border-color: #adb5bd !important;
 }
 
-/* --- RESULTS DISPLAY --- */
 .results-header {
   display: flex;
   justify-content: space-between;
@@ -543,7 +534,6 @@ select {
   min-width: 150px;
 }
 
-/* --- RESULTS GRID --- */
 .results-grid-container {
   flex-grow: 1;
   overflow: auto;
@@ -656,7 +646,6 @@ span a:hover {
   border-radius: 50%;
 }
 
-/* --- MAP & RADIUS --- */
 #map {
   height: 250px;
   width: 100%;
@@ -708,7 +697,6 @@ span a:hover {
   letter-spacing: 0;
 }
 
-/* --- AUTOCOMPLETE FIX --- */
 .autocomplete-suggestions {
   position: absolute;
   top: 100%;
@@ -738,7 +726,6 @@ span a:hover {
   background-color: #f8f9fa;
 }
 
-/* --- RESPONSIVENESS --- */
 @media (max-width: 1400px) {
   .app-container {
     max-width: 100%;
