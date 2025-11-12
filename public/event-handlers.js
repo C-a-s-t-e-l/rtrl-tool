@@ -258,7 +258,7 @@ function setupEventListeners(elements, socket, categories, countries, allCollect
     await downloadExcel(getSelectedData(), state.currentSearchParameters, "full", "xlsx", elements.logEl, null, geocoder, elements.countryInput.value);
   });
 
-  elements.downloadNotifyreCSVButton.addEventListener("click", async () => {
+elements.downloadNotifyreCSVButton.addEventListener("click", async () => {
     const geocoder = window.rtrlApp.state.googleMapsGeocoder; 
     const selectedData = getSelectedData();
       const notifyreHeaders = ["FirstName", "LastName", "Organization", "Email", "FaxNumber", "MobileNumber", "CustomField1", "CustomField2", "CustomField3", "CustomField4", "Unsubscribed"];
@@ -270,7 +270,7 @@ function setupEventListeners(elements, socket, categories, countries, allCollect
           firstName = nameParts.shift();
           lastName = nameParts.join(" ");
         }
-        return { FirstName: firstName, LastName: lastName, Organization: business.BusinessName || "", Email: business.Email1 || "", FaxNumber: "", MobileNumber: business.Phone || "", CustomField1: business.Category || "", CustomField2: business.SuburbArea || "", CustomField3: "", CustomField4: "", Unsubscribed: "" };
+        return { FirstName: firstName, LastName: lastName, Organization: business.BusinessName || "", Email: business.Email1 || "", FaxNumber: "", MobileNumber: business.Phone || "", CustomField1: business.Category || "", CustomField2: business.Suburb || "", CustomField3: "", CustomField4: "", Unsubscribed: "" };
       });
       await downloadExcel(notifyreFormattedData, state.currentSearchParameters, "sms", "csv", elements.logEl, notifyreHeaders, geocoder, elements.countryInput.value);
   });
@@ -328,7 +328,7 @@ function setupEventListeners(elements, socket, categories, countries, allCollect
           state = stateMatch ? stateMatch[1] : ''; 
       }
       return {
-        "Company": d.BusinessName || '', "Address_Suburb": d.SuburbArea || '', "Address_State": state, 
+        "Company": d.BusinessName || '', "Address_Suburb": d.Suburb || '', "Address_State": state, 
         "Notes": notesContent, "Category": d.Category || '', "facebook": d.FacebookURL || '',
         "instagram": d.InstagramURL || '', "linkedin": '', "email_1": d.Email1 || '',
         "email_2": d.Email2 || '', "email_3": d.Email3 || ''

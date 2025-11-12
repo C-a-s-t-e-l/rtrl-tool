@@ -131,76 +131,76 @@ function cleanDisplayValue(text) {
 }
 
 function addTableRow(gridBody, data, index) {
-  const row = document.createElement("div");
-  row.className = "grid-row";
+    const row = document.createElement('div');
+    row.className = 'grid-row';
 
-  const createCell = (content = "", title = "") => {
-    const cell = document.createElement("span");
-    if (typeof content === "object") {
-      cell.appendChild(content);
-    } else {
-      cell.textContent = content;
-    }
-    cell.title = title || content;
-    return cell;
-  };
+    const createCell = (content = '', title = '') => {
+        const cell = document.createElement('span');
+        if (typeof content === 'object') {
+            cell.appendChild(content);
+        } else {
+            cell.textContent = content;
+        }
+        cell.title = title || content;
+        return cell;
+    };
 
-  const createLinkCell = (url) => {
-    const cell = document.createElement("span");
-    if (url) {
-      const link = document.createElement("a");
-      link.href = url;
-      link.target = "_blank";
-      link.textContent = url;
-      link.title = url;
-      cell.appendChild(link);
-    }
-    return cell;
-  };
+    const createLinkCell = (url) => {
+        const cell = document.createElement('span');
+        if (url) {
+            const link = document.createElement('a');
+            link.href = url;
+            link.target = '_blank';
+            link.textContent = url;
+            link.title = url;
+            cell.appendChild(link);
+        }
+        return cell;
+    };
 
-  const checkboxContainer = document.createElement("span");
-  checkboxContainer.className = "checkbox-column";
-  const checkbox = document.createElement("input");
-  checkbox.type = "checkbox";
-  checkbox.className = "row-checkbox";
-  checkbox.dataset.index = index;
-  checkbox.checked = true;
-  checkboxContainer.appendChild(checkbox);
+    const checkboxContainer = document.createElement('span');
+    checkboxContainer.className = 'checkbox-column';
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.className = 'row-checkbox';
+    checkbox.dataset.index = index;
+    checkbox.checked = true;
+    checkboxContainer.appendChild(checkbox);
 
-  const mapsLink = document.createElement("a");
-  mapsLink.href = data.GoogleMapsURL || "#";
-  mapsLink.target = "_blank";
-  mapsLink.title = data.GoogleMapsURL || "View on Google Maps";
+    const mapsLink = document.createElement('a');
+    mapsLink.href = data.GoogleMapsURL || '#';
+    mapsLink.target = '_blank';
+    mapsLink.title = data.GoogleMapsURL || 'View on Google Maps';
+    
+    const mapsContent = document.createElement('span');
+    mapsContent.className = 'maps-link-content';
+    const circle = document.createElement('span');
+    circle.className = 'maps-status-icon';
+    mapsContent.appendChild(circle);
+    mapsContent.appendChild(document.createTextNode(' View'));
+    mapsLink.appendChild(mapsContent);
 
-  const mapsContent = document.createElement("span");
-  mapsContent.className = "maps-link-content";
-  const circle = document.createElement("span");
-  circle.className = "maps-status-icon";
-  mapsContent.appendChild(circle);
-  mapsContent.appendChild(document.createTextNode(" View"));
-  mapsLink.appendChild(mapsContent);
+    const cells = [
+        checkboxContainer,
+        createCell(cleanDisplayValue(data.BusinessName)),
+        createCell(cleanDisplayValue(data.Category)),
+        createCell(cleanDisplayValue(data.StarRating)),
+        createCell(cleanDisplayValue(data.ReviewCount)),
+        createCell(cleanDisplayValue(data.Suburb)),
+        createCell(cleanDisplayValue(data.StreetAddress)),
+        createLinkCell(data.Website),
+        createCell(cleanDisplayValue(data.OwnerName)),
+        createCell(cleanDisplayValue(data.Email1)),
+        createCell(cleanDisplayValue(data.Email2)),
+        createCell(cleanDisplayValue(data.Email3)),
+        createCell(cleanDisplayValue(data.Phone)),
+        createLinkCell(data.InstagramURL),
+        createLinkCell(data.FacebookURL),
+        createCell(mapsLink)
+    ];
 
-  const cells = [
-    checkboxContainer,
-    createCell(cleanDisplayValue(data.BusinessName)),
-    createCell(cleanDisplayValue(data.Category)),
-    createCell(cleanDisplayValue(data.StarRating)),
-    createCell(cleanDisplayValue(data.ReviewCount)),
-    createCell(cleanDisplayValue(data.SuburbArea)),
-    createCell(cleanDisplayValue(data.StreetAddress)),
-    createLinkCell(data.Website),
-    createCell(cleanDisplayValue(data.OwnerName)),
-    createCell(cleanDisplayValue(data.Email1)),
-    createCell(cleanDisplayValue(data.Email2)),
-    createCell(cleanDisplayValue(data.Email3)),
-    createCell(cleanDisplayValue(data.Phone)),
-    createLinkCell(data.InstagramURL),
-    createLinkCell(data.FacebookURL),
-    createCell(mapsLink),
-  ];
-
-  cells.forEach((cell) => row.appendChild(cell));
-  gridBody.appendChild(row);
+    cells.forEach(cell => row.appendChild(cell));
+    gridBody.appendChild(row);
 }
 
 function setUiState(isBusy, elements) {

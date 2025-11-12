@@ -806,27 +806,30 @@ function initializeMainApp() {
     updateSortHeaders();
   }
 
-  window.rtrlApp.applyFilterAndSort = () => {
+window.rtrlApp.applyFilterAndSort = () => {
     const filterText = elements.filterInput.value.toLowerCase();
     const minRating = parseFloat(elements.ratingFilter.value);
     const reviewFilterValue = elements.reviewCountFilter.value;
     let filteredData;
+
     if (filterText) {
       filteredData = allCollectedData.filter(
         (item) =>
           item.BusinessName?.toLowerCase().includes(filterText) ||
           item.Category?.toLowerCase().includes(filterText) ||
           item.StreetAddress?.toLowerCase().includes(filterText) ||
-          item.SuburbArea?.toLowerCase().includes(filterText)
+          item.Suburb?.toLowerCase().includes(filterText)
       );
     } else {
       filteredData = [...allCollectedData];
     }
+
     if (!isNaN(minRating) && minRating > 0) {
       filteredData = filteredData.filter(
         (item) => (parseFloat(item.StarRating) || 0) >= minRating
       );
     }
+
     if (reviewFilterValue) {
       filteredData = filteredData.filter((item) => {
         const reviewCount = parseInt(item.ReviewCount, 10) || 0;
@@ -836,6 +839,7 @@ function initializeMainApp() {
         return true;
       });
     }
+
     const { key, direction } = window.rtrlApp.state.currentSort;
     if (key) {
       filteredData.sort((a, b) => {
@@ -853,6 +857,7 @@ function initializeMainApp() {
         return direction === "asc" ? comparison : -comparison;
       });
     }
+
     displayedData = filteredData;
     renderTable();
   };
