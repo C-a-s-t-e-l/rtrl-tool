@@ -51,15 +51,15 @@
         </header>
 
         <main class="main-layout">
-            <div class="search-controls">
+            <aside class="search-controls">
                 <div class="search-controls-header">
                     <h2><i class="fas fa-search"></i> Define Your Search</h2>
                     <p>Configure search parameters to find potential clients</p>
                 </div>
 
-                <div class="collapsible-card">
+                <div class="collapsible-section">
                     <div class="collapsible-header">
-                        <h3><i class="fas fa-layer-group"></i> Bulk Search by Category</h3>
+                        <h3><i class="fas fa-layer-group icon-bulk-search"></i> Bulk Search by Category</h3>
                         <i class="fas fa-chevron-down toggle-icon open"></i>
                     </div>
                     <div class="collapsible-content" id="bulkSearchContainer">
@@ -68,7 +68,6 @@
                             <div id="customKeywordContainer" class="tag-container">
                                 <input type="text" id="customCategoryInput" placeholder="Add keywords (press Enter)...">
                             </div>
-                            <small class="form-text">Press Enter to add multiple keywords.</small>
                         </div>
                         <div class="form-group">
                             <label for="primaryCategorySelect">Business Category</label>
@@ -94,9 +93,9 @@
                     </div>
                 </div>
 
-                <div class="collapsible-card">
+                <div class="collapsible-section">
                     <div class="collapsible-header">
-                        <h3><i class="fas fa-map-marker-alt"></i> Search by Location</h3>
+                        <h3><i class="fas fa-map-marker-alt icon-location-search"></i> Search by Location</h3>
                         <i class="fas fa-chevron-down toggle-icon"></i>
                     </div>
                     <div class="collapsible-content collapsed" id="locationSearchContainer">
@@ -124,9 +123,9 @@
                     </div>
                 </div>
                 
-                <div class="collapsible-card">
+                <div class="collapsible-section">
                     <div class="collapsible-header">
-                        <h3><i class="fas fa-bullseye"></i> Search by Radius</h3>
+                        <h3><i class="fas fa-bullseye icon-radius-search"></i> Search by Radius</h3>
                         <i class="fas fa-chevron-down toggle-icon"></i>
                     </div>
                     <div class="collapsible-content collapsed" id="radiusSearchContainer">
@@ -146,23 +145,22 @@
                     </div>
                 </div>
 
-                <div class="collapsible-card">
+                <div class="collapsible-section">
                     <div class="collapsible-header">
-                        <h3><i class="fas fa-store"></i> Search by Specific Name(s)</h3>
+                        <h3><i class="fas fa-store icon-name-search"></i> Search by Specific Name(s)</h3>
                         <i class="fas fa-chevron-down toggle-icon"></i>
                     </div>
                     <div class="collapsible-content collapsed" id="individualSearchContainer">
                         <div class="form-group">
                             <label for="businessNamesInput">Business Names (one per line)</label>
                             <textarea id="businessNamesInput" rows="5" placeholder="e.g., Johnny's Bakery&#10;The Coffee Club&#10;Another Cafe"></textarea>
-                            <small class="form-text">Fills all location info automatically. Overrides bulk search.</small>
                         </div>
                     </div>
                 </div>
 
-                <div class="collapsible-card">
+                <div class="collapsible-section">
                     <div class="collapsible-header">
-                        <h3><i class="fas fa-ban"></i> Exclude Retailers</h3>
+                        <h3><i class="fas fa-ban icon-exclude-search"></i> Exclude Retailers</h3>
                         <i class="fas fa-chevron-down toggle-icon"></i>
                     </div>
                     <div class="collapsible-content collapsed" id="exclusionSearchContainer">
@@ -171,26 +169,24 @@
                             <div id="exclusionContainer" class="tag-container">
                                 <input type="text" id="exclusionInput" placeholder="e.g., Woolworths, Coles...">
                             </div>
-                            <small class="form-text">Press Enter to add a retailer to the exclusion list.</small>
                         </div>
                     </div>
                 </div>
 
-                <div class="collapsible-card">
+                <div class="collapsible-section">
                     <div class="collapsible-header">
-                        <h3><i class="fas fa-envelope"></i> Email Results To (Optional)</h3>
+                        <h3><i class="fas fa-envelope icon-email-search"></i> Email Results To (Optional)</h3>
                         <i class="fas fa-chevron-down toggle-icon"></i>
                     </div>
                     <div class="collapsible-content collapsed">
                         <div class="form-group">
                             <input type="email" id="userEmailInput" placeholder="your.email@example.com" autocomplete="email">
-                            <small class="form-text">If provided, files will be emailed upon completion.</small>
                         </div>
                     </div>
                 </div>
 
                 <button id="startButton" class="btn btn-primary"><i class="fas fa-play"></i> Start Research</button>
-            </div>
+            </aside>
 
             <div class="results-display">
                 <div class="card">
@@ -223,7 +219,7 @@
                     <div class="filter-bar">
                         <div class="filter-group">
                             <i class="fas fa-filter"></i>
-                            <input type="text" id="filterInput" placeholder="Filter by name, suburb, address...">
+                            <input type="text" id="filterInput" placeholder="Filter by...">
                         </div>
                         <select id="ratingFilter" class="filter-control">
                             <option value="">Min Rating</option>
@@ -267,9 +263,6 @@
                 </div>
             </div>
         </main>
-        <footer>
-            <p>&copy; <span id="currentYear"></span> RTRL Property. All rights reserved.</p>
-        </footer>
     </div>
 
     <script src="ui-helpers.js"></script>
