@@ -1,11 +1,10 @@
 const JSZip = require('jszip');
 const XLSX = require('xlsx');
 
-// --- NEW HELPER FUNCTION ADDED (FOR BOTH TXT BATCHING & DEDUPE V4 FILTERING) ---
 const isValidEmail = (email) => {
     return email && typeof email === 'string' && email.includes('@') && email.includes('.');
 };
-// ---------------------------------
+
 
 function generateFilename(searchParams, fileSuffix, fileExtension) {
     const date = new Date().toISOString().split('T')[0].replace(/-/g, '');
@@ -35,12 +34,11 @@ const createLinkObject = (url) => {
 
 async function generateFileData(rawData, searchParams, duplicatesData = []) {
 
-    // --- SORTING LOGIC ---
     rawData.sort((a, b) => (a.BusinessName || '').localeCompare(b.BusinessName || ''));
     if (duplicatesData && duplicatesData.length > 0) {
         duplicatesData.sort((a, b) => (a.BusinessName || '').localeCompare(b.BusinessName || ''));
     }
-    // ----------------------
+  
 
     const date = new Date().toISOString().split('T')[0].replace(/-/g, '');
     let categoryString;
@@ -59,7 +57,7 @@ async function generateFileData(rawData, searchParams, duplicatesData = []) {
     const fullData = rawData.map(item => ({
         BusinessName: item.BusinessName,
         Category: item.Category,
-        'Suburb/Area': item.SuburbArea,
+        'Suburb/Area': item.Suburb, 
         StreetAddress: item.StreetAddress,
         Website: createLinkObject(item.Website),
         OwnerName: item.OwnerName,
@@ -92,14 +90,13 @@ async function generateFileData(rawData, searchParams, duplicatesData = []) {
                 FaxNumber: "",
                 MobileNumber: b.Phone || "",
                 CustomField1: b.Category || "",
-                CustomField2: b.SuburbArea || "",
+                CustomField2: b.Suburb || "", 
                 CustomField3: "",
                 CustomField4: "",
                 Unsubscribed: ""
             };
         });
     
-    // Primary contact data (unique businesses with Email OR Phone)
     const contactsData = rawData
         .filter(d => 
             (isValidEmail(d.Email1) || isValidEmail(d.Email2) || isValidEmail(d.Email3)) 
@@ -112,7 +109,7 @@ async function generateFileData(rawData, searchParams, duplicatesData = []) {
             }
             return {
                 "Company": d.BusinessName || '',
-                "Address_Suburb": d.SuburbArea || '',
+                "Address_Suburb": d.Suburb || '', 
                 "Address_State": state,
                 "Notes": notesContent, 
                 "Category": d.Category || '', 
@@ -135,7 +132,6 @@ async function generateFileData(rawData, searchParams, duplicatesData = []) {
         const txtZip = new JSZip();
         const headers = ["Company", "Address_Suburb", "Address_State", "Notes", "Category", "facebook", "instagram", "linkedin", "email_1", "email_2", "email_3"];
 
-        // --- STEP 1: CREATE STANDARD CSV SPLITS (Full details, split by 18) ---
         for (let i = 0; i < contactsData.length; i += SPLIT_SIZE) {
             const chunk = contactsData.slice(i, i + SPLIT_SIZE);
             const splitIndex = Math.floor(i / SPLIT_SIZE) + 1;
@@ -152,12 +148,9 @@ async function generateFileData(rawData, searchParams, duplicatesData = []) {
         zipBuffer = await zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" });
 
 
-        // --- STEP 2: CREATE TXT FILES, GROUPED BY CATEGORY (NEW FEATURE) ---
-        // Filter contacts to only include those with a primary email for the TXT export
         const emailContacts = contactsData.filter(d => isValidEmail(d.email_1));
 
         const contactsByCategory = emailContacts.reduce((acc, item) => {
-            // Grouping by Category as it is the most consistent field
             const category = item.Category || 'Other'; 
             if (!acc[category]) {
                 acc[category] = [];
@@ -167,17 +160,13 @@ async function generateFileData(rawData, searchParams, duplicatesData = []) {
         }, {});
 
         for (const [category, items] of Object.entries(contactsByCategory)) {
-            // Further split the category if it exceeds the max size (18)
             for (let i = 0; i < items.length; i += SPLIT_SIZE) {
                 const chunk = items.slice(i, i + SPLIT_SIZE);
                 const part = Math.floor(i / SPLIT_SIZE) + 1;
                 
-                // Collect all primary emails (email_1) into a simple text string
                 const emailList = chunk
                     .map(item => item.email_1)
-                    .join('\n'); // New line for each email
-
-                // Clean the category for safe file naming (e.g., "Fast food" -> "fast_food")
+                    .join('\n'); 
                 const cleanCategory = category.replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_').toLowerCase();
                 const txtFilename = generateFilename(searchParams, `emails_txt_${cleanCategory}_part_${part}`, 'txt');
                 
@@ -192,7 +181,7 @@ async function generateFileData(rawData, searchParams, duplicatesData = []) {
     const duplicatesFormattedData = duplicatesData.map(item => ({
         BusinessName: item.BusinessName,
         Category: item.Category,
-        'Suburb/Area': item.SuburbArea,
+        'Suburb/Area': item.Suburb, 
         StreetAddress: item.StreetAddress,
         Website: createLinkObject(item.Website),
         OwnerName: item.OwnerName,

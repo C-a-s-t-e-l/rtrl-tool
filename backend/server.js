@@ -134,6 +134,7 @@ const runScrapeJob = async (jobId) => {
   } = parameters;
 
   let browser = null;
+
   let allProcessedBusinesses = job.results || [];
   const masterUrlMap = new Map(
     (job.collected_urls || []).map(item => [item.url, item.category])
@@ -158,9 +159,6 @@ const runScrapeJob = async (jobId) => {
       await addLog(jobId, `[Resume] Loaded ${masterUrlMap.size} URLs from previous session. Continuing collection.`);
     }
 
-    browser = await launchBrowser("[Browser Lifecycle] Launching new browser for URL collection...");
-    let collectionPage = await browser.newPage();
-    await addLog(jobId, "[Setup] Created a dedicated page for URL collection.");
 
     const isIndividualSearch = businessNames && businessNames.length > 0;
     const searchItems = isIndividualSearch ? businessNames : (categoriesToLoop && categoriesToLoop.length > 0 ? categoriesToLoop : []);
@@ -168,6 +166,9 @@ const runScrapeJob = async (jobId) => {
     for (const item of searchItems) {
       await addLog(jobId, isIndividualSearch ? `\n--- Searching for business: "${item}" ---` : `\n--- Searching for category: "${item}" ---`);
       
+      browser = await launchBrowser(`[System] Launching fresh browser for "${item}"...`);
+      let collectionPage = await browser.newPage();
+
       let locationQueries = [];
       if (anchorPoint && radiusKm)
         locationQueries = await getSearchQueriesForRadius(anchorPoint, radiusKm, country, GOOGLE_MAPS_API_KEY, jobId);
@@ -196,6 +197,13 @@ const runScrapeJob = async (jobId) => {
         await addLog(jobId, `   -> Found ${newUrlsFound} new URLs in this area. Total unique URLs so far: ${masterUrlMap.size}`);
       }
 
+      if (collectionPage) try { await collectionPage.close(); } catch (e) {}
+      if (browser) {
+        try { await browser.close(); } catch (e) {}
+        await addLog(jobId, `[System] Closed browser for "${item}" to conserve resources.`);
+      }
+      browser = null;
+
       const currentUrlsToSave = Array.from(masterUrlMap, ([url, specificCategory]) => ({ url, category: specificCategory }));
       const { error: saveError } = await supabase
         .from("jobs")
@@ -209,9 +217,6 @@ const runScrapeJob = async (jobId) => {
       }
     }
 
-    if (collectionPage) try { await collectionPage.close(); } catch (e) {}
-    if (browser) try { await browser.close(); } catch (e) {}
-    browser = null; 
 
     const finalCollectedUrls = Array.from(masterUrlMap, ([url, specificCategory]) => ({ url, category: specificCategory }));
     await addLog(jobId, `\n--- URL Collection Complete. Found ${finalCollectedUrls.length} total unique businesses. ---`);
@@ -336,11 +341,11 @@ if (exclusionList && exclusionList.length > 0) {
       const mainSearchArea = searchParamsForEmail.area || "selected_area";
       
       const uniqueBusinessesForEmail = uniqueBusinesses.map((business) => ({
-        ...business, SuburbArea: business.Suburb || mainSearchArea.replace(/_/g, " "),
+        ...business, Suburb: business.Suburb || mainSearchArea.replace(/_/g, " "),
       }));
       
       const duplicatesForEmail = duplicates.map((business) => ({
-        ...business, SuburbArea: business.Suburb || mainSearchArea.replace(/_/g, " "),
+        ...business, Suburb: business.Suburb || mainSearchArea.replace(/_/g, " "),
       }));
       
       const emailParams = { ...searchParamsForEmail };
@@ -459,8 +464,6 @@ app.get("/api/config", (req, res) =>
   res.json({ googleMapsApiKey: GOOGLE_MAPS_API_KEY })
 );
 
-// --- NEW EXCLUSION API ENDPOINTS ---
-// GET endpoint to fetch the user's exclusion list
 app.get("/api/exclusions", async (req, res) => {
     try {
         const authHeader = req.headers.authorization;
@@ -624,7 +627,6 @@ app.delete("/api/postcode-lists/:id", async (req, res) => {
     }
 });
 
-// --- THIS MUST BE AFTER ALL API ROUTES ---
 const containerPublicPath = path.join(__dirname, "..", "public");
 app.use(express.static(containerPublicPath, { index: false }));
 app.get(/(.*)/, (req, res) => {
