@@ -677,6 +677,10 @@ function initializeMainApp() {
       loginBtn.style.display = "block";
       userMenu.style.display = "none";
       startButton.disabled = true;
+
+      elements.userEmailInput.value = '';
+      localStorage.removeItem('rtrl_last_used_email');
+
       currentJobId = null;
       subscribedJobId = null;
       window.rtrlApp.exclusionFeature.populateTags([]);
