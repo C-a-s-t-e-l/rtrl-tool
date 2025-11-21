@@ -639,6 +639,11 @@ function initializeMainApp() {
         session.user.user_metadata.full_name || session.user.email;
       startButton.disabled = false;
 
+      if (elements.userEmailInput.value.trim() === '') {
+      elements.userEmailInput.value = session.user.email;
+      localStorage.setItem('rtrl_last_used_email', session.user.email);
+      }
+
       await fetchPostcodeLists();
       try {
         const response = await fetch(`${BACKEND_URL}/api/exclusions`, {
