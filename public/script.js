@@ -762,13 +762,10 @@ function initializeMainApp() {
   }
 
   function initializeApp() {
-    // FIX 2: Initialize features that depend on the DOM before any async operations that might use them.
     window.rtrlApp.exclusionFeature.init(
       () => currentUserSession?.access_token
     );
 
-    // FIX 1: Removed reference to "currentYear" element which no longer exists.
-    // document.getElementById("currentYear").textContent = new Date().getFullYear();
 
     const savedEmail = localStorage.getItem("rtrl_last_used_email");
     if (savedEmail) elements.userEmailInput.value = savedEmail;

@@ -7,7 +7,6 @@ window.rtrlApp.exclusionFeature = (function () {
     let saveTimeout;
 
     function renderTags() {
-        // Clear existing tags except for the input
         containerEl.querySelectorAll('.tag').forEach(tag => tag.remove());
 
         exclusionList.forEach(name => {
@@ -20,7 +19,7 @@ window.rtrlApp.exclusionFeature = (function () {
     
     async function saveExclusionList() {
         const token = tokenProvider();
-        if (!token) return; // Can't save if not logged in
+        if (!token) return; 
 
         try {
             await fetch(`${BACKEND_URL}/api/exclusions`, {
@@ -38,7 +37,7 @@ window.rtrlApp.exclusionFeature = (function () {
 
     function debouncedSave() {
         clearTimeout(saveTimeout);
-        saveTimeout = setTimeout(saveExclusionList, 1000); // Save 1 second after last change
+        saveTimeout = setTimeout(saveExclusionList, 1000); 
     }
 
     function addExclusionTag(name) {

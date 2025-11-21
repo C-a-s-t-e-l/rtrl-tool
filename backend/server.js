@@ -1,5 +1,3 @@
-// backend/server.js
-
 const express = require("express");
 const puppeteer = require("puppeteer-extra");
 const StealthPlugin = require("puppeteer-extra-plugin-stealth");
@@ -483,7 +481,7 @@ app.get("/api/exclusions", async (req, res) => {
             .eq('user_id', user.id)
             .single();
 
-        if (error && error.code !== 'PGRST116') { // PGRST116 means no rows found, which is fine
+        if (error && error.code !== 'PGRST116') { 
             throw error;
         }
 
@@ -494,7 +492,6 @@ app.get("/api/exclusions", async (req, res) => {
     }
 });
 
-// POST endpoint to save the user's exclusion list
 app.post("/api/exclusions", async (req, res) => {
     try {
         const authHeader = req.headers.authorization;
@@ -556,7 +553,6 @@ app.get("/api/postcode-lists", async (req, res) => {
     }
 });
 
-// POST endpoint to save a new postcode list
 app.post("/api/postcode-lists", async (req, res) => {
     try {
         const authHeader = req.headers.authorization;
@@ -586,7 +582,7 @@ app.post("/api/postcode-lists", async (req, res) => {
             .single();
 
         if (error) {
-            if (error.code === '23505') { // Unique constraint violation
+            if (error.code === '23505') { 
                  return res.status(409).json({ error: 'A list with this name already exists.' });
             }
             throw error;
@@ -598,7 +594,6 @@ app.post("/api/postcode-lists", async (req, res) => {
     }
 });
 
-// DELETE endpoint to remove a specific postcode list
 app.delete("/api/postcode-lists/:id", async (req, res) => {
     try {
         const authHeader = req.headers.authorization;
@@ -616,7 +611,7 @@ app.delete("/api/postcode-lists/:id", async (req, res) => {
         const { error } = await supabase
             .from('postcode_lists')
             .delete()
-            .eq('user_id', user.id) // Extra security: ensure user owns the list they're deleting
+            .eq('user_id', user.id) 
             .eq('id', id);
 
         if (error) throw error;

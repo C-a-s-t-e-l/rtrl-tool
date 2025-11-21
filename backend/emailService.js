@@ -1,5 +1,3 @@
-// backend/emailService.js
-
 const nodemailer = require('nodemailer');
 const XLSX = require('xlsx');
 const { generateFileData } = require('./fileGenerator');
@@ -75,7 +73,6 @@ async function sendResultsByEmail(recipientEmail, rawData, searchParams, duplica
             });
         }
         
-        // --- ATTACH NEW TXT SPLITS ZIP FILE ---
         if (allFiles.contactsTxtSplits && allFiles.contactsTxtSplits.data) {
             attachments.push({
                 filename: allFiles.contactsTxtSplits.filename,
@@ -91,7 +88,6 @@ async function sendResultsByEmail(recipientEmail, rawData, searchParams, duplica
                 contentType: 'application/zip',
             });
         }
-        // -----------------------------
 
 
         if (attachments.length === 0) {
