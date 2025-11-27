@@ -130,10 +130,12 @@ function setupEventListeners(elements, socket, categories, countries, allCollect
         }
     });
 
-    elements.customCategoryInput.addEventListener("input", () => {
+elements.customCategoryInput.addEventListener("input", () => {
         const hasCustomText = customKeywords.length > 0 || elements.customCategoryInput.value.trim() !== '';
         elements.primaryCategorySelect.disabled = hasCustomText;
         elements.subCategoryCheckboxContainer.querySelectorAll('input').forEach(cb => cb.disabled = hasCustomText);
+        if(elements.categoryModifierInput) elements.categoryModifierInput.disabled = hasCustomText;
+
         if (hasCustomText) {
             elements.primaryCategorySelect.value = "";
             elements.primaryCategorySelect.dispatchEvent(new Event("change"));
@@ -144,11 +146,17 @@ function setupEventListeners(elements, socket, categories, countries, allCollect
   setupTagInput();
   setupKeywordTagInput();
 
-  elements.primaryCategorySelect.addEventListener("change", (event) => {
+elements.primaryCategorySelect.addEventListener("change", (event) => {
     const selectedCategory = event.target.value;
     populateSubCategories(elements.subCategoryCheckboxContainer, elements.subCategoryGroup, selectedCategory, categories);
+    
     const hasCategorySelection = selectedCategory !== "";
     elements.customCategoryInput.disabled = hasCategorySelection;
+    if (elements.categoryModifierGroup) {
+        elements.categoryModifierGroup.style.display = hasCategorySelection ? "block" : "none";
+        if (!hasCategorySelection) elements.categoryModifierInput.value = "";
+    }
+
     if (hasCategorySelection) {
         elements.customCategoryInput.value = "";
         customKeywords.length = 0;

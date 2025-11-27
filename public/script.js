@@ -136,6 +136,8 @@ function initializeMainApp() {
     deletePostcodeListButton: document.getElementById(
       "deletePostcodeListButton"
     ),
+    categoryModifierGroup: document.getElementById("categoryModifierGroup"),
+    categoryModifierInput: document.getElementById("categoryModifierInput"),
   };
 
   let allCollectedData = [];
@@ -1064,7 +1066,7 @@ window.rtrlApp.applyFilterAndSort = () => {
     });
   };
 
-  window.rtrlApp.startResearch = () => {
+window.rtrlApp.startResearch = () => {
     if (!currentUserSession) {
       logMessage(
         elements.logEl,
@@ -1073,6 +1075,7 @@ window.rtrlApp.applyFilterAndSort = () => {
       );
       return;
     }
+
     setUiState(true, getUiElementsForStateChange());
     allCollectedData = [];
     displayedData = [];
@@ -1081,11 +1084,13 @@ window.rtrlApp.applyFilterAndSort = () => {
     elements.progressBar.style.width = "0%";
     elements.progressPercentage.textContent = "0%";
     elements.collectedDataCard.classList.remove("has-results");
+
     const namesText = elements.businessNamesInput.value.trim();
     const businessNames = namesText
       .split("\n")
       .map((n) => n.trim())
       .filter(Boolean);
+
     const primaryCategory = elements.primaryCategorySelect.value;
     const selectedSubCategories = Array.from(
       elements.subCategoryCheckboxContainer.querySelectorAll(
@@ -1094,13 +1099,18 @@ window.rtrlApp.applyFilterAndSort = () => {
     )
       .map((cb) => cb.value)
       .filter((v) => v !== "select_all");
+
     const exclusionList = window.rtrlApp.exclusionFeature.getExclusionList();
+    
+    const modifierText = elements.categoryModifierInput ? elements.categoryModifierInput.value.trim() : "";
+
     const scrapeParams = {
       country: elements.countryInput.value,
       businessNames: businessNames.length > 0 ? businessNames : [],
       userEmail: elements.userEmailInput.value.trim(),
       exclusionList: exclusionList,
     };
+
     if (window.rtrlApp.state.selectedAnchorPoint) {
       const { lat, lng } = window.rtrlApp.state.selectedAnchorPoint.center;
       scrapeParams.anchorPoint = `${lat},${lng}`;
@@ -1109,24 +1119,42 @@ window.rtrlApp.applyFilterAndSort = () => {
       scrapeParams.location = elements.locationInput.value.trim();
       scrapeParams.postalCode = postalCodes;
     }
+
     if (businessNames.length > 0) {
       scrapeParams.count = -1;
     } else if (customKeywords.length > 0) {
       scrapeParams.categoriesToLoop = customKeywords;
-    } else if (selectedSubCategories.length > 0) {
-      scrapeParams.categoriesToLoop = selectedSubCategories;
     } else {
-      scrapeParams.categoriesToLoop = [primaryCategory];
+      let baseCategories = [];
+
+      if (selectedSubCategories.length > 0) {
+        baseCategories = selectedSubCategories;
+      } else if (primaryCategory) {
+        baseCategories = [primaryCategory];
+      }
+
+      if (baseCategories.length > 0) {
+        if (modifierText) {
+           scrapeParams.categoriesToLoop = baseCategories.map(cat => `${modifierText} ${cat}`);
+        } else {
+           scrapeParams.categoriesToLoop = baseCategories;
+        }
+      } else {
+        scrapeParams.categoriesToLoop = [];
+      }
     }
+
     const hasLocation =
       scrapeParams.location ||
       (scrapeParams.postalCode && scrapeParams.postalCode.length > 0) ||
       (scrapeParams.anchorPoint && scrapeParams.radiusKm);
+    
     const hasSearchTerm =
       scrapeParams.businessNames.length > 0 ||
       (scrapeParams.categoriesToLoop &&
         scrapeParams.categoriesToLoop.length > 0 &&
         scrapeParams.categoriesToLoop[0]);
+
     if (
       (!hasSearchTerm || !hasLocation || !scrapeParams.country) &&
       businessNames.length === 0
@@ -1139,6 +1167,7 @@ window.rtrlApp.applyFilterAndSort = () => {
       handleScrapeError({ error: "Invalid input" });
       return;
     }
+
     if (businessNames.length === 0) {
       const countValue = parseInt(elements.countInput.value.trim(), 10);
       const find_all =
@@ -1147,6 +1176,7 @@ window.rtrlApp.applyFilterAndSort = () => {
         countValue <= 0;
       scrapeParams.count = find_all ? -1 : countValue;
     }
+
     let searchAreaKey;
     if (window.rtrlApp.state.selectedAnchorPoint)
       searchAreaKey = elements.anchorPointInput.value.trim().split(",")[0];
@@ -1155,6 +1185,7 @@ window.rtrlApp.applyFilterAndSort = () => {
         postalCodes.length > 0
           ? postalCodes.join("_")
           : elements.locationInput.value.trim().split(",")[0];
+
     scrapeParams.searchParamsForEmail = {
       primaryCategory: primaryCategory,
       subCategory:
@@ -1162,11 +1193,12 @@ window.rtrlApp.applyFilterAndSort = () => {
           ? "multiple_subcategories"
           : selectedSubCategories[0] || "",
       subCategoryList: selectedSubCategories,
-      customCategory: customKeywords.join(", "),
+      customCategory: customKeywords.length > 0 ? customKeywords.join(", ") : modifierText, 
       area: searchAreaKey,
       postcodes: postalCodes,
       country: elements.countryInput.value,
     };
+
     socket.emit("start_scrape_job", {
       authToken: currentUserSession.access_token,
       ...scrapeParams,
