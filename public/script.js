@@ -1135,7 +1135,7 @@ window.rtrlApp.startResearch = () => {
 
       if (baseCategories.length > 0) {
         if (modifierText) {
-           scrapeParams.categoriesToLoop = baseCategories.map(cat => `${modifierText} ${cat}`);
+           scrapeParams.categoriesToLoop = baseCategories.map(cat => `"${modifierText}" ${cat}`);
         } else {
            scrapeParams.categoriesToLoop = baseCategories;
         }
