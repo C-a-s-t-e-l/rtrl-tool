@@ -90,17 +90,11 @@ function initializeMainApp() {
     ratingFilter: document.getElementById("ratingFilter"),
     reviewCountFilter: document.getElementById("reviewCountFilter"),
     downloadFullExcelButton: document.getElementById("downloadFullExcelButton"),
-    downloadNotifyreCSVButton: document.getElementById(
-      "downloadNotifyreCSVButton"
-    ),
-    downloadContactsCSVButton: document.getElementById(
-      "downloadContactsCSVButton"
-    ),
+    downloadNotifyreCSVButton: document.getElementById("downloadNotifyreCSVButton"),
+    downloadContactsCSVButton: document.getElementById("downloadContactsCSVButton"),
     primaryCategorySelect: document.getElementById("primaryCategorySelect"),
     subCategoryGroup: document.getElementById("subCategoryGroup"),
-    subCategoryCheckboxContainer: document.getElementById(
-      "subCategoryCheckboxContainer"
-    ),
+    subCategoryCheckboxContainer: document.getElementById("subCategoryCheckboxContainer"),
     customCategoryGroup: document.getElementById("customCategoryGroup"),
     customCategoryInput: document.getElementById("customCategoryInput"),
     customKeywordContainer: document.getElementById("customKeywordContainer"),
@@ -133,12 +127,232 @@ function initializeMainApp() {
     filterInput: document.getElementById("filterInput"),
     postcodeListSelect: document.getElementById("postcodeListSelect"),
     savePostcodeListButton: document.getElementById("savePostcodeListButton"),
-    deletePostcodeListButton: document.getElementById(
-      "deletePostcodeListButton"
-    ),
+    deletePostcodeListButton: document.getElementById("deletePostcodeListButton"),
     categoryModifierGroup: document.getElementById("categoryModifierGroup"),
     categoryModifierInput: document.getElementById("categoryModifierInput"),
+    loginGoogleBtn: document.getElementById("login-google"),
+    loginMicrosoftBtn: document.getElementById("login-microsoft"),
+    loginOverlay: document.getElementById("login-overlay"),
+    appContent: document.getElementById("app-content"),
+    logoutButton: document.getElementById("logout-button"),
+    userInfoSpan: document.getElementById("user-info"),
+    userMenu: document.getElementById("user-menu"),
+    userEmailDisplay: document.getElementById("user-email-display")
   };
+
+
+  if (elements.loginGoogleBtn) {
+    elements.loginGoogleBtn.addEventListener("click", async () => {
+      const { error } = await supabaseClient.auth.signInWithOAuth({
+        provider: "google",
+        options: { redirectTo: window.location.origin }
+      });
+      if (error) alert("Login Error: " + error.message);
+    });
+  }
+
+  if (elements.loginMicrosoftBtn) {
+    elements.loginMicrosoftBtn.addEventListener("click", async () => {
+      const { error } = await supabaseClient.auth.signInWithOAuth({
+        provider: "azure",
+        options: {
+          scopes: 'email',
+          redirectTo: window.location.origin
+        }
+      });
+      if (error) alert("Login Error: " + error.message);
+    });
+  }
+
+  if (elements.logoutButton) {
+    elements.logoutButton.addEventListener("click", async (e) => {
+      e.preventDefault();
+      await supabaseClient.auth.signOut();
+      window.location.reload();
+    });
+  }
+
+
+  socket.on("job_created", ({ jobId }) => {
+    logMessage(
+      elements.logEl,
+      `Job successfully created with ID: ${jobId}. It is now in the queue.`,
+      "success"
+    );
+    currentJobId = jobId;
+    if (currentUserSession && currentUserSession.user) {
+      const userId = currentUserSession.user.id;
+      localStorage.setItem(`rtrl_last_job_id_${userId}`, jobId);
+    }
+    allCollectedData = [];
+    window.rtrlApp.applyFilterAndSort();
+    if (subscribedJobId !== currentJobId) {
+      socket.emit("subscribe_to_job", {
+        jobId,
+        authToken: currentUserSession.access_token,
+      });
+      subscribedJobId = currentJobId;
+    }
+  });
+
+  socket.on("job_log", (message) =>
+    logMessage(elements.logEl, message, "info")
+  );
+  socket.on("job_error", ({ error }) => {
+    logMessage(elements.logEl, `JOB ERROR: ${error}`, "error");
+    setUiState(false, getUiElementsForStateChange());
+  });
+
+  socket.on("job_update", (update) => {
+    if (update.status) {
+      logMessage(
+        elements.logEl,
+        `Job status changed to: ${update.status}`,
+        "info"
+      );
+      elements.researchStatusIcon.className =
+        update.status === "running" ? "fas fa-spinner fa-spin" : "fas fa-tasks";
+      if (update.status === "completed" || update.status === "failed") {
+        currentJobId = null;
+        setUiState(false, getUiElementsForStateChange());
+        if (update.status === "completed")
+          elements.researchStatusIcon.className = "fas fa-check-circle";
+      }
+    }
+  });
+
+  socket.on("job_state", (job) => {
+    if (!job) {
+      logMessage(
+        elements.logEl,
+        "Could not retrieve job state. Ready for a new search.",
+        "error"
+      );
+      return;
+    }
+    allCollectedData.length = 0;
+    if (job.results && job.results.length > 0) {
+      allCollectedData.push(...job.results);
+    }
+    if (job.parameters && job.parameters.searchParamsForEmail) {
+      window.rtrlApp.state.currentSearchParameters =
+        job.parameters.searchParamsForEmail;
+    } else {
+      window.rtrlApp.state.currentSearchParameters = {};
+    }
+    window.rtrlApp.applyFilterAndSort();
+    if (allCollectedData.length > 0) {
+      elements.collectedDataCard.classList.add("has-results");
+    }
+    const isRunning = job.status === "running" || job.status === "queued";
+    if (isRunning) {
+      logMessage(
+        elements.logEl,
+        "Successfully reconnected and restored active job state.",
+        "success"
+      );
+      elements.logEl.textContent = job.logs.join("\n");
+      elements.logEl.scrollTop = elements.logEl.scrollHeight;
+    } else {
+      elements.logEl.innerHTML = "";
+      logMessage(elements.logEl, "Waiting to start research...", "default");
+    }
+    setUiState(isRunning, getUiElementsForStateChange());
+  });
+
+  socket.on("business_found", (business) => {
+    if (allCollectedData.length === 0)
+      elements.collectedDataCard.classList.add("has-results");
+    allCollectedData.push(business);
+    window.rtrlApp.applyFilterAndSort();
+  });
+
+  socket.on("progress_update", ({ processed, discovered, added, target }) => {
+    let percentage = 0;
+    const isSearchAll = target === -1;
+    if (isSearchAll) {
+      if (discovered > 0) percentage = (processed / discovered) * 100;
+    } else {
+      if (target > 0) percentage = (added / target) * 100;
+    }
+    if (percentage > 100) percentage = 100;
+    const roundedPercentage = Math.round(percentage);
+    elements.progressBar.style.width = `${roundedPercentage}%`;
+    elements.progressPercentage.textContent = `${roundedPercentage}%`;
+  });
+
+
+  supabaseClient.auth.onAuthStateChange(async (event, session) => {
+    currentUserSession = session;
+
+    if (session) {
+      if (elements.loginOverlay) elements.loginOverlay.style.display = "none";
+      if (elements.appContent) elements.appContent.style.display = "block";
+      if (elements.userMenu) elements.userMenu.style.display = "block";
+
+      if (elements.userInfoSpan) {
+        elements.userInfoSpan.textContent = session.user.user_metadata.full_name || "User";
+      }
+      if (elements.userEmailDisplay) {
+        elements.userEmailDisplay.textContent = session.user.email;
+      }
+
+      elements.startButton.disabled = false;
+
+      if (elements.userEmailInput.value.trim() === '') {
+        elements.userEmailInput.value = session.user.email;
+        localStorage.setItem('rtrl_last_used_email', session.user.email);
+      }
+
+      await fetchPostcodeLists();
+
+      try {
+        const response = await fetch(`${BACKEND_URL}/api/exclusions`, {
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        });
+        if (response.ok) {
+          const { exclusionList } = await response.json();
+          window.rtrlApp.exclusionFeature.populateTags(exclusionList);
+        }
+      } catch (error) {
+        console.error("Could not fetch exclusion list:", error);
+      }
+
+      const userId = session.user.id;
+      const previousJobId = localStorage.getItem(`rtrl_last_job_id_${userId}`);
+
+      if (previousJobId) {
+        currentJobId = previousJobId;
+        if (subscribedJobId !== currentJobId) {
+          logMessage(
+            elements.logEl,
+            `Reconnecting to previous job: ${previousJobId}...`
+          );
+          socket.emit("subscribe_to_job", {
+            jobId: previousJobId,
+            authToken: session.access_token,
+          });
+          subscribedJobId = currentJobId;
+        }
+      }
+
+    } else {
+      if (elements.loginOverlay) elements.loginOverlay.style.display = "flex";
+      if (elements.appContent) elements.appContent.style.display = "none";
+      if (elements.userMenu) elements.userMenu.style.display = "none";
+
+      elements.startButton.disabled = true;
+
+      if (elements.userEmailInput) elements.userEmailInput.value = '';
+      localStorage.removeItem('rtrl_last_used_email');
+
+      currentJobId = null;
+      subscribedJobId = null;
+      window.rtrlApp.exclusionFeature.populateTags([]);
+      populatePostcodeListDropdown([]);
+    }
+  });
+
 
   let allCollectedData = [];
   let displayedData = [];
@@ -504,192 +718,6 @@ function initializeMainApp() {
     { value: "HK", text: "Hong Kong" },
   ];
 
-  const loginButton = document.getElementById("login-button");
-  const logoutButton = document.getElementById("logout-button");
-  const startButton = document.getElementById("startButton");
-
-  loginButton.addEventListener("click", async () => {
-    const { error } = await supabaseClient.auth.signInWithOAuth({
-      provider: "google",
-    });
-    if (error) console.error("Error logging in:", error.message);
-  });
-
-  logoutButton.addEventListener("click", async () => {
-    const { error } = await supabaseClient.auth.signOut();
-    if (error) console.error("Error logging out:", error.message);
-  });
-
-  socket.on("job_created", ({ jobId }) => {
-    logMessage(
-      elements.logEl,
-      `Job successfully created with ID: ${jobId}. It is now in the queue.`,
-      "success"
-    );
-    currentJobId = jobId;
-    if (currentUserSession && currentUserSession.user) {
-      const userId = currentUserSession.user.id;
-      localStorage.setItem(`rtrl_last_job_id_${userId}`, jobId);
-    }
-    allCollectedData = [];
-    window.rtrlApp.applyFilterAndSort();
-    if (subscribedJobId !== currentJobId) {
-      socket.emit("subscribe_to_job", {
-        jobId,
-        authToken: currentUserSession.access_token,
-      });
-      subscribedJobId = currentJobId;
-    }
-  });
-
-  socket.on("job_log", (message) =>
-    logMessage(elements.logEl, message, "info")
-  );
-  socket.on("job_error", ({ error }) => {
-    logMessage(elements.logEl, `JOB ERROR: ${error}`, "error");
-    setUiState(false, getUiElementsForStateChange());
-  });
-
-  socket.on("job_update", (update) => {
-    if (update.status) {
-      logMessage(
-        elements.logEl,
-        `Job status changed to: ${update.status}`,
-        "info"
-      );
-      elements.researchStatusIcon.className =
-        update.status === "running" ? "fas fa-spinner fa-spin" : "fas fa-tasks";
-      if (update.status === "completed" || update.status === "failed") {
-        currentJobId = null;
-        setUiState(false, getUiElementsForStateChange());
-        if (update.status === "completed")
-          elements.researchStatusIcon.className = "fas fa-check-circle";
-      }
-    }
-  });
-
-  socket.on("job_state", (job) => {
-    if (!job) {
-      logMessage(
-        elements.logEl,
-        "Could not retrieve job state. Ready for a new search.",
-        "error"
-      );
-      return;
-    }
-    allCollectedData.length = 0;
-    if (job.results && job.results.length > 0) {
-      allCollectedData.push(...job.results);
-    }
-    if (job.parameters && job.parameters.searchParamsForEmail) {
-      window.rtrlApp.state.currentSearchParameters =
-        job.parameters.searchParamsForEmail;
-    } else {
-      window.rtrlApp.state.currentSearchParameters = {};
-    }
-    window.rtrlApp.applyFilterAndSort();
-    if (allCollectedData.length > 0) {
-      elements.collectedDataCard.classList.add("has-results");
-    }
-    const isRunning = job.status === "running" || job.status === "queued";
-    if (isRunning) {
-      logMessage(
-        elements.logEl,
-        "Successfully reconnected and restored active job state.",
-        "success"
-      );
-      elements.logEl.textContent = job.logs.join("\n");
-      elements.logEl.scrollTop = elements.logEl.scrollHeight;
-    } else {
-      elements.logEl.innerHTML = "";
-      logMessage(elements.logEl, "Waiting to start research...", "default");
-    }
-    setUiState(isRunning, getUiElementsForStateChange());
-  });
-
-  socket.on("business_found", (business) => {
-    if (allCollectedData.length === 0)
-      elements.collectedDataCard.classList.add("has-results");
-    allCollectedData.push(business);
-    window.rtrlApp.applyFilterAndSort();
-  });
-
-  socket.on("progress_update", ({ processed, discovered, added, target }) => {
-    let percentage = 0;
-    const isSearchAll = target === -1;
-    if (isSearchAll) {
-      if (discovered > 0) percentage = (processed / discovered) * 100;
-    } else {
-      if (target > 0) percentage = (added / target) * 100;
-    }
-    if (percentage > 100) percentage = 100;
-    const roundedPercentage = Math.round(percentage);
-    elements.progressBar.style.width = `${roundedPercentage}%`;
-    elements.progressPercentage.textContent = `${roundedPercentage}%`;
-  });
-
-  supabaseClient.auth.onAuthStateChange(async (event, session) => {
-    currentUserSession = session;
-    const loginBtn = document.getElementById("login-button");
-    const userMenu = document.getElementById("user-menu");
-
-    if (session) {
-      loginBtn.style.display = "none";
-      userMenu.style.display = "block";
-      const userInfoSpan = userMenu.querySelector("#user-info");
-      userInfoSpan.textContent =
-        session.user.user_metadata.full_name || session.user.email;
-      startButton.disabled = false;
-
-      if (elements.userEmailInput.value.trim() === '') {
-      elements.userEmailInput.value = session.user.email;
-      localStorage.setItem('rtrl_last_used_email', session.user.email);
-      }
-
-      await fetchPostcodeLists();
-      try {
-        const response = await fetch(`${BACKEND_URL}/api/exclusions`, {
-          headers: { Authorization: `Bearer ${session.access_token}` },
-        });
-        if (response.ok) {
-          const { exclusionList } = await response.json();
-          window.rtrlApp.exclusionFeature.populateTags(exclusionList);
-        }
-      } catch (error) {
-        console.error("Could not fetch exclusion list:", error);
-      }
-
-      const userId = session.user.id;
-      const previousJobId = localStorage.getItem(`rtrl_last_job_id_${userId}`);
-      if (previousJobId) {
-        currentJobId = previousJobId;
-        if (subscribedJobId !== currentJobId) {
-          logMessage(
-            elements.logEl,
-            `Reconnecting to previous job: ${previousJobId}...`
-          );
-          socket.emit("subscribe_to_job", {
-            jobId: previousJobId,
-            authToken: session.access_token,
-          });
-          subscribedJobId = currentJobId;
-        }
-      }
-    } else {
-      loginBtn.style.display = "block";
-      userMenu.style.display = "none";
-      startButton.disabled = true;
-
-      elements.userEmailInput.value = '';
-      localStorage.removeItem('rtrl_last_used_email');
-
-      currentJobId = null;
-      subscribedJobId = null;
-      window.rtrlApp.exclusionFeature.populateTags([]);
-      populatePostcodeListDropdown([]);
-    }
-  });
-
   async function getPlaceDetails(placeId) {
     return new Promise((resolve, reject) => {
       const geocoder = window.rtrlApp.state.googleMapsGeocoder;
@@ -1019,15 +1047,6 @@ window.rtrlApp.applyFilterAndSort = () => {
       );
     }
   };
-
-  if (
-    window.google &&
-    google.maps &&
-    google.maps.places &&
-    !window.rtrlApp.state.googleMapsService
-  ) {
-    window.rtrlApp.initializeMapServices();
-  }
 
   window.rtrlApp.fetchPlaceSuggestions = (
     inputEl,

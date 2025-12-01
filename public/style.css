@@ -726,6 +726,97 @@ span a:hover {
   background-color: #f8f9fa;
 }
 
+.login-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: #f7f8fa;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 10000; /* Sit on top of everything */
+}
+
+.login-card {
+  background: white;
+  padding: 3rem;
+  border-radius: 16px;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+  text-align: center;
+  max-width: 400px;
+  width: 90%;
+  border: 1px solid var(--border-color);
+}
+
+.login-logo {
+  width: 64px;
+  height: 64px;
+  background-color: var(--header-logo-bg);
+  color: white;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  font-size: 2rem;
+  margin: 0 auto 1.5rem auto;
+}
+
+.login-card h1 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--primary-text);
+  margin-bottom: 0.5rem;
+}
+
+.login-card p {
+  color: var(--secondary-text);
+  margin-bottom: 2rem;
+}
+
+.login-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.btn-login {
+  width: 100%;
+  justify-content: center;
+  padding: 0.8rem;
+  font-size: 1rem;
+  font-weight: 500;
+  border: 1px solid var(--border-color);
+  background-color: white;
+  color: var(--primary-text);
+  transition: all 0.2s;
+  cursor: pointer;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.btn-login:hover {
+  background-color: #f8f9fa;
+  border-color: var(--accent-color);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+}
+
+.btn-google i { color: #DB4437; }
+.btn-microsoft i { color: #00a4ef; }
+
+.login-footer {
+  margin-top: 2rem;
+  font-size: 0.8rem;
+  color: #adb5bd;
+}
+
+.non-clickable {
+    pointer-events: none;
+}
+
 @media (max-width: 1400px) {
   .app-container {
     max-width: 100%;
