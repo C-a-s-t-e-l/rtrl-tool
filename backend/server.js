@@ -268,7 +268,9 @@ const runScrapeJob = async (jobId) => {
                   let websiteData = {};
                   if (googleData.Website) websiteData = await scrapeWebsiteForGoldData(detailPage, googleData.Website, jobId);
                   const fullBusinessData = { ...googleData, ...websiteData };
-                  fullBusinessData.Category = businessNames && businessNames.length > 0 ? googleData.ScrapedCategory || "N/A" : processItem.category || "N/A";
+                 
+                  const rawCategory = businessNames && businessNames.length > 0 ? googleData.ScrapedCategory || "N/A" : processItem.category || "N/A";
+fullBusinessData.Category = rawCategory.replace(/"/g, "");
                   return fullBusinessData;
               };
 
