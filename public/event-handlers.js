@@ -15,15 +15,25 @@ function setupEventListeners(elements, socket, categories, countries, allCollect
     document.getElementById('resultsCount').textContent = `(${count} selected)`;
   }
   
-  document.querySelectorAll('.collapsible-header').forEach(header => {
-    header.addEventListener('click', () => {
-        const content = header.nextElementSibling;
-        const icon = header.querySelector('.toggle-icon');
-        
-        content.classList.toggle('collapsed');
-        icon.classList.toggle('open');
-    });
+document.querySelectorAll('.collapsible-header').forEach(header => {
+  header.addEventListener('click', () => {
+      const content = header.nextElementSibling;
+      const icon = header.querySelector('.toggle-icon');
+      
+      content.classList.toggle('collapsed');
+      icon.classList.toggle('open');
+
+      if (content.id === 'radiusSearchContainer' && !content.classList.contains('collapsed')) {
+          setTimeout(() => {
+              if (window.map) {
+                  window.map.invalidateSize();
+              } else if (map) {
+                  map.invalidateSize();
+              }
+          }, 300);
+      }
   });
+});
 
   const userMenuButton = document.getElementById('user-menu-button');
   const userMenuDropdown = document.getElementById('user-menu-dropdown');

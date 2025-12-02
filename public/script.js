@@ -52,7 +52,7 @@ function initializeMainApp() {
 
   const socket = io(BACKEND_URL, {
     extraHeaders: { "ngrok-skip-browser-warning": "true" },
-    transports: ["websocket"],
+    transports: ["websocket", "polling"],
     timeout: 70000,
   });
 
@@ -852,6 +852,7 @@ function initializeMainApp() {
       };
       elements.anchorPointInput.value = item.description;
       elements.anchorPointSuggestionsEl.style.display = "none";
+      map.invalidateSize(); 
       map.setView(newCenter, 11);
       window.rtrlApp.drawSearchCircle(newCenter);
     } catch (error) {
