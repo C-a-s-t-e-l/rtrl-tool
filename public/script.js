@@ -52,7 +52,7 @@ function initializeMainApp() {
 
   const socket = io(BACKEND_URL, {
     extraHeaders: { "ngrok-skip-browser-warning": "true" },
-    transports: ["websocket"],
+    transports: ["websocket", "polling"],
     timeout: 70000,
   });
 
