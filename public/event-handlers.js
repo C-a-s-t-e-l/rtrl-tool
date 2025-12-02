@@ -16,23 +16,21 @@ function setupEventListeners(elements, socket, categories, countries, allCollect
   }
   
 document.querySelectorAll('.collapsible-header').forEach(header => {
-  header.addEventListener('click', () => {
-      const content = header.nextElementSibling;
-      const icon = header.querySelector('.toggle-icon');
-      
-      content.classList.toggle('collapsed');
-      icon.classList.toggle('open');
+    header.addEventListener('click', () => {
+        const content = header.nextElementSibling;
+        const icon = header.querySelector('.toggle-icon');
+        
+        content.classList.toggle('collapsed');
+        icon.classList.toggle('open');
 
-      if (content.id === 'radiusSearchContainer' && !content.classList.contains('collapsed')) {
-          setTimeout(() => {
-              if (window.map) {
-                  window.map.invalidateSize();
-              } else if (map) {
-                  map.invalidateSize();
-              }
-          }, 300);
-      }
-  });
+        if (content.id === 'radiusSearchContainer' && !content.classList.contains('collapsed')) {
+            setTimeout(() => {
+                if (map) {
+                    map.invalidateSize();
+                }
+            }, 300);
+        }
+    });
 });
 
   const userMenuButton = document.getElementById('user-menu-button');
