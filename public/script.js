@@ -155,6 +155,23 @@ function initializeMainApp() {
         signupEmailBtn: document.getElementById("signup-email-btn"),
   };
 
+    function setupPasswordToggle(toggleId, inputId) {
+    const toggleBtn = document.getElementById(toggleId);
+    const inputField = document.getElementById(inputId);
+
+    if (toggleBtn && inputField) {
+      toggleBtn.addEventListener("click", () => {
+        const type = inputField.getAttribute("type") === "password" ? "text" : "password";
+        inputField.setAttribute("type", type);
+
+        toggleBtn.classList.toggle("fa-eye");
+        toggleBtn.classList.toggle("fa-eye-slash");
+      });
+    }
+  }
+
+  setupPasswordToggle("toggle-login-password", "password-input");
+  setupPasswordToggle("toggle-signup-password", "signup-password-input");
 
   if (elements.loginGoogleBtn) {
     elements.loginGoogleBtn.addEventListener("click", async () => {

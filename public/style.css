@@ -1020,6 +1020,31 @@ span a:hover {
     padding: 0 10px;
 }
 
+.password-wrapper {
+    position: relative;
+    width: 100%;
+}
+
+.password-wrapper input {
+    padding-right: 40px; 
+}
+
+.password-toggle-icon {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    cursor: pointer;
+    color: #9ca3af;
+    font-size: 0.9rem;
+    transition: color 0.2s;
+    z-index: 10;
+}
+
+.password-toggle-icon:hover {
+    color: #4b5563;
+}
+
 @media (max-width: 1400px) {
   .app-container {
     max-width: 100%;
