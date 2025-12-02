@@ -1,321 +1,539 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="icon" type="image/x-icon" href="https://cdn-icons-png.flaticon.com/512/2248/2248814.png">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link
+      rel="icon"
+      type="image/x-icon"
+      href="https://cdn-icons-png.flaticon.com/512/2248/2248814.png"
+    />
     <title>RTRL Property Prospector</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <link rel="stylesheet" href="style.css">
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css"
+    />
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    />
+    <link rel="stylesheet" href="style.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    
+
     <script>
-        window.rtrlApp = window.rtrlApp || {};
-        window.initMap = function() {
-            if (typeof window.rtrlApp.initializeMapServices === 'function') {
-                window.rtrlApp.initializeMapServices();
-            }
-        };
+      window.rtrlApp = window.rtrlApp || {};
+      window.initMap = function () {
+        if (typeof window.rtrlApp.initializeMapServices === "function") {
+          window.rtrlApp.initializeMapServices();
+        }
+      };
     </script>
-</head>
-<body>
-    <div id="login-overlay" class="login-overlay">
+  </head>
+  <body>
+ <div id="login-overlay" class="login-overlay">
         
         <div class="bg-decoration-grid"></div>
         <div class="bg-decoration-blob blob-top"></div>
         <div class="bg-decoration-blob blob-bottom"></div>
 
-        <div class="login-card">
-    <div class="login-logo">
-        <i class="fas fa-building"></i>
-    </div>
-    <h1>Sign In</h1>
-    <p>RTRL Property Prospector</p>
-
-    <div class="login-form">
-        <div class="input-group">
-            <label for="email">Email Address</label>
-            <input type="email" id="email-input" placeholder="user@gmail.com">
-        </div>
-        <div class="input-group">
-            <label for="password">Password</label>
-            <input type="password" id="password-input" placeholder="••••••••">
-        </div>
-        <button id="login-email-btn" class="btn btn-primary-login">Sign in</button>
-    </div>
-
-    <div class="divider">
-        <span>OR</span>
-    </div>
-    
-    <div class="login-buttons">
-        <button id="login-google" class="btn btn-login btn-google">
-            <i class="fab fa-google"></i> <span>Sign in with Google</span>
-        </button>
-        <button id="login-microsoft" class="btn btn-login btn-microsoft">
-            <i class="fab fa-microsoft"></i> <span>Sign in with Microsoft</span>
-        </button>
-    </div>
-
-    <p class="login-footer">Authorized Personnel Only</p>
-        </div>
-    </div>
-
-    <div id="app-content" style="display: none;">
-        <div class="app-container">
-            <header>
-                <div class="header-left">
-                    <div class="logo">
+        <div class="flip-container" id="flip-card">
+            <div class="flipper">
+                
+                <div class="login-card card-face card-front">
+                    <div class="login-logo">
                         <i class="fas fa-building"></i>
                     </div>
-                    <div class="header-text">
-                        <h1>RTRL Property Prospector</h1>
-                        <p>Intelligent Client Prospecting for Commercial Real Estate</p>
+                    <h1>Welcome Back</h1>
+                    <p>RTRL Property Prospector</p>
+                    
+                    <div class="login-form">
+                        <div class="input-group">
+                            <label for="email-input">Email Address</label>
+                            <input type="email" id="email-input" placeholder="user@acme.com">
+                        </div>
+                        <div class="input-group">
+                            <label for="password-input">Password</label>
+                            <input type="password" id="password-input" placeholder="••••••••">
+                        </div>
+                        <button id="login-email-btn" class="btn btn-primary-login">Sign In</button>
                     </div>
-                </div>
-                <div id="auth-container">
-                    <div id="user-menu" class="user-menu" style="display: none;">
-                        <button id="user-menu-button" class="user-menu-button">
-                            <span id="user-info"></span>
-                            <i class="fas fa-chevron-down toggle-icon"></i>
+
+                    <p class="auth-toggle-text">
+                        Don't have an account? <a href="#" id="to-signup-btn">Sign up</a>
+                    </p>
+
+                    <div class="divider"><span>OR</span></div>
+                    
+                    <div class="login-buttons">
+                        <button id="login-google" class="btn btn-login btn-google">
+                            <i class="fab fa-google"></i> <span>Sign in with Google</span>
                         </button>
-                        <div id="user-menu-dropdown" class="user-menu-dropdown">
-                            <div class="dropdown-item non-clickable">
-                                <i class="fas fa-user"></i> <span id="user-email-display"></span>
-                            </div>
-                            <div class="dropdown-divider"></div>
-                            <a href="#" id="logout-button" class="dropdown-item"><i class="fas fa-sign-out-alt"></i> Logout</a>
-                        </div>
+                        <button id="login-microsoft" class="btn btn-login btn-microsoft">
+                            <i class="fab fa-microsoft"></i> <span>Sign in with Microsoft</span>
+                        </button>
                     </div>
+                    <p class="login-footer">Authorized Personnel Only</p>
                 </div>
-            </header>
 
-            <main class="main-layout">
-                <aside class="search-controls">
-                    <div class="search-controls-header">
-                        <h2><i class="fas fa-search"></i> Define Your Search</h2>
-                        <p>Configure search parameters to find potential clients</p>
+                <div class="login-card card-face card-back">
+                    <div class="login-logo">
+                        <i class="fas fa-user-plus"></i>
                     </div>
-
-                    <div class="collapsible-section">
-                        <div class="collapsible-header">
-                            <h3><i class="fas fa-layer-group icon-bulk-search"></i> Bulk Search by Category</h3>
-                            <i class="fas fa-chevron-down toggle-icon open"></i>
-                        </div>
-                        <div class="collapsible-content" id="bulkSearchContainer">
-                            <div class="form-group" id="customCategoryGroup">
-                                <label for="customCategoryInput">Custom Keywords / Category</label>
-                                <div id="customKeywordContainer" class="tag-container">
-                                    <input type="text" id="customCategoryInput" placeholder="Add keywords then press enter...">
-                                </div>
-                            </div>
-                            <div class="form-group">
-                                <label for="primaryCategorySelect">Business Category</label>
-                                <select id="primaryCategorySelect"></select>
-                            </div>
-                            <div class="form-group" id="subCategoryGroup" style="display: none;">
-                                <label>Sub-Categories</label>
-                                <div id="subCategoryCheckboxContainer" class="checkbox-container"></div>
-                            </div>
-                            <div class="form-group" id="categoryModifierGroup" style="display: none;"> 
-                                <label for="categoryModifierInput">Refine Category (Optional)</label>
-                                <input type="text" id="categoryModifierInput" placeholder="e.g. Dog friendly, 24 Hour, Emergency...">
-                            </div>
-                            <div class="form-group">
-                                <label for="countryInput">Country</label>
-                                <input type="text" id="countryInput" placeholder="e.g. Australia" autocomplete="off" value="Australia">
-                                <div id="countrySuggestions" class="autocomplete-suggestions"></div>
-                            </div>
-                            <div class="form-group">
-                                <label for="count">Number of Businesses</label>
-                                <input type="number" id="count" placeholder="10" min="1">
-                            </div>
-                            <div class="form-group checkbox-group">
-                                <input type="checkbox" id="findAllBusinesses" name="find_option" checked>
-                                <label for="findAllBusinesses">Find all available businesses</label>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="collapsible-section">
-                        <div class="collapsible-header">
-                            <h3><i class="fas fa-map-marker-alt icon-location-search"></i> Search by Location</h3>
-                            <i class="fas fa-chevron-down toggle-icon"></i>
-                        </div>
-                        <div class="collapsible-content collapsed" id="locationSearchContainer">
-                            <div class="form-group">
-                                <label>Suburb / Area</label>
-                                <input type="text" id="locationInput" placeholder="e.g. Melbourne" autocomplete="off">
-                                <div id="locationSuggestions" class="autocomplete-suggestions"></div>
-                            </div>
-                            <div class="form-group">
-                                <label>Postal Code(s)</label>
-                                <div id="postalCodeContainer" class="tag-container">
-                                    <input type="text" id="postalCodeInput" placeholder="Enter postcodes...">
-                                </div>
-                                <div id="postalCodeSuggestions" class="autocomplete-suggestions"></div>
-                            </div>
-                            <div id="postcodeListContainer">
-                                <div class="form-group">
-                                    <select id="postcodeListSelect">
-                                        <option value="">Load a saved list...</option>
-                                    </select>
-                                </div>
-                                <button id="savePostcodeListButton" class="btn btn-secondary" disabled><i class="fas fa-save"></i> Save Current Postcode List</button>
-                                <button id="deletePostcodeListButton" class="btn-icon" title="Delete selected list" style="display: none;"><i class="fas fa-trash-alt"></i></button>
-                            </div>
-                        </div>
-                    </div>
+                    <h1>Create Account</h1>
+                    <p>Join the team</p>
                     
-                    <div class="collapsible-section">
-                        <div class="collapsible-header">
-                            <h3><i class="fas fa-bullseye icon-radius-search"></i> Search by Radius</h3>
-                            <i class="fas fa-chevron-down toggle-icon"></i>
+                    <div class="login-form">
+                        <div class="input-group">
+                            <label for="signup-email-input">Email Address</label>
+                            <input type="email" id="signup-email-input" placeholder="user@acme.com">
                         </div>
-                        <div class="collapsible-content collapsed" id="radiusSearchContainer">
-                            <div class="form-group">
-                                <label for="anchorPointInput">Center Suburb</label>
-                                <input type="text" id="anchorPointInput" placeholder="Type a suburb name..." autocomplete="off">
-                                <div id="anchorPointSuggestions" class="autocomplete-suggestions"></div>
-                            </div>
-                            <div class="form-group">
-                                <label for="radiusSlider">Search Radius</label>
-                                <div class="slider-container">
-                                    <input type="range" id="radiusSlider" min="1" max="20" value="5" step="1">
-                                    <span id="radiusValue">5 km</span>
-                                </div>
-                            </div>
-                            <div id="map"></div>
+                        <div class="input-group">
+                            <label for="signup-password-input">Create Password</label>
+                            <input type="password" id="signup-password-input" placeholder="••••••••">
                         </div>
+                        <button id="signup-email-btn" class="btn btn-primary-login">Create Account</button>
                     </div>
 
-                    <div class="collapsible-section">
-                        <div class="collapsible-header">
-                            <h3><i class="fas fa-store icon-name-search"></i> Search by Specific Name(s)</h3>
-                            <i class="fas fa-chevron-down toggle-icon"></i>
-                        </div>
-                        <div class="collapsible-content collapsed" id="individualSearchContainer">
-                            <div class="form-group">
-                                <label for="businessNamesInput">Business Names (one per line)</label>
-                                <textarea id="businessNamesInput" rows="5" placeholder="e.g., Johnny's Bakery..."></textarea>
-                            </div>
-                        </div>
-                    </div>
+                    <p class="auth-toggle-text">
+                        Already have an account? <a href="#" id="to-signin-btn">Sign in</a>
+                    </p>
 
-                    <div class="collapsible-section">
-                        <div class="collapsible-header">
-                            <h3><i class="fas fa-ban icon-exclude-search"></i> Exclude Retailers</h3>
-                            <i class="fas fa-chevron-down toggle-icon"></i>
-                        </div>
-                        <div class="collapsible-content collapsed" id="exclusionSearchContainer">
-                            <div class="form-group">
-                                <label for="exclusionInput">Retailers to Exclude</label>
-                                <div id="exclusionContainer" class="tag-container">
-                                    <input type="text" id="exclusionInput" placeholder="e.g., Woolworths, Coles...">
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="collapsible-section">
-                        <div class="collapsible-header">
-                            <h3><i class="fas fa-envelope icon-email-search"></i> Email Results To (Optional)</h3>
-                            <i class="fas fa-chevron-down toggle-icon"></i>
-                        </div>
-                        <div class="collapsible-content collapsed">
-                            <div class="form-group">
-                                <input type="email" id="userEmailInput" placeholder="your.email@example.com" autocomplete="email">
-                            </div>
-                        </div>
-                    </div>
-
-                    <button id="startButton" class="btn btn-primary"><i class="fas fa-play"></i> Start Research</button>
-                </aside>
-
-                <div class="results-display">
-                    <div class="card">
-                        <div class="card-header">
-                            <h2><i class="fas fa-tasks" id="researchStatusIcon"></i> Research in Progress</h2>
-                        </div>
-                        <label>Progress</label>
-                        <div class="progress-bar-container">
-                            <div class="progress-bar">
-                                <div id="progressBar"></div>
-                            </div>
-                            <span id="progressPercentage" class="progress-percentage">0%</span>
-                        </div>
-                        <label>System Log</label>
-                        <pre id="log" class="log-console">Waiting to start research...</pre>
-                    </div>
-                    
-                    <div class="card" id="collectedDataCard">
-                        <div class="card-header results-header">
-                            <h2><i class="fas fa-database"></i> Collected Data <span id="resultsCount">(0 selected)</span></h2>
-                            <div class="download-buttons-group">
-                                <button id="downloadFullExcelButton" class="btn btn-secondary" disabled><i class="fas fa-download"></i> Download Selected (.xlsx)</button>
-                                <button id="downloadNotifyreCSVButton" class="btn btn-secondary" disabled>Generate SMS List (.csv)</button>
-                                <button id="downloadContactsCSVButton" class="btn btn-secondary" disabled>Generate Contacts List (.csv)</button>
-                            </div>
-                        </div>
-
-                        <div class="placeholder-text">No data collected yet. Start a research to see results here.</div>
-                        
-                        <div class="filter-bar">
-                            <div class="filter-group">
-                                <i class="fas fa-filter"></i>
-                                <input type="text" id="filterInput" placeholder="Filter by...">
-                            </div>
-                            <select id="ratingFilter" class="filter-control">
-                                <option value="">Min Rating</option>
-                                <option value="4.5">4.5+ stars</option>
-                                <option value="4.0">4.0+ stars</option>
-                                <option value="3.5">3.5+ stars</option>
-                                <option value="3.0">3.0+ stars</option>
-                            </select>
-                            <select id="reviewCountFilter" class="filter-control">
-                                <option value="">All Reviews</option>
-                                <option value=">50">More than 50</option>
-                                <option value=">100">More than 100</option>
-                                <option value=">250">More than 250</option>
-                            </select>
-                        </div>
-
-                        <div class="results-grid-container">
-                            <div class="results-grid" id="resultsGrid">
-                                <div class="grid-header" id="resultsTableHeader">
-                                    <div class="checkbox-column"><input type="checkbox" id="selectAllCheckbox"></div>
-                                    <div class="sortable" data-sort-key="BusinessName">Business</div>
-                                    <div>Category</div>
-                                    <div class="sortable" data-sort-key="StarRating">Rating</div>
-                                    <div class="sortable" data-sort-key="ReviewCount">Reviews</div>
-                                    <div class="sortable" data-sort-key="SuburbArea">Suburb</div>
-                                    <div>Address</div>
-                                    <div>Website</div>
-                                    <div>Owner</div>
-                                    <div>Email 1</div>
-                                    <div>Email 2</div>
-                                    <div>Email 3</div>
-                                    <div>Phone</div>
-                                    <div>Insta</div>
-                                    <div>FB</div>
-                                    <div>Maps</div>
-                                </div>
-                                <div class="grid-body" id="resultsTableBody">
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                    <p class="login-footer">Internal Usage Only</p>
                 </div>
-            </main>
+
+            </div>
         </div>
+    </div>
+
+    <div id="app-content" style="display: none">
+      <div class="app-container">
+        <header>
+          <div class="header-left">
+            <div class="logo">
+              <i class="fas fa-building"></i>
+            </div>
+            <div class="header-text">
+              <h1>RTRL Property Prospector</h1>
+              <p>Intelligent Client Prospecting for Commercial Real Estate</p>
+            </div>
+          </div>
+          <div id="auth-container">
+            <div id="user-menu" class="user-menu" style="display: none">
+              <button id="user-menu-button" class="user-menu-button">
+                <span id="user-info"></span>
+                <i class="fas fa-chevron-down toggle-icon"></i>
+              </button>
+              <div id="user-menu-dropdown" class="user-menu-dropdown">
+                <div class="dropdown-item non-clickable">
+                  <i class="fas fa-user"></i>
+                  <span id="user-email-display"></span>
+                </div>
+                <div class="dropdown-divider"></div>
+                <a href="#" id="logout-button" class="dropdown-item"
+                  ><i class="fas fa-sign-out-alt"></i> Logout</a
+                >
+              </div>
+            </div>
+          </div>
+        </header>
+
+        <main class="main-layout">
+          <aside class="search-controls">
+            <div class="search-controls-header">
+              <h2><i class="fas fa-search"></i> Define Your Search</h2>
+              <p>Configure search parameters to find potential clients</p>
+            </div>
+
+            <div class="collapsible-section">
+              <div class="collapsible-header">
+                <h3>
+                  <i class="fas fa-layer-group icon-bulk-search"></i> Bulk
+                  Search by Category
+                </h3>
+                <i class="fas fa-chevron-down toggle-icon open"></i>
+              </div>
+              <div class="collapsible-content" id="bulkSearchContainer">
+                <div class="form-group" id="customCategoryGroup">
+                  <label for="customCategoryInput"
+                    >Custom Keywords / Category</label
+                  >
+                  <div id="customKeywordContainer" class="tag-container">
+                    <input
+                      type="text"
+                      id="customCategoryInput"
+                      placeholder="Add keywords then press enter..."
+                    />
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label for="primaryCategorySelect">Business Category</label>
+                  <select id="primaryCategorySelect"></select>
+                </div>
+                <div
+                  class="form-group"
+                  id="subCategoryGroup"
+                  style="display: none"
+                >
+                  <label>Sub-Categories</label>
+                  <div
+                    id="subCategoryCheckboxContainer"
+                    class="checkbox-container"
+                  ></div>
+                </div>
+                <div
+                  class="form-group"
+                  id="categoryModifierGroup"
+                  style="display: none"
+                >
+                  <label for="categoryModifierInput"
+                    >Refine Category (Optional)</label
+                  >
+                  <input
+                    type="text"
+                    id="categoryModifierInput"
+                    placeholder="e.g. Dog friendly, 24 Hour, Emergency..."
+                  />
+                </div>
+                <div class="form-group">
+                  <label for="countryInput">Country</label>
+                  <input
+                    type="text"
+                    id="countryInput"
+                    placeholder="e.g. Australia"
+                    autocomplete="off"
+                    value="Australia"
+                  />
+                  <div
+                    id="countrySuggestions"
+                    class="autocomplete-suggestions"
+                  ></div>
+                </div>
+                <div class="form-group">
+                  <label for="count">Number of Businesses</label>
+                  <input type="number" id="count" placeholder="10" min="1" />
+                </div>
+                <div class="form-group checkbox-group">
+                  <input
+                    type="checkbox"
+                    id="findAllBusinesses"
+                    name="find_option"
+                    checked
+                  />
+                  <label for="findAllBusinesses"
+                    >Find all available businesses</label
+                  >
+                </div>
+              </div>
+            </div>
+
+            <div class="collapsible-section">
+              <div class="collapsible-header">
+                <h3>
+                  <i class="fas fa-map-marker-alt icon-location-search"></i>
+                  Search by Location
+                </h3>
+                <i class="fas fa-chevron-down toggle-icon"></i>
+              </div>
+              <div
+                class="collapsible-content collapsed"
+                id="locationSearchContainer"
+              >
+                <div class="form-group">
+                  <label>Suburb / Area</label>
+                  <input
+                    type="text"
+                    id="locationInput"
+                    placeholder="e.g. Melbourne"
+                    autocomplete="off"
+                  />
+                  <div
+                    id="locationSuggestions"
+                    class="autocomplete-suggestions"
+                  ></div>
+                </div>
+                <div class="form-group">
+                  <label>Postal Code(s)</label>
+                  <div id="postalCodeContainer" class="tag-container">
+                    <input
+                      type="text"
+                      id="postalCodeInput"
+                      placeholder="Enter postcodes..."
+                    />
+                  </div>
+                  <div
+                    id="postalCodeSuggestions"
+                    class="autocomplete-suggestions"
+                  ></div>
+                </div>
+                <div id="postcodeListContainer">
+                  <div class="form-group">
+                    <select id="postcodeListSelect">
+                      <option value="">Load a saved list...</option>
+                    </select>
+                  </div>
+                  <button
+                    id="savePostcodeListButton"
+                    class="btn btn-secondary"
+                    disabled
+                  >
+                    <i class="fas fa-save"></i> Save Current Postcode List
+                  </button>
+                  <button
+                    id="deletePostcodeListButton"
+                    class="btn-icon"
+                    title="Delete selected list"
+                    style="display: none"
+                  >
+                    <i class="fas fa-trash-alt"></i>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div class="collapsible-section">
+              <div class="collapsible-header">
+                <h3>
+                  <i class="fas fa-bullseye icon-radius-search"></i> Search by
+                  Radius
+                </h3>
+                <i class="fas fa-chevron-down toggle-icon"></i>
+              </div>
+              <div
+                class="collapsible-content collapsed"
+                id="radiusSearchContainer"
+              >
+                <div class="form-group">
+                  <label for="anchorPointInput">Center Suburb</label>
+                  <input
+                    type="text"
+                    id="anchorPointInput"
+                    placeholder="Type a suburb name..."
+                    autocomplete="off"
+                  />
+                  <div
+                    id="anchorPointSuggestions"
+                    class="autocomplete-suggestions"
+                  ></div>
+                </div>
+                <div class="form-group">
+                  <label for="radiusSlider">Search Radius</label>
+                  <div class="slider-container">
+                    <input
+                      type="range"
+                      id="radiusSlider"
+                      min="1"
+                      max="20"
+                      value="5"
+                      step="1"
+                    />
+                    <span id="radiusValue">5 km</span>
+                  </div>
+                </div>
+                <div id="map"></div>
+              </div>
+            </div>
+
+            <div class="collapsible-section">
+              <div class="collapsible-header">
+                <h3>
+                  <i class="fas fa-store icon-name-search"></i> Search by
+                  Specific Name(s)
+                </h3>
+                <i class="fas fa-chevron-down toggle-icon"></i>
+              </div>
+              <div
+                class="collapsible-content collapsed"
+                id="individualSearchContainer"
+              >
+                <div class="form-group">
+                  <label for="businessNamesInput"
+                    >Business Names (one per line)</label
+                  >
+                  <textarea
+                    id="businessNamesInput"
+                    rows="5"
+                    placeholder="e.g., Johnny's Bakery..."
+                  ></textarea>
+                </div>
+              </div>
+            </div>
+
+            <div class="collapsible-section">
+              <div class="collapsible-header">
+                <h3>
+                  <i class="fas fa-ban icon-exclude-search"></i> Exclude
+                  Retailers
+                </h3>
+                <i class="fas fa-chevron-down toggle-icon"></i>
+              </div>
+              <div
+                class="collapsible-content collapsed"
+                id="exclusionSearchContainer"
+              >
+                <div class="form-group">
+                  <label for="exclusionInput">Retailers to Exclude</label>
+                  <div id="exclusionContainer" class="tag-container">
+                    <input
+                      type="text"
+                      id="exclusionInput"
+                      placeholder="e.g., Woolworths, Coles..."
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="collapsible-section">
+              <div class="collapsible-header">
+                <h3>
+                  <i class="fas fa-envelope icon-email-search"></i> Email
+                  Results To (Optional)
+                </h3>
+                <i class="fas fa-chevron-down toggle-icon"></i>
+              </div>
+              <div class="collapsible-content collapsed">
+                <div class="form-group">
+                  <input
+                    type="email"
+                    id="userEmailInput"
+                    placeholder="your.email@example.com"
+                    autocomplete="email"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <button id="startButton" class="btn btn-primary">
+              <i class="fas fa-play"></i> Start Research
+            </button>
+          </aside>
+
+          <div class="results-display">
+            <div class="card">
+              <div class="card-header">
+                <h2>
+                  <i class="fas fa-tasks" id="researchStatusIcon"></i> Research
+                  in Progress
+                </h2>
+              </div>
+              <label>Progress</label>
+              <div class="progress-bar-container">
+                <div class="progress-bar">
+                  <div id="progressBar"></div>
+                </div>
+                <span id="progressPercentage" class="progress-percentage"
+                  >0%</span
+                >
+              </div>
+              <label>System Log</label>
+              <pre id="log" class="log-console">
+Waiting to start research...</pre
+              >
+            </div>
+
+            <div class="card" id="collectedDataCard">
+              <div class="card-header results-header">
+                <h2>
+                  <i class="fas fa-database"></i> Collected Data
+                  <span id="resultsCount">(0 selected)</span>
+                </h2>
+                <div class="download-buttons-group">
+                  <button
+                    id="downloadFullExcelButton"
+                    class="btn btn-secondary"
+                    disabled
+                  >
+                    <i class="fas fa-download"></i> Download Selected (.xlsx)
+                  </button>
+                  <button
+                    id="downloadNotifyreCSVButton"
+                    class="btn btn-secondary"
+                    disabled
+                  >
+                    Generate SMS List (.csv)
+                  </button>
+                  <button
+                    id="downloadContactsCSVButton"
+                    class="btn btn-secondary"
+                    disabled
+                  >
+                    Generate Contacts List (.csv)
+                  </button>
+                </div>
+              </div>
+
+              <div class="placeholder-text">
+                No data collected yet. Start a research to see results here.
+              </div>
+
+              <div class="filter-bar">
+                <div class="filter-group">
+                  <i class="fas fa-filter"></i>
+                  <input
+                    type="text"
+                    id="filterInput"
+                    placeholder="Filter by..."
+                  />
+                </div>
+                <select id="ratingFilter" class="filter-control">
+                  <option value="">Min Rating</option>
+                  <option value="4.5">4.5+ stars</option>
+                  <option value="4.0">4.0+ stars</option>
+                  <option value="3.5">3.5+ stars</option>
+                  <option value="3.0">3.0+ stars</option>
+                </select>
+                <select id="reviewCountFilter" class="filter-control">
+                  <option value="">All Reviews</option>
+                  <option value=">50">More than 50</option>
+                  <option value=">100">More than 100</option>
+                  <option value=">250">More than 250</option>
+                </select>
+              </div>
+
+              <div class="results-grid-container">
+                <div class="results-grid" id="resultsGrid">
+                  <div class="grid-header" id="resultsTableHeader">
+                    <div class="checkbox-column">
+                      <input type="checkbox" id="selectAllCheckbox" />
+                    </div>
+                    <div class="sortable" data-sort-key="BusinessName">
+                      Business
+                    </div>
+                    <div>Category</div>
+                    <div class="sortable" data-sort-key="StarRating">
+                      Rating
+                    </div>
+                    <div class="sortable" data-sort-key="ReviewCount">
+                      Reviews
+                    </div>
+                    <div class="sortable" data-sort-key="SuburbArea">
+                      Suburb
+                    </div>
+                    <div>Address</div>
+                    <div>Website</div>
+                    <div>Owner</div>
+                    <div>Email 1</div>
+                    <div>Email 2</div>
+                    <div>Email 3</div>
+                    <div>Phone</div>
+                    <div>Insta</div>
+                    <div>FB</div>
+                    <div>Maps</div>
+                  </div>
+                  <div class="grid-body" id="resultsTableBody"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </main>
+      </div>
     </div>
 
     <script src="ui-helpers.js"></script>
     <script src="exclusion-feature.js"></script>
-    <script src="event-handlers.js"></script> 
+    <script src="event-handlers.js"></script>
     <script src="script.js"></script>
-</body>
+  </body>
 </html>

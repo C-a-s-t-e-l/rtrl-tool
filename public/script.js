@@ -137,7 +137,22 @@ function initializeMainApp() {
     logoutButton: document.getElementById("logout-button"),
     userInfoSpan: document.getElementById("user-info"),
     userMenu: document.getElementById("user-menu"),
-    userEmailDisplay: document.getElementById("user-email-display")
+    userEmailDisplay: document.getElementById("user-email-display"),
+    authTitle: document.getElementById("auth-title"),
+    authTogglePrompt: document.getElementById("auth-toggle-prompt"),
+    authModeToggle: document.getElementById("auth-mode-toggle"),
+
+        flipCardContainer: document.getElementById("flip-card"),
+        toSignupBtn: document.getElementById("to-signup-btn"),
+        toSigninBtn: document.getElementById("to-signin-btn"),
+        
+        emailInputAuth: document.getElementById("email-input"),
+        passwordInputAuth: document.getElementById("password-input"),
+        loginEmailBtn: document.getElementById("login-email-btn"),
+        
+        signupEmailInput: document.getElementById("signup-email-input"),
+        signupPasswordInput: document.getElementById("signup-password-input"),
+        signupEmailBtn: document.getElementById("signup-email-btn"),
   };
 
 
@@ -164,6 +179,79 @@ function initializeMainApp() {
     });
   }
 
+  if (elements.toSignupBtn) {
+    elements.toSignupBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      if (elements.flipCardContainer) elements.flipCardContainer.classList.add("flipped");
+    });
+  }
+
+  if (elements.toSigninBtn) {
+    elements.toSigninBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      if (elements.flipCardContainer) elements.flipCardContainer.classList.remove("flipped");
+    });
+  }
+
+  if (elements.loginEmailBtn) {
+    elements.loginEmailBtn.addEventListener("click", async () => {
+      const email = elements.emailInputAuth.value;
+      const password = elements.passwordInputAuth.value;
+
+      if (!email || !password) {
+        alert("Please enter both email and password.");
+        return;
+      }
+
+      const originalText = elements.loginEmailBtn.textContent;
+      elements.loginEmailBtn.textContent = "Verifying...";
+      elements.loginEmailBtn.disabled = true;
+
+      const { error } = await supabaseClient.auth.signInWithPassword({
+        email: email,
+        password: password,
+      });
+
+      if (error) {
+        alert("Login Failed: " + error.message);
+        elements.loginEmailBtn.textContent = originalText;
+        elements.loginEmailBtn.disabled = false;
+      }
+    });
+  }
+
+  if (elements.signupEmailBtn) {
+    elements.signupEmailBtn.addEventListener("click", async () => {
+      const email = elements.signupEmailInput.value;
+      const password = elements.signupPasswordInput.value;
+
+      if (!email || !password) {
+        alert("Please enter both email and password.");
+        return;
+      }
+
+      const originalText = elements.signupEmailBtn.textContent;
+      elements.signupEmailBtn.textContent = "Creating...";
+      elements.signupEmailBtn.disabled = true;
+
+      const { data, error } = await supabaseClient.auth.signUp({
+        email: email,
+        password: password,
+      });
+
+      if (error) {
+        alert("Signup Failed: " + error.message);
+        elements.signupEmailBtn.textContent = originalText;
+        elements.signupEmailBtn.disabled = false;
+      } else if (!data.session) {
+        alert("Account created! Please check your email to confirm your account.");
+        if (elements.flipCardContainer) elements.flipCardContainer.classList.remove("flipped");
+        elements.signupEmailBtn.textContent = originalText;
+        elements.signupEmailBtn.disabled = false;
+      }
+    });
+  }
+
   if (elements.logoutButton) {
     elements.logoutButton.addEventListener("click", async (e) => {
       e.preventDefault();
@@ -171,7 +259,6 @@ function initializeMainApp() {
       window.location.reload();
     });
   }
-
 
   socket.on("job_created", ({ jobId }) => {
     logMessage(
