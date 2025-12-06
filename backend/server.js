@@ -131,6 +131,32 @@ const runScrapeJob = async (jobId) => {
     categoriesToLoop, location, postalCode, country, count, businessNames, anchorPoint, radiusKm, userEmail, searchParamsForEmail, exclusionList,
   } = parameters;
 
+  let filterCenterLat = null;
+  let filterCenterLng = null;
+
+  if (radiusKm && anchorPoint) {
+    try {
+      if (anchorPoint.includes(",")) {
+        const parts = anchorPoint.split(",");
+        filterCenterLat = parseFloat(parts[0]);
+        filterCenterLng = parseFloat(parts[1]);
+      } else {
+        const geocodeUrl = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(
+          `${anchorPoint}, ${country}`
+        )}&key=${GOOGLE_MAPS_API_KEY}`;
+        const response = await axios.get(geocodeUrl);
+        if (response.data.status === "OK") {
+          const loc = response.data.results[0].geometry.location;
+          filterCenterLat = loc.lat;
+          filterCenterLng = loc.lng;
+          await addLog(jobId, `[Filter] Radius filter active. Center: ${filterCenterLat}, ${filterCenterLng}`);
+        }
+      }
+    } catch (e) {
+      console.error("Failed to resolve anchor point for filtering", e);
+    }
+  }
+
   let browser = null;
 
   let allProcessedBusinesses = job.results || [];
@@ -216,9 +242,40 @@ const runScrapeJob = async (jobId) => {
     }
 
 
+
     const finalCollectedUrls = Array.from(masterUrlMap, ([url, specificCategory]) => ({ url, category: specificCategory }));
     await addLog(jobId, `\n--- URL Collection Complete. Found ${finalCollectedUrls.length} total unique businesses. ---`);
     
+    let optimizedUrlList = finalCollectedUrls;
+
+    if (radiusKm && filterCenterLat !== null && filterCenterLng !== null) {
+        await addLog(jobId, `[Optimization] Pre-filtering URLs based on radius (${radiusKm}km)...`);
+        
+        const initialCount = optimizedUrlList.length;
+        
+        optimizedUrlList = finalCollectedUrls.filter(item => {
+            const coords = extractCoordinatesFromUrl(item.url);
+            
+            if (!coords) return true; 
+
+            const distance = calculateDistance(
+                filterCenterLat, 
+                filterCenterLng, 
+                coords.lat, 
+                coords.lng
+            );
+
+            return distance <= (parseFloat(radiusKm) + 0.2);
+        });
+
+        const removedCount = initialCount - optimizedUrlList.length;
+        if (removedCount > 0) {
+            await addLog(jobId, `[Optimization] Removed ${removedCount} URLs that were clearly outside the radius. ${optimizedUrlList.length} remaining.`);
+        } else {
+            await addLog(jobId, `[Optimization] All URLs appear to be within range.`);
+        }
+    }
+
     await addLog(jobId, `--- Starting Data Processing Phase ---`);
     browser = await launchBrowser("[Browser Lifecycle] Launching new browser for data processing...");
 
@@ -227,7 +284,7 @@ const runScrapeJob = async (jobId) => {
     const targetCount = isSearchAll ? Infinity : finalCount;
 
     const processedUrls = new Set(allProcessedBusinesses.map((b) => b.GoogleMapsURL));
-    const urlsToProcess = finalCollectedUrls.filter(item => !processedUrls.has(item.url));
+     const urlsToProcess = optimizedUrlList.filter(item => !processedUrls.has(item.url));
 
     await addLog(jobId, `Total URLs to process: ${urlsToProcess.length}. Previously processed: ${processedUrls.size}.`);
 
@@ -301,6 +358,24 @@ if (exclusionList && exclusionList.length > 0) {
         continue; 
     }
 }
+
+          if (radiusKm && filterCenterLat !== null && filterCenterLng !== null) {
+            const businessCoords = extractCoordinatesFromUrl(businessData.GoogleMapsURL);
+            
+            if (businessCoords) {
+              const distance = calculateDistance(
+                filterCenterLat, 
+                filterCenterLng, 
+                businessCoords.lat, 
+                businessCoords.lng
+              );
+              
+              if (distance > (parseFloat(radiusKm) + 0.2)) {
+                await addLog(jobId, `-> SKIPPED (Outside Radius): ${businessData.BusinessName} is ${distance.toFixed(2)}km away.`);
+                continue; 
+              }
+            }
+          }
           const name = businessData.BusinessName?.toLowerCase().trim() || "";
           const phone = normalizePhoneNumber(businessData.Phone);
           const address = normalizeAddress(businessData.StreetAddress);
@@ -322,9 +397,9 @@ if (exclusionList && exclusionList.length > 0) {
           }
         }
       }
-      io.to(jobId).emit("progress_update", {
+io.to(jobId).emit("progress_update", {
         processed: processedUrls.size + i + batch.length,
-        discovered: finalCollectedUrls.length,
+        discovered: optimizedUrlList.length, 
         added: allProcessedBusinesses.length,
         target: finalCount,
       });
@@ -1320,4 +1395,20 @@ function normalizeForExclusionCheck(str = "") {
     .toLowerCase()
     .replace(/['’`.,()&]/g, "") 
     .replace(/\s+/g, "");      
+}
+
+function extractCoordinatesFromUrl(url) {
+  if (!url) return null;
+
+  const pinMatch = url.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/);
+  if (pinMatch) {
+    return { lat: parseFloat(pinMatch[1]), lng: parseFloat(pinMatch[2]) };
+  }
+
+  const viewMatch = url.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
+  if (viewMatch) {
+    return { lat: parseFloat(viewMatch[1]), lng: parseFloat(viewMatch[2]) };
+  }
+
+  return null;
 }
