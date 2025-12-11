@@ -321,6 +321,8 @@ function initializeMainApp() {
         setUiState(false, getUiElementsForStateChange());
         if (update.status === "completed")
           elements.researchStatusIcon.className = "fas fa-check-circle";
+          elements.progressBar.style.width = "100%";
+          elements.progressPercentage.textContent = "100% (Done)";
       }
     }
   });
