@@ -10,6 +10,7 @@ const axios = require("axios");
 const { createClient } = require("@supabase/supabase-js");
 require("dotenv").config();
 
+const { findBusinessOwnerWithAI } = require("./aiService");
 const { sendResultsByEmail } = require("./emailService");
 
 puppeteer.use(StealthPlugin());
@@ -75,36 +76,49 @@ const addLog = async (jobId, message) => {
   io.to(jobId).emit("job_log", message);
 };
 
+const saveQueues = {}; 
+
 const appendJobResult = async (jobId, newResult) => {
-  try {
-    const { data: currentJob, error: fetchError } = await supabase
-      .from("jobs")
-      .select("results")
-      .eq("id", jobId)
-      .single();
-
-    if (fetchError) {
-      throw new Error(`Failed to fetch current results: ${fetchError.message}`);
-    }
-
-    const existingResults = currentJob.results || [];
-    const updatedResults = [...existingResults, newResult];
-
-    const { error: updateError } = await supabase
-      .from("jobs")
-      .update({ results: updatedResults })
-      .eq("id", jobId);
-
-    if (updateError) {
-      throw new Error(`Failed to save updated results: ${updateError.message}`);
-    }
-    io.to(jobId).emit("business_found", newResult);
-
-  } catch (error) {
-    console.error(`[appendJobResult Error] For job ${jobId}:`, error);
-    io.to(jobId).emit("business_found", newResult);
-    await addLog(jobId, `[ERROR] Failed to permanently save result: ${newResult.BusinessName}. It will be missing on reload.`);
+  if (!saveQueues[jobId]) {
+      saveQueues[jobId] = Promise.resolve();
   }
+
+  saveQueues[jobId] = saveQueues[jobId].then(async () => {
+      try {
+        const { data: currentJob, error: fetchError } = await supabase
+          .from("jobs")
+          .select("results")
+          .eq("id", jobId)
+          .single();
+
+        if (fetchError) {
+          throw new Error(`Failed to fetch current results: ${fetchError.message}`);
+        }
+
+        const existingResults = currentJob.results || [];
+        const updatedResults = [...existingResults, newResult];
+
+        const { error: updateError } = await supabase
+          .from("jobs")
+          .update({ results: updatedResults })
+          .eq("id", jobId);
+
+        if (updateError) {
+          throw new Error(`Failed to save updated results: ${updateError.message}`);
+        }
+        
+        io.to(jobId).emit("business_found", newResult);
+
+      } catch (error) {
+        console.error(`[appendJobResult Error] For job ${jobId}:`, error);
+        io.to(jobId).emit("business_found", newResult);
+        await addLog(jobId, `[Warning] Database save glitch. Item shown in UI but might not persist.`);
+      }
+  }).catch(err => {
+      console.error("Critical error in save queue:", err);
+  });
+
+  return saveQueues[jobId];
 };
 
 const runScrapeJob = async (jobId) => {
@@ -255,16 +269,8 @@ const runScrapeJob = async (jobId) => {
         
         optimizedUrlList = finalCollectedUrls.filter(item => {
             const coords = extractCoordinatesFromUrl(item.url);
-            
             if (!coords) return true; 
-
-            const distance = calculateDistance(
-                filterCenterLat, 
-                filterCenterLng, 
-                coords.lat, 
-                coords.lng
-            );
-
+            const distance = calculateDistance(filterCenterLat, filterCenterLng, coords.lat, coords.lng);
             return distance <= (parseFloat(radiusKm) + 0.2);
         });
 
@@ -295,7 +301,7 @@ const runScrapeJob = async (jobId) => {
       return `name_only::${name}`;
     }));
 
-    const CONCURRENCY = 3;
+    const CONCURRENCY = 2;
     const BROWSER_RESTART_THRESHOLD = 50;
     let processedInThisSession = 0;
 
@@ -313,6 +319,7 @@ const runScrapeJob = async (jobId) => {
           let detailPage = null;
           try {
               const scrapingTask = async () => {
+                  if (detailPage && !detailPage.isClosed()) { try { await detailPage.close(); } catch(e){} }
                   detailPage = await browser.newPage();
                   await detailPage.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36");
                   await detailPage.setRequestInterception(true);
@@ -320,56 +327,72 @@ const runScrapeJob = async (jobId) => {
                       if (["image", "stylesheet", "font", "media"].includes(req.resourceType())) req.abort();
                       else req.continue();
                   });
+                  
                   let googleData = await scrapeGoogleMapsDetails(detailPage, processItem.url, jobId, country);
                   if (!googleData || !googleData.BusinessName) return null;
+                  
                   let websiteData = {};
                   if (googleData.Website) websiteData = await scrapeWebsiteForGoldData(detailPage, googleData.Website, jobId);
+                  
+                  const badKeywords = ["account", "sales", "admin", "info@", "contact", "enquiries"];
+                  if (websiteData.OwnerName) {
+                      const lowerName = websiteData.OwnerName.toLowerCase();
+                      if (badKeywords.some(kw => lowerName.includes(kw)) || /\d/.test(lowerName)) {
+                          websiteData.OwnerName = ""; 
+                      }
+                  }
+
+                  if ((!websiteData.OwnerName || websiteData.OwnerName === "") && googleData.BusinessName) {
+                      const aiResult = await findBusinessOwnerWithAI(
+                          googleData.BusinessName,
+                          googleData.Suburb || country,
+                          googleData.Website,
+                          jobId,
+                          addLog
+                      );
+
+                      if (aiResult.ownerName) {
+                          websiteData.OwnerName = aiResult.ownerName;
+                      }
+                  }
+
                   const fullBusinessData = { ...googleData, ...websiteData };
-                 
                   const rawCategory = businessNames && businessNames.length > 0 ? googleData.ScrapedCategory || "N/A" : processItem.category || "N/A";
-fullBusinessData.Category = rawCategory.replace(/"/g, "");
+                  fullBusinessData.Category = rawCategory.replace(/"/g, "");
                   return fullBusinessData;
               };
 
-              return await promiseWithRetry(scrapingTask, 3, 2000, jobId, processItem.url);
+              return await promiseWithRetry(scrapingTask, 3, 300000, jobId, processItem.url);
 
           } catch (err) {
-              await addLog(jobId, `[FINAL_FAILURE] Skipped URL ${processItem.url} after all retries failed: ${err.message}`, "error");
+              await addLog(jobId, `[FINAL_FAILURE] Skipped URL ${processItem.url}: ${err.message}`, "error");
+              if (detailPage && !detailPage.isClosed()) { try { await detailPage.close(); } catch (e) {} }
               return null; 
           } finally {
               processedInThisSession++;
-              if (detailPage) try { await detailPage.close(); } catch (e) {}
+              if (detailPage && !detailPage.isClosed()) { try { await detailPage.close(); } catch (e) {} }
           }
       });
 
       const results = await Promise.all(promises);
       for (const businessData of results) {
         if (businessData && allProcessedBusinesses.length < targetCount) {
-if (exclusionList && exclusionList.length > 0) {
-    const normalizedBusinessName = normalizeForExclusionCheck(businessData.BusinessName);
-    
-    const isExcluded = exclusionList.some(excludedItem => {
-        const normalizedExcludedItem = normalizeForExclusionCheck(excludedItem);
-        return normalizedBusinessName.includes(normalizedExcludedItem);
-    });
-
-    if (isExcluded) {
-        await addLog(jobId, `-> SKIPPED (On exclusion list): ${businessData.BusinessName}`);
-        continue; 
-    }
-}
+            if (exclusionList && exclusionList.length > 0) {
+                const normalizedBusinessName = normalizeForExclusionCheck(businessData.BusinessName);
+                const isExcluded = exclusionList.some(excludedItem => {
+                    const normalizedExcludedItem = normalizeForExclusionCheck(excludedItem);
+                    return normalizedBusinessName.includes(normalizedExcludedItem);
+                });
+                if (isExcluded) {
+                    await addLog(jobId, `-> SKIPPED (On exclusion list): ${businessData.BusinessName}`);
+                    continue; 
+                }
+            }
 
           if (radiusKm && filterCenterLat !== null && filterCenterLng !== null) {
             const businessCoords = extractCoordinatesFromUrl(businessData.GoogleMapsURL);
-            
             if (businessCoords) {
-              const distance = calculateDistance(
-                filterCenterLat, 
-                filterCenterLng, 
-                businessCoords.lat, 
-                businessCoords.lng
-              );
-              
+              const distance = calculateDistance(filterCenterLat, filterCenterLng, businessCoords.lat, businessCoords.lng);
               if (distance > (parseFloat(radiusKm) + 0.2)) {
                 await addLog(jobId, `-> SKIPPED (Outside Radius): ${businessData.BusinessName} is ${distance.toFixed(2)}km away.`);
                 continue; 
@@ -391,13 +414,15 @@ if (exclusionList && exclusionList.length > 0) {
           } else {
             addedBusinessKeys.add(uniqueIdentifier);
             allProcessedBusinesses.push(businessData);
+            
             await appendJobResult(jobId, businessData);
+            
             const status = isSearchAll ? `(Total Added: ${allProcessedBusinesses.length})` : `(${allProcessedBusinesses.length}/${finalCount})`;
             await addLog(jobId, `-> ADDED: ${businessData.BusinessName}. ${status}`);
           }
         }
       }
-io.to(jobId).emit("progress_update", {
+      io.to(jobId).emit("progress_update", {
         processed: processedUrls.size + i + batch.length,
         discovered: optimizedUrlList.length, 
         added: allProcessedBusinesses.length,
@@ -414,20 +439,16 @@ io.to(jobId).emit("progress_update", {
     if (userEmail && uniqueBusinesses.length > 0) {
       await addLog(jobId, `[Email] Preparing to send results to ${userEmail}...`);
       const mainSearchArea = searchParamsForEmail.area || "selected_area";
-      
       const uniqueBusinessesForEmail = uniqueBusinesses.map((business) => ({
         ...business, Suburb: business.Suburb || mainSearchArea.replace(/_/g, " "),
       }));
-      
       const duplicatesForEmail = duplicates.map((business) => ({
         ...business, Suburb: business.Suburb || mainSearchArea.replace(/_/g, " "),
       }));
-      
       const emailParams = { ...searchParamsForEmail };
       if (parameters.radiusKm) {
         emailParams.radiusKm = parameters.radiusKm;
       }
-
       const emailStatus = await sendResultsByEmail(userEmail, uniqueBusinessesForEmail, emailParams, duplicatesForEmail);
       await addLog(jobId, `[Email] ${emailStatus}`);
     } else if (userEmail) {
@@ -440,6 +461,7 @@ io.to(jobId).emit("progress_update", {
     await updateJobStatus(jobId, "failed");
   } finally {
     if (browser) try { await browser.close(); } catch (e) {}
+    delete saveQueues[jobId];
     cleanupTempDirs();
   }
 };
@@ -1377,7 +1399,7 @@ function promiseWithTimeout(promise, ms) {
 async function promiseWithRetry(task, maxRetries = 3, delay = 2000, jobId, url) {
     for (let i = 0; i < maxRetries; i++) {
         try {
-            return await promiseWithTimeout(task(), 120000); 
+            return await promiseWithTimeout(task(), 300000); 
         } catch (error) {
             const isLastAttempt = i === maxRetries - 1;
             if (isLastAttempt) {
