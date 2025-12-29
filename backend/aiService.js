@@ -20,7 +20,7 @@ async function findBusinessOwnerWithAI(businessName, location, website, jobId, a
         await sleep(2000); 
 
         try {
-            if (addLog) await addLog(jobId, `🤖 AI Researching: ${businessName}...`);
+            if (addLog) await addLog(jobId, `AI Researching: ${businessName}...`);
 
             const prompt = `
             Task: Identify the Owner, Founder, or Principal of "${businessName}" in "${location}".
@@ -28,11 +28,11 @@ async function findBusinessOwnerWithAI(businessName, location, website, jobId, a
             
             STRICT RULES:
             1. Search Google/LinkedIn/About Us pages.
-            2. REJECT slogans (e.g. "I Am The", "With Our", "Welcome To").
-            3. REJECT generic roles (e.g. "The Team", "Senior Stylist" without a name).
-            4. FORMAT: You MUST return names in this exact format: "Name (Title)".
-            5. MULTIPLE: If multiple owners, separate with a semicolon: "Jane Doe (Owner); John Smith (Founder)".
-            6. If you cannot find a specific HUMAN NAME, return: "NOT_FOUND".
+            2. REJECT slogans (e.g. "I Am The", "With Our").
+            3. REJECT generic roles (e.g. "The Team").
+            4. FORMAT: "Name (Title)".
+            5. If multiple, separate with semicolon.
+            6. If NOT found, return: "NOT_FOUND".
             `;
 
             const response = await aiClient.models.generateContent({
@@ -62,10 +62,10 @@ async function findBusinessOwnerWithAI(businessName, location, website, jobId, a
             const cleanResult = sanitizeOutput(text);
 
             if (cleanResult.isValid) {
-                if (addLog) await addLog(jobId, `✨ AI Found: ${cleanResult.name}`);
+                if (addLog) await addLog(jobId, `AI Found: ${cleanResult.name}`);
                 return { ownerName: cleanResult.name, source: "AI_Search" };
             } else {
-                if (addLog) await addLog(jobId, `[AI] Result rejected: "${text.substring(0,30)}..." (${cleanResult.reason})`);
+                if (addLog) await addLog(jobId, `[AI] Result rejected: "${text.substring(0,40)}..." (${cleanResult.reason})`);
                 return { ownerName: "", source: "AI_Rejected" };
             }
 
@@ -82,15 +82,21 @@ async function findBusinessOwnerWithAI(businessName, location, website, jobId, a
 function sanitizeOutput(rawText) {
     let clean = rawText
         .replace(/^FOUND:/i, "")
-        .replace(/^The owner is/i, "")
         .replace(/\*/g, "") 
         .trim();
+
+    if (clean.length > 50 && !clean.includes(";")) {
+        const sentenceMatch = clean.match(/^([A-Z][a-zA-Z'\-\s]+?) (is|was|has been) (the|identified as)/i);
+        if (sentenceMatch && sentenceMatch[1].split(" ").length <= 4) {
+            clean = `${sentenceMatch[1]} (Owner)`; 
+        }
+    }
 
     if (clean.includes("NOT_FOUND") || clean.includes("unable to find")) {
         return { isValid: false, reason: "Not Found" };
     }
 
-    const garbageWords = ["welcome", "about us", "contact", "menu", "home", "our team", "meet the", "i am the", "with our", "from the", "senior /"];
+    const garbageWords = ["welcome", "about us", "contact", "menu", "home", "our team", "meet the", "i am the", "with our", "senior /"];
     if (garbageWords.some(word => clean.toLowerCase().startsWith(word))) {
         return { isValid: false, reason: "Detected Slogan/Header" };
     }
@@ -99,10 +105,9 @@ function sanitizeOutput(rawText) {
     const validParts = [];
 
     for (let part of parts) {
-        if (part.includes("(") && !part.includes(")")) {
-            part += ")";
-        }
-        if (part.length < 5 || part.length > 50) continue;
+        if (part.includes("(") && !part.includes(")")) part += ")";
+
+        if (part.length < 4 || part.length > 60) continue;
         
         if (!part.includes("(") || !part.includes(")")) {
             if (part.split(" ").length >= 2 && part.split(" ").length <= 4) {
@@ -111,7 +116,6 @@ function sanitizeOutput(rawText) {
                 continue; 
             }
         }
-
         validParts.push(part);
     }
 
