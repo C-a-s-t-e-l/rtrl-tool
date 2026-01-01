@@ -19,6 +19,7 @@
       href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
     />
     <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="login.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
@@ -32,83 +33,152 @@
     </script>
   </head>
   <body>
- <div id="login-overlay" class="login-overlay">
-        
-        <div class="bg-decoration-grid"></div>
-        <div class="bg-decoration-blob blob-top"></div>
-        <div class="bg-decoration-blob blob-bottom"></div>
-
-        <div class="flip-container" id="flip-card">
-            <div class="flipper">
-                
-                <div class="login-card card-face card-front">
-                    <div class="login-logo">
-                        <i class="fas fa-building"></i>
+    <div id="login-overlay" class="login-overlay">
+        <div class="login-container">
+            <div class="login-promo-panel">
+                <div class="promo-particle particle-1"></div>
+                <div class="promo-particle particle-2"></div>
+                <div class="promo-particle particle-3"></div>
+                <div class="promo-particle particle-4"></div>
+                <div class="promo-particle particle-5"></div>
+                <div class="promo-particle particle-6"></div>
+                <div class="promo-particle particle-7"></div>
+                <div class="promo-content">
+                    <div class="promo-header">
+                        <div class="logo-icon-wrapper"><i class="fas fa-search"></i></div>
+                        RTRL Prospector
                     </div>
-                    <h1>Welcome Back</h1>
-                    <p>RTRL Property Prospector</p>
-                    
-                    <div class="login-form">
-                        <div class="input-group">
-                            <label for="email-input">Email Address</label>
-                            <input type="email" id="email-input" placeholder="user@acme.com">
+                    <h1 class="promo-title">Find Your Next <br><span class="text-highlight">Australian Lead</span></h1>
+                    <p class="promo-subtitle">Access real-time business data across Australia. Scrape, filter, and export verified leads in seconds.</p>
+                    <div class="promo-stats">
+                        <div class="stat-item">
+                            <span class="stat-number">2.4M+</span>
+                            <span class="stat-label">Businesses</span>
                         </div>
-                    <div class="input-group">
-                        <label for="password-input">Password</label>
-                        <div class="password-wrapper">
-                            <input type="password" id="password-input" placeholder="••••••••">
-                            <i class="fas fa-eye password-toggle-icon" id="toggle-login-password"></i>
-                       </div>
+                        <div class="stat-item">
+                            <span class="stat-number">300+</span>
+                            <span class="stat-label">Industries</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-number">8</span>
+                            <span class="stat-label">States & Territories</span>
+                        </div>
+                         <div class="stat-item">
+                            <span class="stat-number">99.2%</span>
+                            <span class="stat-label">Accuracy Rate</span>
+                        </div>
                     </div>
-                        <button id="login-email-btn" class="btn btn-primary-login">Sign In</button>
+                    <div class="promo-features">
+                        <div class="feature-card">
+                           <div class="feature-icon"><i class="fas fa-database"></i></div>
+                           <div class="feature-text">
+                               <h4>Real-Time Data</h4>
+                               <p>Fresh business data updated daily from Australian sources</p>
+                           </div>
+                        </div>
+                        <div class="feature-card">
+                           <div class="feature-icon"><i class="fas fa-map-marker-alt"></i></div>
+                           <div class="feature-text">
+                               <h4>Location Targeting</h4>
+                               <p>Filter by state, city, or postcode across all of Australia</p>
+                           </div>
+                        </div>
+                        <div class="feature-card">
+                            <div class="feature-icon"><i class="fas fa-sitemap"></i></div>
+                            <div class="feature-text">
+                                <h4>Industry Deep-Dive</h4>
+                                <p>300+ industry categories with detailed business profiles</p>
+                            </div>
+                        </div>
+                        <div class="feature-card">
+                            <div class="feature-icon"><i class="fas fa-chart-line"></i></div>
+                            <div class="feature-text">
+                                <h4>Growth Insights</h4>
+                                <p>Track business trends and market opportunities</p>
+                            </div>
+                        </div>
                     </div>
-
-                    <p class="auth-toggle-text">
-                        Don't have an account? <a href="#" id="to-signup-btn">Sign up</a>
-                    </p>
-
-                    <div class="divider"><span>OR</span></div>
-                    
-                    <div class="login-buttons">
-                        <button id="login-google" class="btn btn-login btn-google">
-                            <i class="fab fa-google"></i> <span>Sign in with Google</span>
-                        </button>
-                        <button id="login-microsoft" class="btn btn-login btn-microsoft">
-                            <i class="fab fa-microsoft"></i> <span>Sign in with Microsoft</span>
-                        </button>
+                    <div class="promo-footer">
+                        <i class="fas fa-shield-alt"></i> The new standard for commercial real estate prospecting.
                     </div>
-                    <p class="login-footer">Authorized Personnel Only</p>
                 </div>
+            </div>
+            <div class="login-form-panel">
+                <div class="flip-container" id="flip-card">
+                    <div class="flipper">
+                        <div class="login-card card-face card-front">
+                            <h2>Welcome back</h2>
+                            <p>Enter your credentials to access your dashboard</p>
+                            
+                            <div class="login-form">
+                                <div class="input-group">
+                                    <label for="email-input">Email address</label>
+                                    <input type="email" id="email-input" placeholder="you@company.com">
+                                </div>
+                                <div class="input-group">
+                                    <label class="password-label" for="password-input">
+                                        <span>Password</span>
+                                        <a href="#" class="forgot-password">Forgot password?</a>
+                                    </label>
+                                    <div class="password-wrapper">
+                                        <input type="password" id="password-input" placeholder="••••••••">
+                                        <i class="fas fa-eye password-toggle-icon" id="toggle-login-password"></i>
+                                    </div>
+                                </div>
+                                <button id="login-email-btn" class="btn btn-auth">Sign in <i class="fas fa-arrow-right"></i></button>
+                            </div>
 
-                <div class="login-card card-face card-back">
-                    <div class="login-logo">
-                        <i class="fas fa-user-plus"></i>
-                    </div>
-                    <h1>Create Account</h1>
-                    <p>Join the team</p>
-                    
-                    <div class="login-form">
-                        <div class="input-group">
-                            <label for="signup-email-input">Email Address</label>
-                            <input type="email" id="signup-email-input" placeholder="user@acme.com">
+                            <div class="divider"><span>or continue with</span></div>
+                            
+                            <div class="social-login">
+                                <button id="login-google" class="btn btn-social">
+                                    <i class="fab fa-google"></i> <span>Continue with Google</span>
+                                </button>
+                            </div>
+                            
+                            <p class="auth-toggle-text">
+                                Don't have an account? <a href="#" id="to-signup-btn">Sign up ></a>
+                            </p>
                         </div>
-                    <div class="input-group">
-                       <label for="signup-password-input">Create Password</label>
-                        <div class="password-wrapper">
-                            <input type="password" id="signup-password-input" placeholder="••••••••">
-                           <i class="fas fa-eye password-toggle-icon" id="toggle-signup-password"></i>
+                        <div class="login-card card-face card-back">
+                            <h2>Create account</h2>
+                            <p>Start finding Australian business leads today</p>
+                            
+                            <div class="login-form">
+                                <div class="input-group">
+                                    <label for="signup-email-input">Email address</label>
+                                    <input type="email" id="signup-email-input" placeholder="you@company.com">
+                                </div>
+                                <div class="input-group">
+                                    <label for="signup-password-input">Password</label>
+                                    <div class="password-wrapper">
+                                        <input type="password" id="signup-password-input" placeholder="••••••••">
+                                        <i class="fas fa-eye password-toggle-icon" id="toggle-signup-password"></i>
+                                    </div>
+                                </div>
+                                 <div class="input-group">
+                                    <label for="signup-confirm-password-input">Confirm password</label>
+                                    <div class="password-wrapper">
+                                        <input type="password" id="signup-confirm-password-input" placeholder="••••••••">
+                                    </div>
+                                </div>
+                                <button id="signup-email-btn" class="btn btn-auth">Create account <i class="fas fa-arrow-right"></i></button>
+                            </div>
+
+                            <div class="divider"><span>or continue with</span></div>
+
+                             <div class="social-login">
+                                <button class="btn btn-social">
+                                    <i class="fab fa-google"></i> <span>Continue with Google</span>
+                                </button>
+                            </div>
+
+                            <p class="auth-toggle-text">
+                                Already have an account? <a href="#" id="to-signin-btn">Sign in ></a>
+                            </p>
                         </div>
-                    </div>                    
-                        <button id="signup-email-btn" class="btn btn-primary-login">Create Account</button>
                     </div>
-
-                    <p class="auth-toggle-text">
-                        Already have an account? <a href="#" id="to-signin-btn">Sign in</a>
-                    </p>
-
-                    <p class="login-footer">Internal Usage Only</p>
                 </div>
-
             </div>
         </div>
     </div>
