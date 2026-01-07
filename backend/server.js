@@ -834,7 +834,7 @@ app.get("/api/jobs/:jobId/download/:fileType", async (req, res) => {
                 if (allFiles.contactsTxtSplits.data) zip.file(allFiles.contactsTxtSplits.filename, allFiles.contactsTxtSplits.data);
 
                 buffer = await zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" });
-                filename = `rtrl_all_files_${jobId.substring(0,8)}.zip`;
+                filename = generateFilename(searchParams, 'all_files', 'zip', job.created_at);
                 contentType = 'application/zip';
                 break;
 
@@ -888,7 +888,6 @@ app.post("/api/jobs/:jobId/resend-email", async (req, res) => {
     }
 });
 
-
 app.get("/api/jobs/history", async (req, res) => {
     try {
         const authHeader = req.headers.authorization;
@@ -904,7 +903,7 @@ app.get("/api/jobs/history", async (req, res) => {
 
         const { data, error } = await supabase
             .from('jobs')
-            .select('id, created_at, parameters, status, results(count)')
+            .select('id, created_at, parameters, status, results')
             .eq('user_id', user.id)
             .order('created_at', { ascending: false })
             .limit(50);
@@ -913,7 +912,7 @@ app.get("/api/jobs/history", async (req, res) => {
         
         const jobs = data.map(job => ({
             ...job,
-            results: job.results[0]?.count || 0
+            results: job.results?.length || 0
         }));
 
         res.json(jobs || []);
@@ -922,7 +921,6 @@ app.get("/api/jobs/history", async (req, res) => {
         res.status(500).json({ error: 'Failed to fetch job history.' });
     }
 });
-
 
 const containerPublicPath = path.join(__dirname, "..", "public");
 app.use(express.static(containerPublicPath, { index: false }));

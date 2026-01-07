@@ -7,6 +7,7 @@ window.rtrlApp.exclusionFeature = (function () {
     let saveTimeout;
 
     function renderTags() {
+        if (!containerEl) return;
         containerEl.querySelectorAll('.tag').forEach(tag => tag.remove());
 
         exclusionList.forEach(name => {
@@ -22,7 +23,7 @@ window.rtrlApp.exclusionFeature = (function () {
         if (!token) return; 
 
         try {
-            await fetch(`${BACKEND_URL}/api/exclusions`, {
+            await fetch(`${window.BACKEND_URL}/api/exclusions`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -41,6 +42,7 @@ window.rtrlApp.exclusionFeature = (function () {
     }
 
     function addExclusionTag(name) {
+        if (!inputEl) return;
         const cleanedName = name.trim();
         if (!cleanedName || exclusionList.map(n => n.toLowerCase()).includes(cleanedName.toLowerCase())) {
             inputEl.value = '';
@@ -63,6 +65,11 @@ window.rtrlApp.exclusionFeature = (function () {
         containerEl = document.getElementById('exclusionContainer');
         inputEl = document.getElementById('exclusionInput');
         tokenProvider = provider;
+
+        if (!containerEl || !inputEl) {
+            console.error("Exclusion feature elements not found!");
+            return;
+        }
 
         containerEl.addEventListener('click', (e) => {
             if (e.target.classList.contains('tag-close-btn')) {

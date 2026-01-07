@@ -1,4 +1,3 @@
-// public/job-history.js
 window.rtrlApp.jobHistory = (function () {
     let containerEl, listContainer;
     let tokenProvider = () => null;
@@ -13,12 +12,23 @@ window.rtrlApp.jobHistory = (function () {
         listContainer = document.getElementById('job-list-container');
         tokenProvider = provider;
         backendUrl = url;
+
+        // Add event listener only after elements are confirmed to exist
+        if (listContainer) {
+            listContainer.addEventListener('click', (e) => {
+                const resendButton = e.target.closest('.resend-email-btn');
+                if (resendButton) {
+                    const jobId = resendButton.dataset.jobId;
+                    resendEmail(jobId, resendButton);
+                }
+            });
+        }
     }
 
     function renderJob(job) {
         const { id, created_at, parameters, status, results } = job;
         const date = new Date(created_at).toLocaleString();
-        const totalResults = results ? results.length : 0;
+        const totalResults = results || 0;
         const searchParams = parameters?.searchParamsForEmail || {};
 
         let statusIcon = 'fa-clock', statusClass = 'status-queued', statusText = 'Queued';
@@ -32,16 +42,17 @@ window.rtrlApp.jobHistory = (function () {
         
         let title = 'Untitled Search';
         if (parameters) {
+            const locationPart = (searchParams.area || 'area').replace(/_/g, ' ');
             if (parameters.businessNames && parameters.businessNames.length > 0) {
                 title = `"${parameters.businessNames.slice(0, 2).join(', ')}"`;
             } else if (searchParams.customCategory) {
-                title = `"${searchParams.customCategory}" in ${searchParams.area || 'area'}`;
+                title = `"${searchParams.customCategory}" in ${locationPart}`;
             } else if (searchParams.primaryCategory) {
                 let categoryPart = searchParams.primaryCategory;
                 if (searchParams.subCategoryList && searchParams.subCategoryList.length > 0) {
-                    categoryPart += ` (${searchParams.subCategoryList.slice(0, 2).join(', ')}...)`;
+                    categoryPart += ` (${searchParams.subCategoryList.slice(0, 2).join(', ')}${searchParams.subCategoryList.length > 2 ? '...' : ''})`;
                 }
-                title = `"${categoryPart}" in ${searchParams.area || 'area'}`;
+                title = `"${categoryPart}" in ${locationPart}`;
             }
         }
         if (title.length > 80) title = title.substring(0, 77) + '...';
@@ -129,16 +140,8 @@ window.rtrlApp.jobHistory = (function () {
         }
     }
 
-    listContainer.addEventListener('click', (e) => {
-        const resendButton = e.target.closest('.resend-email-btn');
-        if (resendButton) {
-            const jobId = resendButton.dataset.jobId;
-            resendEmail(jobId, resendButton);
-        }
-    });
-
     async function fetchAndRenderJobs() {
-        if (!containerEl) return;
+        if (!listContainer) return;
         const token = tokenProvider();
         if (!token) return;
 
