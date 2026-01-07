@@ -1,405 +1,340 @@
-function populatePrimaryCategories(selectEl, categoriesData, defaultCategory) {
-  selectEl.innerHTML = "";
-  const defaultOption = document.createElement("option");
-  defaultOption.value = "";
-  defaultOption.textContent = "Select Business Category";
-  selectEl.appendChild(defaultOption);
-
-  for (const categoryName in categoriesData) {
-    if (categoryName !== "Select Category") {
-      const option = document.createElement("option");
-      option.value = categoryName;
-      option.textContent = categoryName;
-      selectEl.appendChild(option);
-    }
-  }
-  selectEl.value = defaultCategory;
-}
-
-function populateSubCategories(
-  containerEl,
-  groupEl,
-  selectedCategory,
-  categoriesData
+function setupEventListeners(
+  elements,
+  socket,
+  categories,
+  countries,
+  postalCodes,
+  customKeywords,
+  map,
+  searchCircle
 ) {
-  containerEl.innerHTML = "";
-  const subCategories = categoriesData[selectedCategory];
+  const state = window.rtrlApp.state;
 
-  if (subCategories && subCategories.length > 1 && selectedCategory) {
-    groupEl.style.display = "block";
+  document.querySelectorAll(".collapsible-header").forEach((header) => {
+    header.addEventListener("click", () => {
+      const content = header.nextElementSibling;
+      const icon = header.querySelector(".toggle-icon");
 
-    const createCheckboxItem = (value, text, isBold = false) => {
-      const itemDiv = document.createElement("div");
-      itemDiv.className = "checkbox-item";
-      if (isBold) itemDiv.classList.add("checkbox-item-all");
+      content.classList.toggle("collapsed");
+      icon.classList.toggle("open");
 
-      const checkbox = document.createElement("input");
-      checkbox.type = "checkbox";
-      checkbox.id = `subcat-${value.replace(/\s/g, "_")}`;
-      checkbox.value = value;
+      if (
+        content.id === "radiusSearchContainer" &&
+        !content.classList.contains("collapsed")
+      ) {
+        setTimeout(() => {
+          if (map) {
+            map.invalidateSize();
+          }
+        }, 300);
+      }
+    });
+  });
 
-      const label = document.createElement("label");
-      label.htmlFor = `subcat-${value.replace(/\s/g, "_")}`;
-      label.textContent = text;
+  const userMenuButton = document.getElementById("user-menu-button");
+  const userMenuDropdown = document.getElementById("user-menu-dropdown");
+  if (userMenuButton) {
+    userMenuButton.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const isVisible = userMenuDropdown.style.display === "block";
+      userMenuDropdown.style.display = isVisible ? "none" : "block";
+    });
+  }
+  document.addEventListener("click", () => {
+    if (userMenuDropdown) userMenuDropdown.style.display = "none";
+  });
 
-      itemDiv.appendChild(checkbox);
-      itemDiv.appendChild(label);
-      return { itemDiv, checkbox };
-    };
-
-    const allSubCategories = subCategories.filter(
-      (sc) => sc !== "ALL" && sc !== ""
-    );
-    if (allSubCategories.length === 0) {
-      groupEl.style.display = "none";
-      return;
+  function setupTagInput() {
+    function updateSaveButtonState() {
+      elements.savePostcodeListButton.disabled = postalCodes.length === 0;
     }
 
-    const { itemDiv: allDiv, checkbox: allCheckbox } = createCheckboxItem(
-      "select_all",
-      "Select All",
-      true
-    );
-    containerEl.appendChild(allDiv);
+    elements.postalCodeContainer.addEventListener("click", (e) => {
+      if (e.target.classList.contains("tag-close-btn")) {
+        const postcode = e.target.dataset.value;
+        const index = postalCodes.indexOf(postcode);
+        if (index > -1) postalCodes.splice(index, 1);
+        e.target.parentElement.remove();
+        if (postalCodes.length === 0 && !elements.locationInput.value.trim())
+          window.rtrlApp.setRadiusInputsState(false);
 
-    const individualCheckboxes = [];
+        updateSaveButtonState();
+      } else {
+        elements.postalCodeInput.focus();
+      }
+    });
+    elements.postalCodeInput.addEventListener("keydown", async (e) => {
+      if (e.key === "Enter" || e.key === ",") {
+        e.preventDefault();
+        const value = elements.postalCodeInput.value.trim();
+        if (value) {
+          await window.rtrlApp.validateAndAddTag(value);
+          updateSaveButtonState();
+        }
+      } else if (
+        e.key === "Backspace" &&
+        elements.postalCodeInput.value === ""
+      ) {
+        if (postalCodes.length > 0) {
+          const lastTag =
+            elements.postalCodeContainer.querySelector(".tag:last-of-type");
+          if (lastTag) {
+            const closeBtn = lastTag.querySelector(".tag-close-btn");
+            const postcode = closeBtn.dataset.value;
+            const index = postalCodes.indexOf(postcode);
+            if (index > -1) postalCodes.splice(index, 1);
+            lastTag.remove();
+            updateSaveButtonState();
+          }
+        }
+      }
+    });
+    elements.postalCodeContainer.addEventListener("input", () => {
+      const hasTags =
+        postalCodes.length > 0 || elements.postalCodeInput.value.trim();
+      if (hasTags) window.rtrlApp.setRadiusInputsState(true);
+    });
+  }
 
-    allSubCategories.forEach((subCat) => {
-      if (subCat) {
-        const { itemDiv, checkbox } = createCheckboxItem(subCat, subCat);
-        individualCheckboxes.push(checkbox);
-        containerEl.appendChild(itemDiv);
+  function setupKeywordTagInput() {
+    elements.customKeywordContainer.addEventListener("click", (e) => {
+      if (e.target.classList.contains("tag-close-btn")) {
+        const keyword = e.target.dataset.value;
+        const index = customKeywords.indexOf(keyword);
+        if (index > -1) customKeywords.splice(index, 1);
+        e.target.parentElement.remove();
+
+        const hasCustomText = customKeywords.length > 0;
+        elements.primaryCategorySelect.disabled = hasCustomText;
+        elements.subCategoryCheckboxContainer
+          .querySelectorAll("input")
+          .forEach((cb) => (cb.disabled = hasCustomText));
+      } else {
+        elements.customCategoryInput.focus();
       }
     });
 
-    allCheckbox.addEventListener("change", () => {
-      individualCheckboxes.forEach((cb) => {
-        cb.checked = allCheckbox.checked;
-      });
-    });
-
-    individualCheckboxes.forEach((cb) => {
-      cb.addEventListener("change", () => {
-        if (!cb.checked) {
-          allCheckbox.checked = false;
-        } else if (individualCheckboxes.every((iCb) => iCb.checked)) {
-          allCheckbox.checked = true;
-        }
-      });
-    });
-  } else {
-    groupEl.style.display = "none";
-  }
-}
-
-function renderSuggestions(
-  inputElement,
-  suggestionsContainer,
-  items,
-  displayKey,
-  valueKey,
-  onSelectCallback
-) {
-  suggestionsContainer.innerHTML = "";
-  if (items.length === 0 || inputElement.value.trim() === "") {
-    suggestionsContainer.style.display = "none";
-    return;
-  }
-
-  const ul = document.createElement("ul");
-  items.forEach((item) => {
-    const li = document.createElement("li");
-    li.textContent = item[displayKey];
-    li.dataset.value = item[valueKey];
-    li.dataset.original = JSON.stringify(item);
-    li.addEventListener("click", () => {
-      onSelectCallback(item);
-      suggestionsContainer.style.display = "none";
-    });
-    ul.appendChild(li);
-  });
-  suggestionsContainer.appendChild(ul);
-  suggestionsContainer.style.display = "block";
-}
-
-function cleanDisplayValue(text) {
-  if (!text) return "";
-  let cleaned = String(text).replace(/^[^a-zA-Z0-9\s.,'#\-+/&_]+/u, "");
-  cleaned = cleaned.replace(/\p{Z}/gu, " ");
-  cleaned = cleaned.replace(/[\u0000-\u001F\u007F-\u009F\uFEFF\n\r]/g, "");
-  return cleaned.replace(/\s+/g, " ").trim();
-}
-
-function addTableRow(gridBody, data, index) {
-    const row = document.createElement('div');
-    row.className = 'grid-row';
-
-    const createCell = (content = '', title = '') => {
-        const cell = document.createElement('span');
-        if (typeof content === 'object') {
-            cell.appendChild(content);
+    elements.customCategoryInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        const value = elements.customCategoryInput.value.trim();
+        if (
+          value &&
+          !customKeywords.some((k) => k.toLowerCase() === value.toLowerCase())
+        ) {
+          customKeywords.push(value);
+          const tagEl = document.createElement("span");
+          tagEl.className = "tag";
+          tagEl.innerHTML = `<span>${value}</span> <span class="tag-close-btn" data-value="${value}">&times;</span>`;
+          elements.customKeywordContainer.insertBefore(
+            tagEl,
+            elements.customCategoryInput
+          );
+          elements.customCategoryInput.value = "";
         } else {
-            cell.textContent = content;
+          elements.customCategoryInput.value = "";
         }
-        cell.title = title || content;
-        return cell;
-    };
-
-    const createLinkCell = (url) => {
-        const cell = document.createElement('span');
-        if (url) {
-            const link = document.createElement('a');
-            link.href = url;
-            link.target = '_blank';
-            link.textContent = url;
-            link.title = url;
-            cell.appendChild(link);
-        }
-        return cell;
-    };
-
-    const checkboxContainer = document.createElement('span');
-    checkboxContainer.className = 'checkbox-column';
-    const checkbox = document.createElement('input');
-    checkbox.type = 'checkbox';
-    checkbox.className = 'row-checkbox';
-    checkbox.dataset.index = index;
-    checkbox.checked = true;
-    checkboxContainer.appendChild(checkbox);
-
-    const mapsLink = document.createElement('a');
-    mapsLink.href = data.GoogleMapsURL || '#';
-    mapsLink.target = '_blank';
-    mapsLink.title = data.GoogleMapsURL || 'View on Google Maps';
-    
-    const mapsContent = document.createElement('span');
-    mapsContent.className = 'maps-link-content';
-    const circle = document.createElement('span');
-    circle.className = 'maps-status-icon';
-    mapsContent.appendChild(circle);
-    mapsContent.appendChild(document.createTextNode(' View'));
-    mapsLink.appendChild(mapsContent);
-
-    const cells = [
-        checkboxContainer,
-        createCell(cleanDisplayValue(data.BusinessName)),
-        createCell(cleanDisplayValue(data.Category)),
-        createCell(cleanDisplayValue(data.StarRating)),
-        createCell(cleanDisplayValue(data.ReviewCount)),
-        createCell(cleanDisplayValue(data.Suburb)),
-        createCell(cleanDisplayValue(data.StreetAddress)),
-        createLinkCell(data.Website),
-        createCell(cleanDisplayValue(data.OwnerName)),
-        createCell(cleanDisplayValue(data.Email1)),
-        createCell(cleanDisplayValue(data.Email2)),
-        createCell(cleanDisplayValue(data.Email3)),
-        createCell(cleanDisplayValue(data.Phone)),
-        createLinkCell(data.InstagramURL),
-        createLinkCell(data.FacebookURL),
-        createCell(mapsLink)
-    ];
-
-    cells.forEach(cell => row.appendChild(cell));
-    gridBody.appendChild(row);
-}
-
-function setUiState(isBusy, elements) {
-  const isIndividualSearch =
-    elements.businessNamesInput.value.trim().length > 0;
-
-  for (const key in elements) {
-    if (!elements.hasOwnProperty(key)) continue;
-
-    if (key === "subCategoryCheckboxContainer") {
-      elements[key]
-        .querySelectorAll('input[type="checkbox"]')
-        .forEach((cb) => (cb.disabled = isBusy));
-    } else if (
-      key !== "downloadButtons" &&
-      key !== "displayedData" &&
-      key !== "bulkSearchContainer"
-    ) {
-      if (elements[key] && typeof elements[key].disabled !== "undefined") {
-        elements[key].disabled = isBusy;
+      } else if (
+        e.key === "Backspace" &&
+        elements.customCategoryInput.value === "" &&
+        customKeywords.length > 0
+      ) {
+        customKeywords.pop();
+        const lastTagEl =
+          elements.customKeywordContainer.querySelector(`.tag:last-of-type`);
+        if (lastTagEl) lastTagEl.remove();
       }
+
+      const hasCustomText =
+        customKeywords.length > 0 ||
+        elements.customCategoryInput.value.trim() !== "";
+      elements.primaryCategorySelect.disabled = hasCustomText;
+      elements.subCategoryCheckboxContainer
+        .querySelectorAll("input")
+        .forEach((cb) => (cb.disabled = hasCustomText));
+      if (hasCustomText) {
+        elements.primaryCategorySelect.value = "";
+        elements.primaryCategorySelect.dispatchEvent(new Event("change"));
+      }
+    });
+
+    elements.customCategoryInput.addEventListener("input", () => {
+      const hasCustomText =
+        customKeywords.length > 0 ||
+        elements.customCategoryInput.value.trim() !== "";
+      elements.primaryCategorySelect.disabled = hasCustomText;
+      elements.subCategoryCheckboxContainer
+        .querySelectorAll("input")
+        .forEach((cb) => (cb.disabled = hasCustomText));
+      if (elements.categoryModifierInput)
+        elements.categoryModifierInput.disabled = hasCustomText;
+
+      if (hasCustomText) {
+        elements.primaryCategorySelect.value = "";
+        elements.primaryCategorySelect.dispatchEvent(new Event("change"));
+      }
+    });
+  }
+
+  setupTagInput();
+  setupKeywordTagInput();
+
+  elements.primaryCategorySelect.addEventListener("change", (event) => {
+    const selectedCategory = event.target.value;
+    populateSubCategories(
+      elements.subCategoryCheckboxContainer,
+      elements.subCategoryGroup,
+      selectedCategory,
+      categories
+    );
+
+    const hasCategorySelection = selectedCategory !== "";
+    elements.customCategoryInput.disabled = hasCategorySelection;
+    if (elements.categoryModifierGroup) {
+      elements.categoryModifierGroup.style.display = hasCategorySelection
+        ? "block"
+        : "none";
+      if (!hasCategorySelection) elements.categoryModifierInput.value = "";
     }
-  }
 
-  if (!isBusy) {
-    elements.countInput.disabled =
-      elements.findAllBusinessesCheckbox.checked || isIndividualSearch;
-    document
-      .querySelectorAll(
-        "#bulkSearchContainer input, #bulkSearchContainer select"
-      )
-      .forEach((el) => {
-        el.disabled = isIndividualSearch;
-      });
-    elements.subCategoryCheckboxContainer
-      .querySelectorAll('input[type="checkbox"]')
-      .forEach((cb) => (cb.disabled = isIndividualSearch));
-  }
+    if (hasCategorySelection) {
+      elements.customCategoryInput.value = "";
+      customKeywords.length = 0;
+      elements.customKeywordContainer
+        .querySelectorAll(".tag")
+        .forEach((tag) => tag.remove());
+    }
+  });
 
-  setDownloadButtonStates(
-    isBusy,
-    elements.downloadButtons,
-    elements.displayedData
+  elements.findAllBusinessesCheckbox.addEventListener("change", (e) => {
+    elements.countInput.disabled = e.target.checked;
+    if (e.target.checked) elements.countInput.value = "";
+  });
+
+  elements.countryInput.addEventListener("input", () => {
+    clearTimeout(window.rtrlApp.timers.country);
+    window.rtrlApp.timers.country = setTimeout(() => {
+      const query = elements.countryInput.value.toLowerCase();
+      if (query.length < 1) {
+        elements.countrySuggestionsEl.style.display = "none";
+        return;
+      }
+      const filteredCountries = countries.filter((c) =>
+        c.text.toLowerCase().includes(query)
+      );
+      renderSuggestions(
+        elements.countryInput,
+        elements.countrySuggestionsEl,
+        filteredCountries,
+        "text",
+        "value",
+        (c) => {
+          elements.countryInput.value = c.text;
+        }
+      );
+    }, 300);
+  });
+
+  elements.locationInput.addEventListener("input", () => {
+    clearTimeout(window.rtrlApp.timers.location);
+    window.rtrlApp.timers.location = setTimeout(
+      () =>
+        window.rtrlApp.fetchPlaceSuggestions(
+          elements.locationInput,
+          elements.locationSuggestionsEl,
+          ["geocode"],
+          window.rtrlApp.handleLocationSelection
+        ),
+      300
+    );
+    window.rtrlApp.setRadiusInputsState(
+      elements.locationInput.value.trim().length > 0
+    );
+  });
+
+  elements.postalCodeInput.addEventListener("input", () => {
+    clearTimeout(window.rtrlApp.timers.postalCode);
+    window.rtrlApp.timers.postalCode = setTimeout(
+      () =>
+        window.rtrlApp.fetchPlaceSuggestions(
+          elements.postalCodeInput,
+          elements.postalCodeSuggestionsEl,
+          ["(regions)"],
+          window.rtrlApp.handlePostalCodeSelection
+        ),
+      300
+    );
+  });
+
+  elements.anchorPointInput.addEventListener("input", () => {
+    const hasText = elements.anchorPointInput.value.trim().length > 0;
+    window.rtrlApp.setLocationInputsState(hasText);
+    if (
+      state.selectedAnchorPoint &&
+      elements.anchorPointInput.value.trim() !== state.selectedAnchorPoint.name
+    ) {
+      state.selectedAnchorPoint = null;
+    }
+    clearTimeout(window.rtrlApp.timers.anchorPoint);
+    window.rtrlApp.timers.anchorPoint = setTimeout(() => {
+      window.rtrlApp.fetchPlaceSuggestions(
+        elements.anchorPointInput,
+        elements.anchorPointSuggestionsEl,
+        ["geocode"],
+        window.rtrlApp.handleAnchorPointSelection
+      );
+    }, 300);
+  });
+
+  elements.radiusSlider.addEventListener("input", () => {
+    const km = elements.radiusSlider.value;
+    elements.radiusValue.textContent = `${km} km`;
+    if (state.selectedAnchorPoint) {
+      window.rtrlApp.drawSearchCircle(state.selectedAnchorPoint.center);
+    }
+  });
+
+  document.addEventListener("click", (event) => {
+    if (!elements.locationInput.contains(event.target))
+      elements.locationSuggestionsEl.style.display = "none";
+    if (!elements.postalCodeContainer.contains(event.target))
+      elements.postalCodeSuggestionsEl.style.display = "none";
+    if (!elements.countryInput.contains(event.target))
+      elements.countrySuggestionsEl.style.display = "none";
+    if (!elements.anchorPointInput.contains(event.target))
+      elements.anchorPointSuggestionsEl.style.display = "none";
+  });
+
+  elements.startButton.addEventListener("click", () =>
+    window.rtrlApp.startResearch()
   );
-}
 
-function setDownloadButtonStates(isBusy, buttons, displayedData) {
-  const hasData = displayedData.length > 0;
-  buttons.fullExcel.disabled = isBusy || !hasData;
-  buttons.notifyre.disabled =
-    isBusy ||
-    !hasData ||
-    !displayedData.some((item) => item.Phone && item.Phone.trim() !== "");
-  buttons.contacts.disabled =
-    isBusy ||
-    !hasData ||
-    !displayedData.some((item) => item.Email1 && item.Email1.trim() !== "");
-}
-
-function logMessage(logEl, message, type = "default") {
-  const timestamp = new Date().toLocaleTimeString();
-  const formattedMessage = `[${timestamp}] ${message}`;
-
-  const span = document.createElement("span");
-  span.textContent = formattedMessage;
-  span.className = `log-entry log-${type}`;
-
-  logEl.appendChild(span);
-  logEl.appendChild(document.createTextNode("\n"));
-  logEl.scrollTop = logEl.scrollHeight;
-}
-
-function getColumnWidths(data, headers) {
-  if (!data || data.length === 0 || !headers || headers.length === 0) return [];
-  const widths = headers.map((header) => ({ wch: String(header).length + 2 }));
-
-  data.forEach((item) => {
-    headers.forEach((header, colIndex) => {
-      const cellValue = String(item[header] || "");
-      const effectiveLength =
-        header.includes("URL") && cellValue.length > 50 ? 50 : cellValue.length;
-      if (effectiveLength + 2 > widths[colIndex].wch) {
-        widths[colIndex].wch = effectiveLength + 2;
+  elements.businessNamesInput.addEventListener("input", (e) => {
+    const isIndividualSearch = e.target.value.trim().length > 0;
+    document.querySelectorAll(".collapsible-card").forEach((card) => {
+      const content = card.querySelector(".collapsible-content");
+      if (
+        content &&
+        content.id !== "individualSearchContainer" &&
+        card.querySelector("h3").textContent.includes("Specific Name")
+      ) {
       }
     });
+
+    window.rtrlApp.setRadiusInputsState(isIndividualSearch);
+    window.rtrlApp.setLocationInputsState(isIndividualSearch);
   });
-  return widths.map((w) => ({ wch: Math.max(w.wch, 10) }));
-}
 
-async function downloadExcel(
-  data,
-  searchParams,
-  fileSuffix,
-  fileType,
-  logEl,
-  specificHeaders = null,
-  geocoder,
-  countryName
-) {
-  if (data.length === 0) {
-    logMessage(logEl, "No data to download for this format!", "error");
-    return;
-  }
-
-  const createLinkObject = (url) => {
-    if (!url || typeof url !== "string" || !url.trim()) return "";
-    const formula = `HYPERLINK("${url}", "${url}")`;
-    return {
-      f: formula,
-      v: url,
-      s: { font: { color: { rgb: "0563C1" }, underline: true } },
-    };
-  };
-
-  let exportData;
-  let headers;
-
-  if (specificHeaders) {
-    exportData = data.map((item) => {
-      const row = {};
-      specificHeaders.forEach((h) => {
-        row[h] =
-          h.toLowerCase().includes("url") || h.toLowerCase().includes("website")
-            ? createLinkObject(item[h])
-            : item[h] || "";
-      });
-      if (fileSuffix === "emails" && item.Website) {
-        row["Website"] = createLinkObject(item.Website);
-        if (!specificHeaders.includes("Website"))
-          specificHeaders.push("Website");
+  let emailSaveTimeout;
+  elements.userEmailInput.addEventListener("input", (e) => {
+    clearTimeout(emailSaveTimeout);
+    const email = e.target.value;
+    emailSaveTimeout = setTimeout(() => {
+      if (email) {
+        localStorage.setItem("rtrl_last_used_email", email);
+      } else {
+        localStorage.removeItem("rtrl_last_used_email");
       }
-      return row;
-    });
-    headers = specificHeaders;
-  } else {
-    exportData = data.map((item) => ({
-      BusinessName: item.BusinessName,
-      Category: item.Category,
-      "Suburb/Area": item.SuburbArea,
-      StreetAddress: item.StreetAddress,
-      Website: createLinkObject(item.Website),
-      OwnerName: item.OwnerName,
-      "Email 1": item.Email1,
-      "Email 2": item.Email2,
-      "Email 3": item.Email3,
-      Phone: item.Phone,
-      InstagramURL: createLinkObject(item.InstagramURL),
-      FacebookURL: createLinkObject(item.FacebookURL),
-      GoogleMapsURL: createLinkObject(item.GoogleMapsURL),
-    }));
-    headers = Object.keys(exportData[0] || {});
-  }
-
-  const ws = XLSX.utils.json_to_sheet(exportData, { header: headers });
-  ws["!cols"] = getColumnWidths(exportData, headers);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Business List");
-
-  const date = new Date().toISOString().split("T")[0].replace(/-/g, "");
-  const company = "rtrl";
-
-  let categoryString;
-  if (searchParams.customCategory) {
-    categoryString = searchParams.customCategory.replace(/[\s/&]/g, "_");
-  } else if (
-    searchParams.subCategory === "multiple_subcategories" &&
-    searchParams.subCategoryList &&
-    searchParams.subCategoryList.length > 0
-  ) {
-    categoryString = `${(searchParams.primaryCategory || "").replace(
-      /[\s/&]/g,
-      "_"
-    )}_${searchParams.subCategoryList
-      .map((s) => s.replace(/[\s/&]/g, "_"))
-      .join("_")}`;
-  } else if (searchParams.subCategory) {
-    categoryString = `${(searchParams.primaryCategory || "").replace(
-      /[\s/&]/g,
-      "_"
-    )}_${searchParams.subCategory.replace(/[\s/&]/g, "_")}`;
-  } else {
-    categoryString =
-      searchParams.primaryCategory?.replace(/[\s/&]/g, "_") || "businesses";
-  }
-
-  let locationString = (searchParams.area || "location")
-    .replace(/[\s/,]/g, "_")
-    .toLowerCase();
-
-  const fileExtension = fileType === "xlsx" ? "xlsx" : "csv";
-  const fullFilename = `${date}_${company}_${categoryString}_${locationString}_${fileSuffix}.${fileExtension}`;
-
-  XLSX.writeFile(wb, fullFilename, {
-    bookType: fileExtension,
-    cellDates: true,
+    }, 500);
   });
-  logMessage(
-    logEl,
-    `${data.length} records exported to '${fullFilename}' successfully!`,
-    "success"
-  );
 }

@@ -12,6 +12,8 @@ require("dotenv").config();
 
 const { findBusinessOwnerWithAI } = require("./aiService");
 const { sendResultsByEmail } = require("./emailService");
+const { generateFileData } = require("./fileGenerator");
+const XLSX = require('xlsx');
 
 puppeteer.use(StealthPlugin());
 
@@ -718,6 +720,125 @@ app.delete("/api/postcode-lists/:id", async (req, res) => {
     } catch (dbError) {
         console.error("Error deleting postcode list:", dbError);
         res.status(500).json({ error: 'Failed to delete postcode list.' });
+    }
+});
+
+app.get("/api/jobs/history", async (req, res) => {
+    try {
+        const authHeader = req.headers.authorization;
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            return res.status(401).json({ error: 'Authentication required.' });
+        }
+        const token = authHeader.split(' ')[1];
+
+        const { data: { user }, error: userError } = await supabase.auth.getUser(token);
+        if (userError || !user) {
+            return res.status(401).json({ error: 'Authentication failed.' });
+        }
+
+        const { data, error } = await supabase
+            .from('jobs')
+            .select('id, created_at, parameters, status, results')
+            .eq('user_id', user.id)
+            .order('created_at', { ascending: false })
+            .limit(50);
+
+        if (error) throw error;
+        res.json(data || []);
+    } catch (dbError) {
+        console.error("Error fetching job history:", dbError);
+        res.status(500).json({ error: 'Failed to fetch job history.' });
+    }
+});
+
+app.get("/api/jobs/:jobId/download/:fileType", async (req, res) => {
+    try {
+        const { jobId, fileType } = req.params;
+        const token = req.query.authToken;
+
+        if (!token) {
+            return res.status(401).json({ error: 'Authentication token required.' });
+        }
+        
+        const { data: { user }, error: userError } = await supabase.auth.getUser(token);
+        if (userError || !user) {
+            return res.status(401).json({ error: 'Authentication failed.' });
+        }
+        
+        const { data: job, error: jobError } = await supabase
+            .from('jobs')
+            .select('results, parameters, user_id')
+            .eq('id', jobId)
+            .single();
+
+        if (jobError || !job) {
+            return res.status(404).send('Job not found.');
+        }
+        if (job.user_id !== user.id) {
+            return res.status(403).send('Access denied.');
+        }
+
+        const rawData = job.results || [];
+        const { uniqueBusinesses, duplicates } = deduplicateBusinesses(rawData);
+        
+        const searchParams = job.parameters.searchParamsForEmail || {};
+        if (job.parameters.radiusKm) {
+          searchParams.radiusKm = job.parameters.radiusKm;
+        }
+
+        const allFiles = await generateFileData(uniqueBusinesses, searchParams, duplicates);
+        
+        let buffer, filename, contentType;
+
+        switch(fileType) {
+            case 'full_xlsx':
+                if (allFiles.full.data.length === 0) return res.status(404).send('No unique business data to generate this file.');
+                const wsFull = XLSX.utils.json_to_sheet(allFiles.full.data);
+                const wbFull = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wbFull, wsFull, "Business List (Unique)");
+                buffer = XLSX.write(wbFull, { bookType: 'xlsx', type: 'buffer' });
+                filename = allFiles.full.filename;
+                contentType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+                break;
+            
+            case 'duplicates_xlsx':
+                 if (allFiles.duplicates.data.length === 0) return res.status(404).send('No duplicate business data found.');
+                const wsDup = XLSX.utils.json_to_sheet(allFiles.duplicates.data);
+                const wbDup = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wbDup, wsDup, "Duplicates List");
+                buffer = XLSX.write(wbDup, { bookType: 'xlsx', type: 'buffer' });
+                filename = allFiles.duplicates.filename;
+                contentType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+                break;
+
+            case 'sms_csv':
+                if (allFiles.sms.data.length === 0) return res.status(404).send('No SMS-compatible data found.');
+                const wsSms = XLSX.utils.json_to_sheet(allFiles.sms.data, { header: allFiles.sms.headers });
+                const wbSms = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wbSms, wsSms, "SMS List");
+                buffer = XLSX.write(wbSms, { bookType: 'csv', type: 'buffer' });
+                filename = allFiles.sms.filename;
+                contentType = 'text/csv';
+                break;
+
+            case 'csv_zip':
+                if (!allFiles.contactsSplits.data) return res.status(404).send('No contact data found to generate CSV splits.');
+                buffer = allFiles.contactsSplits.data;
+                filename = allFiles.contactsSplits.filename;
+                contentType = 'application/zip';
+                break;
+
+            default:
+                return res.status(400).send('Invalid file type requested.');
+        }
+
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        res.setHeader('Content-Type', contentType);
+        res.send(buffer);
+
+    } catch (error) {
+        console.error(`[File Download Error] Job ${req.params.jobId}:`, error);
+        res.status(500).send('Failed to generate or retrieve the file.');
     }
 });
 

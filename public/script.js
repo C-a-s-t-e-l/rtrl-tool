@@ -16,8 +16,6 @@ window.rtrlApp = {
   state: {},
   timers: {},
   startResearch: () => {},
-  applyFilterAndSort: () => {},
-  getDisplayedData: () => [],
   fetchPlaceSuggestions: () => {},
   handleLocationSelection: () => {},
   handleAnchorPointSelection: () => {},
@@ -87,14 +85,11 @@ function initializeMainApp() {
 
   const elements = {
     startButton: document.getElementById("startButton"),
-    ratingFilter: document.getElementById("ratingFilter"),
-    reviewCountFilter: document.getElementById("reviewCountFilter"),
-    downloadFullExcelButton: document.getElementById("downloadFullExcelButton"),
-    downloadNotifyreCSVButton: document.getElementById("downloadNotifyreCSVButton"),
-    downloadContactsCSVButton: document.getElementById("downloadContactsCSVButton"),
     primaryCategorySelect: document.getElementById("primaryCategorySelect"),
     subCategoryGroup: document.getElementById("subCategoryGroup"),
-    subCategoryCheckboxContainer: document.getElementById("subCategoryCheckboxContainer"),
+    subCategoryCheckboxContainer: document.getElementById(
+      "subCategoryCheckboxContainer"
+    ),
     customCategoryGroup: document.getElementById("customCategoryGroup"),
     customCategoryInput: document.getElementById("customCategoryInput"),
     customKeywordContainer: document.getElementById("customKeywordContainer"),
@@ -118,16 +113,13 @@ function initializeMainApp() {
     radiusValue: document.getElementById("radiusValue"),
     progressBar: document.getElementById("progressBar"),
     logEl: document.getElementById("log"),
-    resultsTableBody: document.getElementById("resultsTableBody"),
-    resultsTableHeader: document.getElementById("resultsTableHeader"),
-    selectAllCheckbox: document.getElementById("selectAllCheckbox"),
     researchStatusIcon: document.getElementById("researchStatusIcon"),
     progressPercentage: document.getElementById("progressPercentage"),
-    collectedDataCard: document.getElementById("collectedDataCard"),
-    filterInput: document.getElementById("filterInput"),
     postcodeListSelect: document.getElementById("postcodeListSelect"),
     savePostcodeListButton: document.getElementById("savePostcodeListButton"),
-    deletePostcodeListButton: document.getElementById("deletePostcodeListButton"),
+    deletePostcodeListButton: document.getElementById(
+      "deletePostcodeListButton"
+    ),
     categoryModifierGroup: document.getElementById("categoryModifierGroup"),
     categoryModifierInput: document.getElementById("categoryModifierInput"),
     loginGoogleBtn: document.getElementById("login-google"),
@@ -141,27 +133,25 @@ function initializeMainApp() {
     authTitle: document.getElementById("auth-title"),
     authTogglePrompt: document.getElementById("auth-toggle-prompt"),
     authModeToggle: document.getElementById("auth-mode-toggle"),
-
-        flipCardContainer: document.getElementById("flip-card"),
-        toSignupBtn: document.getElementById("to-signup-btn"),
-        toSigninBtn: document.getElementById("to-signin-btn"),
-        
-        emailInputAuth: document.getElementById("email-input"),
-        passwordInputAuth: document.getElementById("password-input"),
-        loginEmailBtn: document.getElementById("login-email-btn"),
-        
-        signupEmailInput: document.getElementById("signup-email-input"),
-        signupPasswordInput: document.getElementById("signup-password-input"),
-        signupEmailBtn: document.getElementById("signup-email-btn"),
+    flipCardContainer: document.getElementById("flip-card"),
+    toSignupBtn: document.getElementById("to-signup-btn"),
+    toSigninBtn: document.getElementById("to-signin-btn"),
+    emailInputAuth: document.getElementById("email-input"),
+    passwordInputAuth: document.getElementById("password-input"),
+    loginEmailBtn: document.getElementById("login-email-btn"),
+    signupEmailInput: document.getElementById("signup-email-input"),
+    signupPasswordInput: document.getElementById("signup-password-input"),
+    signupEmailBtn: document.getElementById("signup-email-btn"),
   };
 
-    function setupPasswordToggle(toggleId, inputId) {
+  function setupPasswordToggle(toggleId, inputId) {
     const toggleBtn = document.getElementById(toggleId);
     const inputField = document.getElementById(inputId);
 
     if (toggleBtn && inputField) {
       toggleBtn.addEventListener("click", () => {
-        const type = inputField.getAttribute("type") === "password" ? "text" : "password";
+        const type =
+          inputField.getAttribute("type") === "password" ? "text" : "password";
         inputField.setAttribute("type", type);
 
         toggleBtn.classList.toggle("fa-eye");
@@ -177,7 +167,7 @@ function initializeMainApp() {
     elements.loginGoogleBtn.addEventListener("click", async () => {
       const { error } = await supabaseClient.auth.signInWithOAuth({
         provider: "google",
-        options: { redirectTo: window.location.origin }
+        options: { redirectTo: window.location.origin },
       });
       if (error) alert("Login Error: " + error.message);
     });
@@ -188,9 +178,9 @@ function initializeMainApp() {
       const { error } = await supabaseClient.auth.signInWithOAuth({
         provider: "azure",
         options: {
-          scopes: 'email',
-          redirectTo: window.location.origin
-        }
+          scopes: "email",
+          redirectTo: window.location.origin,
+        },
       });
       if (error) alert("Login Error: " + error.message);
     });
@@ -199,14 +189,16 @@ function initializeMainApp() {
   if (elements.toSignupBtn) {
     elements.toSignupBtn.addEventListener("click", (e) => {
       e.preventDefault();
-      if (elements.flipCardContainer) elements.flipCardContainer.classList.add("flipped");
+      if (elements.flipCardContainer)
+        elements.flipCardContainer.classList.add("flipped");
     });
   }
 
   if (elements.toSigninBtn) {
     elements.toSigninBtn.addEventListener("click", (e) => {
       e.preventDefault();
-      if (elements.flipCardContainer) elements.flipCardContainer.classList.remove("flipped");
+      if (elements.flipCardContainer)
+        elements.flipCardContainer.classList.remove("flipped");
     });
   }
 
@@ -261,8 +253,11 @@ function initializeMainApp() {
         elements.signupEmailBtn.textContent = originalText;
         elements.signupEmailBtn.disabled = false;
       } else if (!data.session) {
-        alert("Account created! Please check your email to confirm your account.");
-        if (elements.flipCardContainer) elements.flipCardContainer.classList.remove("flipped");
+        alert(
+          "Account created! Please check your email to confirm your account."
+        );
+        if (elements.flipCardContainer)
+          elements.flipCardContainer.classList.remove("flipped");
         elements.signupEmailBtn.textContent = originalText;
         elements.signupEmailBtn.disabled = false;
       }
@@ -288,8 +283,11 @@ function initializeMainApp() {
       const userId = currentUserSession.user.id;
       localStorage.setItem(`rtrl_last_job_id_${userId}`, jobId);
     }
-    allCollectedData = [];
-    window.rtrlApp.applyFilterAndSort();
+
+    if (window.rtrlApp.jobHistory) {
+      window.rtrlApp.jobHistory.fetchAndRenderJobs();
+    }
+
     if (subscribedJobId !== currentJobId) {
       socket.emit("subscribe_to_job", {
         jobId,
@@ -316,61 +314,24 @@ function initializeMainApp() {
       );
       elements.researchStatusIcon.className =
         update.status === "running" ? "fas fa-spinner fa-spin" : "fas fa-tasks";
+
+      if (window.rtrlApp.jobHistory) {
+        window.rtrlApp.jobHistory.fetchAndRenderJobs();
+      }
+
       if (update.status === "completed" || update.status === "failed") {
         currentJobId = null;
         setUiState(false, getUiElementsForStateChange());
         if (update.status === "completed")
           elements.researchStatusIcon.className = "fas fa-check-circle";
-          elements.progressBar.style.width = "100%";
-          elements.progressPercentage.textContent = "100% (Done)";
+        elements.progressBar.style.width = "100%";
+        elements.progressPercentage.textContent = "100% (Done)";
       }
     }
   });
 
-  socket.on("job_state", (job) => {
-    if (!job) {
-      logMessage(
-        elements.logEl,
-        "Could not retrieve job state. Ready for a new search.",
-        "error"
-      );
-      return;
-    }
-    allCollectedData.length = 0;
-    if (job.results && job.results.length > 0) {
-      allCollectedData.push(...job.results);
-    }
-    if (job.parameters && job.parameters.searchParamsForEmail) {
-      window.rtrlApp.state.currentSearchParameters =
-        job.parameters.searchParamsForEmail;
-    } else {
-      window.rtrlApp.state.currentSearchParameters = {};
-    }
-    window.rtrlApp.applyFilterAndSort();
-    if (allCollectedData.length > 0) {
-      elements.collectedDataCard.classList.add("has-results");
-    }
-    const isRunning = job.status === "running" || job.status === "queued";
-    if (isRunning) {
-      logMessage(
-        elements.logEl,
-        "Successfully reconnected and restored active job state.",
-        "success"
-      );
-      elements.logEl.textContent = job.logs.join("\n");
-      elements.logEl.scrollTop = elements.logEl.scrollHeight;
-    } else {
-      elements.logEl.innerHTML = "";
-      logMessage(elements.logEl, "Waiting to start research...", "default");
-    }
-    setUiState(isRunning, getUiElementsForStateChange());
-  });
-
   socket.on("business_found", (business) => {
-    if (allCollectedData.length === 0)
-      elements.collectedDataCard.classList.add("has-results");
-    allCollectedData.push(business);
-    window.rtrlApp.applyFilterAndSort();
+    // This event is no longer used by the main UI.
   });
 
   socket.on("progress_update", ({ processed, discovered, added, target }) => {
@@ -387,7 +348,6 @@ function initializeMainApp() {
     elements.progressPercentage.textContent = `${roundedPercentage}%`;
   });
 
-
   supabaseClient.auth.onAuthStateChange(async (event, session) => {
     currentUserSession = session;
 
@@ -397,7 +357,8 @@ function initializeMainApp() {
       if (elements.userMenu) elements.userMenu.style.display = "block";
 
       if (elements.userInfoSpan) {
-        elements.userInfoSpan.textContent = session.user.user_metadata.full_name || "User";
+        elements.userInfoSpan.textContent =
+          session.user.user_metadata.full_name || "User";
       }
       if (elements.userEmailDisplay) {
         elements.userEmailDisplay.textContent = session.user.email;
@@ -405,9 +366,9 @@ function initializeMainApp() {
 
       elements.startButton.disabled = false;
 
-      if (elements.userEmailInput.value.trim() === '') {
+      if (elements.userEmailInput.value.trim() === "") {
         elements.userEmailInput.value = session.user.email;
-        localStorage.setItem('rtrl_last_used_email', session.user.email);
+        localStorage.setItem("rtrl_last_used_email", session.user.email);
       }
 
       await fetchPostcodeLists();
@@ -424,24 +385,9 @@ function initializeMainApp() {
         console.error("Could not fetch exclusion list:", error);
       }
 
-      const userId = session.user.id;
-      const previousJobId = localStorage.getItem(`rtrl_last_job_id_${userId}`);
-
-      if (previousJobId) {
-        currentJobId = previousJobId;
-        if (subscribedJobId !== currentJobId) {
-          logMessage(
-            elements.logEl,
-            `Reconnecting to previous job: ${previousJobId}...`
-          );
-          socket.emit("subscribe_to_job", {
-            jobId: previousJobId,
-            authToken: session.access_token,
-          });
-          subscribedJobId = currentJobId;
-        }
+      if (window.rtrlApp.jobHistory) {
+        window.rtrlApp.jobHistory.fetchAndRenderJobs();
       }
-
     } else {
       if (elements.loginOverlay) elements.loginOverlay.style.display = "flex";
       if (elements.appContent) elements.appContent.style.display = "none";
@@ -449,8 +395,8 @@ function initializeMainApp() {
 
       elements.startButton.disabled = true;
 
-      if (elements.userEmailInput) elements.userEmailInput.value = '';
-      localStorage.removeItem('rtrl_last_used_email');
+      if (elements.userEmailInput) elements.userEmailInput.value = "";
+      localStorage.removeItem("rtrl_last_used_email");
 
       currentJobId = null;
       subscribedJobId = null;
@@ -459,9 +405,6 @@ function initializeMainApp() {
     }
   });
 
-
-  let allCollectedData = [];
-  let displayedData = [];
   let postalCodes = [];
   let customKeywords = [];
   let map, searchCircle;
@@ -637,11 +580,9 @@ function initializeMainApp() {
   window.rtrlApp.state = {
     selectedAnchorPoint: null,
     currentSearchParameters: {},
-    currentSort: { key: "BusinessName", direction: "asc" },
     googleMapsService: null,
     googleMapsGeocoder: null,
   };
-  window.rtrlApp.getDisplayedData = () => displayedData;
 
   const categories = {
     "Select Category": [],
@@ -871,7 +812,7 @@ function initializeMainApp() {
       };
       elements.anchorPointInput.value = item.description;
       elements.anchorPointSuggestionsEl.style.display = "none";
-      map.invalidateSize(); 
+      map.invalidateSize();
       map.setView(newCenter, 11);
       window.rtrlApp.drawSearchCircle(newCenter);
     } catch (error) {
@@ -908,10 +849,14 @@ function initializeMainApp() {
   }
 
   function initializeApp() {
+    window.rtrlApp.jobHistory.init(
+      () => currentUserSession?.access_token,
+      BACKEND_URL
+    );
+
     window.rtrlApp.exclusionFeature.init(
       () => currentUserSession?.access_token
     );
-
 
     const savedEmail = localStorage.getItem("rtrl_last_used_email");
     if (savedEmail) elements.userEmailInput.value = savedEmail;
@@ -924,8 +869,6 @@ function initializeMainApp() {
       socket,
       categories,
       countries,
-      allCollectedData,
-      displayedData,
       postalCodes,
       customKeywords,
       map,
@@ -937,81 +880,6 @@ function initializeMainApp() {
       elements.countInput.value = "";
     }
     loadGoogleMaps();
-  }
-
-  function renderTable() {
-    elements.resultsTableBody.innerHTML = "";
-    if (displayedData.length > 0) {
-      displayedData.forEach((business, index) =>
-        addTableRow(elements.resultsTableBody, business, index)
-      );
-    }
-    updateSortHeaders();
-  }
-
-window.rtrlApp.applyFilterAndSort = () => {
-    const filterText = elements.filterInput.value.toLowerCase();
-    const minRating = parseFloat(elements.ratingFilter.value);
-    const reviewFilterValue = elements.reviewCountFilter.value;
-    let filteredData;
-
-    if (filterText) {
-      filteredData = allCollectedData.filter(
-        (item) =>
-          item.BusinessName?.toLowerCase().includes(filterText) ||
-          item.Category?.toLowerCase().includes(filterText) ||
-          item.StreetAddress?.toLowerCase().includes(filterText) ||
-          item.Suburb?.toLowerCase().includes(filterText)
-      );
-    } else {
-      filteredData = [...allCollectedData];
-    }
-
-    if (!isNaN(minRating) && minRating > 0) {
-      filteredData = filteredData.filter(
-        (item) => (parseFloat(item.StarRating) || 0) >= minRating
-      );
-    }
-
-    if (reviewFilterValue) {
-      filteredData = filteredData.filter((item) => {
-        const reviewCount = parseInt(item.ReviewCount, 10) || 0;
-        if (reviewFilterValue === ">50") return reviewCount > 50;
-        if (reviewFilterValue === ">100") return reviewCount > 100;
-        if (reviewFilterValue === ">250") return reviewCount > 250;
-        return true;
-      });
-    }
-
-    const { key, direction } = window.rtrlApp.state.currentSort;
-    if (key) {
-      filteredData.sort((a, b) => {
-        let valA = a[key] || "";
-        let valB = b[key] || "";
-        if (key === "StarRating" || key === "ReviewCount") {
-          valA = parseFloat(valA) || 0;
-          valB = parseFloat(valB) || 0;
-          return direction === "asc" ? valA - valB : valB - valA;
-        }
-        const comparison = String(valA).localeCompare(String(valB), undefined, {
-          numeric: true,
-          sensitivity: "base",
-        });
-        return direction === "asc" ? comparison : -comparison;
-      });
-    }
-
-    displayedData = filteredData;
-    renderTable();
-  };
-
-  function updateSortHeaders() {
-    elements.resultsTableHeader.querySelectorAll(".sortable").forEach((th) => {
-      th.classList.remove("asc", "desc");
-      if (th.dataset.sortKey === window.rtrlApp.state.currentSort.key) {
-        th.classList.add(window.rtrlApp.state.currentSort.direction);
-      }
-    });
   }
 
   window.rtrlApp.validateAndAddTag = async (postcode) => {
@@ -1192,7 +1060,7 @@ window.rtrlApp.applyFilterAndSort = () => {
     });
   };
 
-window.rtrlApp.startResearch = () => {
+  window.rtrlApp.startResearch = () => {
     if (!currentUserSession) {
       logMessage(
         elements.logEl,
@@ -1203,13 +1071,9 @@ window.rtrlApp.startResearch = () => {
     }
 
     setUiState(true, getUiElementsForStateChange());
-    allCollectedData = [];
-    displayedData = [];
     elements.logEl.textContent = "Submitting job to the queue...";
-    elements.resultsTableBody.innerHTML = "";
     elements.progressBar.style.width = "0%";
     elements.progressPercentage.textContent = "0%";
-    elements.collectedDataCard.classList.remove("has-results");
 
     const namesText = elements.businessNamesInput.value.trim();
     const businessNames = namesText
@@ -1227,8 +1091,10 @@ window.rtrlApp.startResearch = () => {
       .filter((v) => v !== "select_all");
 
     const exclusionList = window.rtrlApp.exclusionFeature.getExclusionList();
-    
-    const modifierText = elements.categoryModifierInput ? elements.categoryModifierInput.value.trim() : "";
+
+    const modifierText = elements.categoryModifierInput
+      ? elements.categoryModifierInput.value.trim()
+      : "";
 
     const scrapeParams = {
       country: elements.countryInput.value,
@@ -1261,9 +1127,11 @@ window.rtrlApp.startResearch = () => {
 
       if (baseCategories.length > 0) {
         if (modifierText) {
-           scrapeParams.categoriesToLoop = baseCategories.map(cat => `"${modifierText}" ${cat}`);
+          scrapeParams.categoriesToLoop = baseCategories.map(
+            (cat) => `"${modifierText}" ${cat}`
+          );
         } else {
-           scrapeParams.categoriesToLoop = baseCategories;
+          scrapeParams.categoriesToLoop = baseCategories;
         }
       } else {
         scrapeParams.categoriesToLoop = [];
@@ -1274,7 +1142,7 @@ window.rtrlApp.startResearch = () => {
       scrapeParams.location ||
       (scrapeParams.postalCode && scrapeParams.postalCode.length > 0) ||
       (scrapeParams.anchorPoint && scrapeParams.radiusKm);
-    
+
     const hasSearchTerm =
       scrapeParams.businessNames.length > 0 ||
       (scrapeParams.categoriesToLoop &&
@@ -1319,7 +1187,8 @@ window.rtrlApp.startResearch = () => {
           ? "multiple_subcategories"
           : selectedSubCategories[0] || "",
       subCategoryList: selectedSubCategories,
-      customCategory: customKeywords.length > 0 ? customKeywords.join(", ") : modifierText, 
+      customCategory:
+        customKeywords.length > 0 ? customKeywords.join(", ") : modifierText,
       area: searchAreaKey,
       postcodes: postalCodes,
       country: elements.countryInput.value,
@@ -1359,12 +1228,6 @@ window.rtrlApp.startResearch = () => {
       userEmailInput: elements.userEmailInput,
       anchorPointInput: elements.anchorPointInput,
       radiusSlider: elements.radiusSlider,
-      downloadButtons: {
-        fullExcel: elements.downloadFullExcelButton,
-        notifyre: elements.downloadNotifyreCSVButton,
-        contacts: elements.downloadContactsCSVButton,
-      },
-      displayedData: displayedData,
     };
   }
 
