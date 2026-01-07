@@ -230,4 +230,4 @@ async function generateFileData(rawData, searchParams, duplicatesData = [], crea
     };
 }
 
-module.exports = { generateFileData };
+module.exports = { generateFileData, generateFilename };

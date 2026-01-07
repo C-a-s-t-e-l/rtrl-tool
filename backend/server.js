@@ -12,7 +12,7 @@ require("dotenv").config();
 
 const { findBusinessOwnerWithAI } = require("./aiService");
 const { sendResultsByEmail } = require("./emailService");
-const { generateFileData } = require("./fileGenerator");
+const { generateFileData, generateFilename } = require("./fileGenerator");
 const XLSX = require('xlsx');
 const JSZip = require('jszip');
 
