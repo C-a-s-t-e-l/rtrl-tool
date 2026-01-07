@@ -6,8 +6,9 @@ const isValidEmail = (email) => {
 };
 
 
-function generateFilename(searchParams, fileSuffix, fileExtension) {
-    const date = new Date().toISOString().split('T')[0].replace(/-/g, '');
+function generateFilename(searchParams, fileSuffix, fileExtension, creationDate = null) {
+    const dateObj = creationDate ? new Date(creationDate) : new Date();
+    const date = dateObj.toISOString().split('T')[0].replace(/-/g, '');
     const company = 'rtrl';
 
     let categoryString;
@@ -32,7 +33,7 @@ const createLinkObject = (url) => {
     return { f: formula, v: url, t: 's' };
 };
 
-async function generateFileData(rawData, searchParams, duplicatesData = []) {
+async function generateFileData(rawData, searchParams, duplicatesData = [], creationDate = null) {
 
     rawData.sort((a, b) => (a.BusinessName || '').localeCompare(b.BusinessName || ''));
     if (duplicatesData && duplicatesData.length > 0) {
@@ -40,7 +41,8 @@ async function generateFileData(rawData, searchParams, duplicatesData = []) {
     }
   
 
-    const date = new Date().toISOString().split('T')[0].replace(/-/g, '');
+    const dateObj = creationDate ? new Date(creationDate) : new Date();
+    const date = dateObj.toISOString().split('T')[0].replace(/-/g, '');
     let categoryString;
     if (searchParams.customCategory) {
         categoryString = searchParams.customCategory.replace(/[\s/&]/g, "_");
@@ -136,7 +138,7 @@ async function generateFileData(rawData, searchParams, duplicatesData = []) {
             const chunk = contactsData.slice(i, i + SPLIT_SIZE);
             const splitIndex = Math.floor(i / SPLIT_SIZE) + 1;
             
-            const splitFilename = generateFilename(searchParams, `emails_csv_split_${splitIndex}`, 'csv');
+            const splitFilename = generateFilename(searchParams, `emails_csv_split_${splitIndex}`, 'csv', creationDate);
             
             const ws = XLSX.utils.json_to_sheet(chunk, { header: headers });
             const wb = XLSX.utils.book_new();
@@ -168,7 +170,7 @@ async function generateFileData(rawData, searchParams, duplicatesData = []) {
                     .map(item => item.email_1)
                     .join('\n'); 
                 const cleanCategory = category.replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_').toLowerCase();
-                const txtFilename = generateFilename(searchParams, `emails_txt_${cleanCategory}_part_${part}`, 'txt');
+                const txtFilename = generateFilename(searchParams, `emails_txt_${cleanCategory}_part_${part}`, 'txt', creationDate);
                 
                 txtZip.file(txtFilename, emailList);
                 allTxtFileNames.push(txtFilename); 
@@ -199,30 +201,30 @@ async function generateFileData(rawData, searchParams, duplicatesData = []) {
     return {
         full: {
             data: fullData,
-            filename: generateFilename(searchParams, 'full_unique', 'xlsx'),
+            filename: generateFilename(searchParams, 'full_unique', 'xlsx', creationDate),
             headers: ["BusinessName", "Category", "Suburb/Area", "StreetAddress", "Website", "OwnerName", "Email 1", "Email 2", "Email 3", "Phone", "InstagramURL", "FacebookURL", "GoogleMapsURL", "StarRating", "ReviewCount"]
         },
         sms: {
             data: smsData,
-            filename: generateFilename(searchParams, 'sms', 'csv'),
+            filename: generateFilename(searchParams, 'sms', 'csv', creationDate),
             headers: ["FirstName", "LastName", "Organization", "Email", "FaxNumber", "MobileNumber", "CustomField1", "CustomField2", "CustomField3", "CustomField4", "Unsubscribed"]
         },
         contacts: {
             data: contactsData,
-            filename: generateFilename(searchParams, 'contacts_primary', 'csv'),
+            filename: generateFilename(searchParams, 'contacts_primary', 'csv', creationDate),
             headers: ["Company", "Address_Suburb", "Address_State", "Notes", "Category", "facebook", "instagram", "linkedin", "email_1", "email_2", "email_3"]
         },
         contactsSplits: {
             data: zipBuffer,
-            filename: generateFilename(searchParams, 'emails_csv_splits', 'zip') 
+            filename: generateFilename(searchParams, 'emails_csv_splits', 'zip', creationDate) 
         },
         contactsTxtSplits: { 
             data: txtZipBuffer,
-            filename: generateFilename(searchParams, 'emails_txt_splits', 'zip'),
+            filename: generateFilename(searchParams, 'emails_txt_splits', 'zip', creationDate),
         },
         duplicates: {
             data: duplicatesFormattedData,
-            filename: generateFilename(searchParams, 'duplicates', 'xlsx'),
+            filename: generateFilename(searchParams, 'duplicates', 'xlsx', creationDate),
             headers: ["BusinessName", "Category", "Suburb/Area", "StreetAddress", "Website", "OwnerName", "Email 1", "Email 2", "Email 3", "Phone", "InstagramURL", "FacebookURL", "GoogleMapsURL", "StarRating", "ReviewCount"]
         }
     };

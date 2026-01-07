@@ -14,6 +14,7 @@ const { findBusinessOwnerWithAI } = require("./aiService");
 const { sendResultsByEmail } = require("./emailService");
 const { generateFileData } = require("./fileGenerator");
 const XLSX = require('xlsx');
+const JSZip = require('jszip');
 
 puppeteer.use(StealthPlugin());
 
@@ -723,70 +724,28 @@ app.delete("/api/postcode-lists/:id", async (req, res) => {
     }
 });
 
-app.get("/api/jobs/history", async (req, res) => {
-    try {
-        const authHeader = req.headers.authorization;
-        if (!authHeader || !authHeader.startsWith('Bearer ')) {
-            return res.status(401).json({ error: 'Authentication required.' });
-        }
-        const token = authHeader.split(' ')[1];
-
-        const { data: { user }, error: userError } = await supabase.auth.getUser(token);
-        if (userError || !user) {
-            return res.status(401).json({ error: 'Authentication failed.' });
-        }
-
-        const { data, error } = await supabase
-            .from('jobs')
-            .select('id, created_at, parameters, status, results')
-            .eq('user_id', user.id)
-            .order('created_at', { ascending: false })
-            .limit(50);
-
-        if (error) throw error;
-        res.json(data || []);
-    } catch (dbError) {
-        console.error("Error fetching job history:", dbError);
-        res.status(500).json({ error: 'Failed to fetch job history.' });
-    }
-});
-
 app.get("/api/jobs/:jobId/download/:fileType", async (req, res) => {
     try {
         const { jobId, fileType } = req.params;
         const token = req.query.authToken;
 
-        if (!token) {
-            return res.status(401).json({ error: 'Authentication token required.' });
-        }
+        if (!token) return res.status(401).json({ error: 'Authentication token required.' });
         
         const { data: { user }, error: userError } = await supabase.auth.getUser(token);
-        if (userError || !user) {
-            return res.status(401).json({ error: 'Authentication failed.' });
-        }
+        if (userError || !user) return res.status(401).json({ error: 'Authentication failed.' });
         
-        const { data: job, error: jobError } = await supabase
-            .from('jobs')
-            .select('results, parameters, user_id')
-            .eq('id', jobId)
-            .single();
+        const { data: job, error: jobError } = await supabase.from('jobs').select('results, parameters, user_id, created_at').eq('id', jobId).single();
 
-        if (jobError || !job) {
-            return res.status(404).send('Job not found.');
-        }
-        if (job.user_id !== user.id) {
-            return res.status(403).send('Access denied.');
-        }
+        if (jobError || !job) return res.status(404).send('Job not found.');
+        if (job.user_id !== user.id) return res.status(403).send('Access denied.');
 
         const rawData = job.results || [];
         const { uniqueBusinesses, duplicates } = deduplicateBusinesses(rawData);
         
         const searchParams = job.parameters.searchParamsForEmail || {};
-        if (job.parameters.radiusKm) {
-          searchParams.radiusKm = job.parameters.radiusKm;
-        }
+        if (job.parameters.radiusKm) searchParams.radiusKm = job.parameters.radiusKm;
 
-        const allFiles = await generateFileData(uniqueBusinesses, searchParams, duplicates);
+        const allFiles = await generateFileData(uniqueBusinesses, searchParams, duplicates, job.created_at);
         
         let buffer, filename, contentType;
 
@@ -802,7 +761,7 @@ app.get("/api/jobs/:jobId/download/:fileType", async (req, res) => {
                 break;
             
             case 'duplicates_xlsx':
-                 if (allFiles.duplicates.data.length === 0) return res.status(404).send('No duplicate business data found.');
+                if (allFiles.duplicates.data.length === 0) return res.status(404).send('No duplicate business data found.');
                 const wsDup = XLSX.utils.json_to_sheet(allFiles.duplicates.data);
                 const wbDup = XLSX.utils.book_new();
                 XLSX.utils.book_append_sheet(wbDup, wsDup, "Duplicates List");
@@ -820,11 +779,62 @@ app.get("/api/jobs/:jobId/download/:fileType", async (req, res) => {
                 filename = allFiles.sms.filename;
                 contentType = 'text/csv';
                 break;
+            
+            case 'contacts_csv':
+                if (allFiles.contacts.data.length === 0) return res.status(404).send('No primary contact data found.');
+                const wsContacts = XLSX.utils.json_to_sheet(allFiles.contacts.data, { header: allFiles.contacts.headers });
+                const wbContacts = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wbContacts, wsContacts, "Contacts List");
+                buffer = XLSX.write(wbContacts, { bookType: 'csv', type: 'buffer' });
+                filename = allFiles.contacts.filename;
+                contentType = 'text/csv';
+                break;
 
             case 'csv_zip':
                 if (!allFiles.contactsSplits.data) return res.status(404).send('No contact data found to generate CSV splits.');
                 buffer = allFiles.contactsSplits.data;
                 filename = allFiles.contactsSplits.filename;
+                contentType = 'application/zip';
+                break;
+
+            case 'txt_zip':
+                if (!allFiles.contactsTxtSplits.data) return res.status(404).send('No contact data found to generate TXT splits.');
+                buffer = allFiles.contactsTxtSplits.data;
+                filename = allFiles.contactsTxtSplits.filename;
+                contentType = 'application/zip';
+                break;
+
+            case 'all':
+                const zip = new JSZip();
+                if (allFiles.full.data.length > 0) {
+                    const ws = XLSX.utils.json_to_sheet(allFiles.full.data);
+                    const wb = XLSX.utils.book_new();
+                    XLSX.utils.book_append_sheet(wb, ws, "Business List");
+                    zip.file(allFiles.full.filename, XLSX.write(wb, { bookType: 'xlsx', type: 'buffer' }));
+                }
+                if (allFiles.duplicates.data.length > 0) {
+                    const ws = XLSX.utils.json_to_sheet(allFiles.duplicates.data);
+                    const wb = XLSX.utils.book_new();
+                    XLSX.utils.book_append_sheet(wb, ws, "Duplicates List");
+                    zip.file(allFiles.duplicates.filename, XLSX.write(wb, { bookType: 'xlsx', type: 'buffer' }));
+                }
+                if (allFiles.sms.data.length > 0) {
+                     const ws = XLSX.utils.json_to_sheet(allFiles.sms.data, { header: allFiles.sms.headers });
+                    const wb = XLSX.utils.book_new();
+                    XLSX.utils.book_append_sheet(wb, ws, "SMS List");
+                    zip.file(allFiles.sms.filename, XLSX.write(wb, { bookType: 'csv', type: 'buffer' }));
+                }
+                if (allFiles.contacts.data.length > 0) {
+                    const ws = XLSX.utils.json_to_sheet(allFiles.contacts.data, { header: allFiles.contacts.headers });
+                    const wb = XLSX.utils.book_new();
+                    XLSX.utils.book_append_sheet(wb, ws, "Contacts List");
+                    zip.file(allFiles.contacts.filename, XLSX.write(wb, { bookType: 'csv', type: 'buffer' }));
+                }
+                if (allFiles.contactsSplits.data) zip.file(allFiles.contactsSplits.filename, allFiles.contactsSplits.data);
+                if (allFiles.contactsTxtSplits.data) zip.file(allFiles.contactsTxtSplits.filename, allFiles.contactsTxtSplits.data);
+
+                buffer = await zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" });
+                filename = `rtrl_all_files_${jobId.substring(0,8)}.zip`;
                 contentType = 'application/zip';
                 break;
 
@@ -841,6 +851,78 @@ app.get("/api/jobs/:jobId/download/:fileType", async (req, res) => {
         res.status(500).send('Failed to generate or retrieve the file.');
     }
 });
+
+app.post("/api/jobs/:jobId/resend-email", async (req, res) => {
+    try {
+        const { jobId } = req.params;
+        const authHeader = req.headers.authorization;
+        if (!authHeader || !authHeader.startsWith('Bearer ')) return res.status(401).json({ error: 'Authentication required.' });
+        
+        const token = authHeader.split(' ')[1];
+        const { data: { user }, error: userError } = await supabase.auth.getUser(token);
+        if (userError || !user) return res.status(401).json({ error: 'Authentication failed.' });
+
+        const { data: job, error: jobError } = await supabase.from('jobs').select('results, parameters, user_id').eq('id', jobId).single();
+
+        if (jobError || !job) return res.status(404).json({ error: 'Job not found.' });
+        if (job.user_id !== user.id) return res.status(403).json({ error: 'Access denied.' });
+        
+        const recipientEmail = job.parameters?.userEmail;
+        if (!recipientEmail) return res.status(400).json({ error: 'No recipient email found for this job.' });
+        
+        const rawData = job.results || [];
+        const { uniqueBusinesses, duplicates } = deduplicateBusinesses(rawData);
+
+        if (uniqueBusinesses.length === 0) return res.status(400).json({ error: 'No unique data to send.' });
+
+        const emailParams = { ...job.parameters.searchParamsForEmail };
+        if (job.parameters.radiusKm) emailParams.radiusKm = job.parameters.radiusKm;
+        
+        const emailStatus = await sendResultsByEmail(recipientEmail, uniqueBusinesses, emailParams, duplicates);
+        
+        res.status(200).json({ success: true, message: emailStatus });
+
+    } catch (error) {
+        console.error(`[Resend Email Error] Job ${req.params.jobId}:`, error);
+        res.status(500).json({ error: 'Failed to resend email.' });
+    }
+});
+
+
+app.get("/api/jobs/history", async (req, res) => {
+    try {
+        const authHeader = req.headers.authorization;
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            return res.status(401).json({ error: 'Authentication required.' });
+        }
+        const token = authHeader.split(' ')[1];
+
+        const { data: { user }, error: userError } = await supabase.auth.getUser(token);
+        if (userError || !user) {
+            return res.status(401).json({ error: 'Authentication failed.' });
+        }
+
+        const { data, error } = await supabase
+            .from('jobs')
+            .select('id, created_at, parameters, status, results(count)')
+            .eq('user_id', user.id)
+            .order('created_at', { ascending: false })
+            .limit(50);
+
+        if (error) throw error;
+        
+        const jobs = data.map(job => ({
+            ...job,
+            results: job.results[0]?.count || 0
+        }));
+
+        res.json(jobs || []);
+    } catch (dbError) {
+        console.error("Error fetching job history:", dbError);
+        res.status(500).json({ error: 'Failed to fetch job history.' });
+    }
+});
+
 
 const containerPublicPath = path.join(__dirname, "..", "public");
 app.use(express.static(containerPublicPath, { index: false }));
