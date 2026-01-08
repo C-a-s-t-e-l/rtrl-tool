@@ -323,7 +323,6 @@ function initializeMainApp() {
   });
 
   socket.on("business_found", (business) => {
-    // This event is no longer used by the main UI.
   });
 
   socket.on("progress_update", ({ processed, discovered, added, target }) => {

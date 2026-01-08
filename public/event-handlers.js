@@ -1,4 +1,3 @@
-// public/event-handlers.js
 function setupEventListeners(
   elements,
   socket,

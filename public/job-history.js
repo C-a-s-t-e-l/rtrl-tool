@@ -13,7 +13,6 @@ window.rtrlApp.jobHistory = (function () {
         tokenProvider = provider;
         backendUrl = url;
 
-        // Add event listener only after elements are confirmed to exist
         if (listContainer) {
             listContainer.addEventListener('click', (e) => {
                 const resendButton = e.target.closest('.resend-email-btn');
@@ -39,7 +38,6 @@ window.rtrlApp.jobHistory = (function () {
         } else if (status === 'failed') {
             statusIcon = 'fa-exclamation-triangle'; statusClass = 'status-failed'; statusText = 'Failed';
         }
-        
         let title = 'Untitled Search';
         if (parameters) {
             const locationPart = (searchParams.area || 'area').replace(/_/g, ' ');

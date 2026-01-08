@@ -1,5 +1,3 @@
-// public/ui-helpers.js
-
 function logMessage(el, message, type = "info") {
   if (!el) return;
   const timestamp = new Date().toLocaleTimeString();
@@ -33,7 +31,6 @@ function setUiState(isResearching, elements) {
       : '<i class="fas fa-play"></i> Start Research';
   }
 
-  // Inputs to disable
   const inputs = [
     primaryCategorySelect,
     customCategoryInput,
@@ -52,7 +49,6 @@ function setUiState(isResearching, elements) {
     if (input) input.disabled = disabled;
   });
 
-  // Handle checkbox container inputs
   if (subCategoryCheckboxContainer) {
     subCategoryCheckboxContainer
       .querySelectorAll("input")
@@ -84,7 +80,6 @@ function populateSubCategories(container, group, selectedCategory, categories) {
   if (subs && subs.length > 0) {
     group.style.display = "block";
 
-    // "Select All" option (if applicable logic exists, otherwise generic list)
     if (subs.includes("ALL")) {
         const div = document.createElement("div");
         div.className = "checkbox-item checkbox-item-all";
@@ -94,7 +89,6 @@ function populateSubCategories(container, group, selectedCategory, categories) {
         `;
         container.appendChild(div);
         
-        // Add listener for Select All
         const allCheckbox = div.querySelector('input');
         allCheckbox.addEventListener('change', (e) => {
             const isChecked = e.target.checked;
@@ -105,7 +99,7 @@ function populateSubCategories(container, group, selectedCategory, categories) {
     }
 
     subs.forEach((sub, index) => {
-      if (sub === "ALL") return; // Skip ALL as we handled it above
+      if (sub === "ALL") return; 
       const safeSub = sub.replace(/\s+/g, "_").toLowerCase() + index;
       const div = document.createElement("div");
       div.className = "checkbox-item";
