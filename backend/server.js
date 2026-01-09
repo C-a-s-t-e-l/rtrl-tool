@@ -495,7 +495,7 @@ const recoverStuckJobs = async () => {
 };
 
 io.on("connection", (socket) => {
-  console.log(`[${new Date().toLocaleString()}] [Connection] Client connected: ${socket.id}`);
+  // console.log(`[${new Date().toLocaleString()}] [Connection] Client connected: ${socket.id}`);
 
   socket.on("authenticate_socket", async (authToken) => {
     if (!authToken) return;

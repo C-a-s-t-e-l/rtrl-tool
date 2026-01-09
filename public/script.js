@@ -120,9 +120,9 @@ function initializeMainApp() {
       "success"
     );
 
-    if (currentUserSession) {
-      socket.emit("authenticate_socket", currentUserSession.access_token);
-    }
+    // if (currentUserSession) {
+    //   socket.emit("authenticate_socket", currentUserSession.access_token);
+    // }
 
     if (subscribedJobId && currentUserSession) {
       logMessage(
