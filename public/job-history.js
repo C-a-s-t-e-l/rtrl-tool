@@ -38,6 +38,7 @@ window.rtrlApp.jobHistory = (function () {
         } else if (status === 'failed') {
             statusIcon = 'fa-exclamation-triangle'; statusClass = 'status-failed'; statusText = 'Failed';
         }
+        
         let title = 'Untitled Search';
         if (parameters) {
             const locationPart = (searchParams.area || 'area').replace(/_/g, ' ');
@@ -143,7 +144,11 @@ window.rtrlApp.jobHistory = (function () {
         const token = tokenProvider();
         if (!token) return;
 
-        listContainer.innerHTML = '<p class="loading-text">Loading history...</p>';
+        const hasExistingJobs = listContainer.querySelector('.job-item');
+        
+        if (!hasExistingJobs) {
+            listContainer.innerHTML = '<p class="loading-text">Loading history...</p>';
+        }
 
         try {
             const response = await fetch(`${backendUrl}/api/jobs/history`, {
@@ -165,7 +170,9 @@ window.rtrlApp.jobHistory = (function () {
 
         } catch (error) {
             console.error('Error fetching job history:', error);
-            listContainer.innerHTML = '<p class="error-text">An error occurred while loading job history.</p>';
+            if (!hasExistingJobs) {
+                listContainer.innerHTML = '<p class="error-text">An error occurred while loading job history.</p>';
+            }
         }
     }
 

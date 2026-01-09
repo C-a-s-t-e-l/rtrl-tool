@@ -495,7 +495,21 @@ const recoverStuckJobs = async () => {
 };
 
 io.on("connection", (socket) => {
-console.log(`[${new Date().toLocaleString()}] [Connection] Client connected: ${socket.id}`);
+  console.log(`[${new Date().toLocaleString()}] [Connection] Client connected: ${socket.id}`);
+
+  socket.on("authenticate_socket", async (authToken) => {
+    if (!authToken) return;
+    try {
+      const { data: { user }, error } = await supabase.auth.getUser(authToken);
+      if (user && !error) {
+        socket.user = user; // Store the user object on the socket instance for later use
+        console.log(`[${new Date().toLocaleString()}] [Auth] Client authenticated: ${user.email} (ID: ${socket.id})`);
+      }
+    } catch (e) {
+      console.log(`[Auth] Failed to authenticate socket ${socket.id}`);
+    }
+  });
+
   socket.on("start_scrape_job", async (payload) => {
     const { authToken, ...scrapeParams } = payload;
     if (!authToken)
@@ -527,6 +541,7 @@ console.log(`[${new Date().toLocaleString()}] [Connection] Client connected: ${s
       });
     }
   });
+
   socket.on("subscribe_to_job", async ({ jobId, authToken }) => {
     if (!authToken) return;
     const {
@@ -553,8 +568,10 @@ console.log(`[${new Date().toLocaleString()}] [Connection] Client connected: ${s
       );
     }
   });
+
  socket.on("disconnect", () => {
-    console.log(`[${new Date().toLocaleString()}] [Disconnection] Client disconnected: ${socket.id}`);
+    const userIdentifier = socket.user ? socket.user.email : socket.id;
+    console.log(`[${new Date().toLocaleString()}] [Disconnection] Client disconnected: ${userIdentifier}`);
   });
 });
 

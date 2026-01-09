@@ -120,6 +120,10 @@ function initializeMainApp() {
       "success"
     );
 
+    if (currentUserSession) {
+      socket.emit("authenticate_socket", currentUserSession.access_token);
+    }
+
     if (subscribedJobId && currentUserSession) {
       logMessage(
         elements.logEl,
@@ -343,7 +347,15 @@ function initializeMainApp() {
   supabaseClient.auth.onAuthStateChange(async (event, session) => {
     currentUserSession = session;
 
+    if (event === 'TOKEN_REFRESHED') {
+    return; 
+    }
+
     if (session) {
+      if (socket.connected) {
+        socket.emit("authenticate_socket", session.access_token);
+      }
+    
       if (elements.loginOverlay) elements.loginOverlay.style.display = "none";
       if (elements.appContent) elements.appContent.style.display = "block";
       if (elements.userMenu) elements.userMenu.style.display = "block";
