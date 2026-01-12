@@ -502,7 +502,7 @@ io.on("connection", (socket) => {
     try {
       const { data: { user }, error } = await supabase.auth.getUser(authToken);
       if (user && !error) {
-        socket.user = user; // Store the user object on the socket instance for later use
+        socket.user = user; 
         console.log(`[${new Date().toLocaleString()}] [Auth] Client authenticated: ${user.email} (ID: ${socket.id})`);
       }
     } catch (e) {

@@ -113,16 +113,25 @@ function initializeMainApp() {
     timeout: 70000,
   });
 
-  socket.on("connect", () => {
-    logMessage(
-      elements.logEl,
-      "Successfully connected to the server. Ready.",
-      "success"
-    );
+  let disconnectTimeout = null;
+  let hasLoggedDisconnect = false;
+  let isFirstConnection = true;
 
-    // if (currentUserSession) {
-    //   socket.emit("authenticate_socket", currentUserSession.access_token);
-    // }
+  socket.on("connect", () => {
+    if (disconnectTimeout) {
+      clearTimeout(disconnectTimeout);
+      disconnectTimeout = null;
+    }
+
+    if (isFirstConnection || hasLoggedDisconnect) {
+      logMessage(
+        elements.logEl,
+        "Successfully connected to the server. Ready.",
+        "success"
+      );
+      isFirstConnection = false;
+      hasLoggedDisconnect = false;
+    }
 
     if (subscribedJobId && currentUserSession) {
       logMessage(
@@ -138,12 +147,15 @@ function initializeMainApp() {
   });
 
   socket.on("disconnect", (reason) => {
-    logMessage(
-      elements.logEl,
-      "Connection to server lost. Attempting to reconnect...",
-      "error"
-    );
     console.error("Socket disconnected due to:", reason);
+    disconnectTimeout = setTimeout(() => {
+      logMessage(
+        elements.logEl,
+        "Connection to server lost. Attempting to reconnect...",
+        "error"
+      );
+      hasLoggedDisconnect = true;
+    }, 15000);
   });
 
     function setupPasswordToggle(toggleId, inputId) {
