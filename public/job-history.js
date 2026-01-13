@@ -73,20 +73,20 @@ window.rtrlApp.jobHistory = (function () {
         `;
 
         return `
-            <div class="job-item">
+            <div class="job-item" id="job-card-${id}">
                 <div class="job-header">
                     <div class="job-title-wrapper">
                         <i class="fas fa-briefcase job-icon"></i>
                         <h4 class="job-title">${title}</h4>
                     </div>
-                    <div class="job-status ${statusClass}">
+                    <div id="job-status-${id}" class="job-status ${statusClass}">
                         <i class="fas ${statusIcon}"></i>
                         <span>${statusText}</span>
                     </div>
                 </div>
                 <div class="job-meta">
                     <span><i class="fas fa-calendar-alt"></i> ${date}</span>
-                    <span><i class="fas fa-database"></i> ${totalResults} Results Found</span>
+                    <span id="job-count-${id}"><i class="fas fa-database"></i> ${totalResults} Results Found</span>
                     <span><i class="fas fa-id-badge"></i> Job ID: ${id}</span>
                 </div>
                 ${status === 'completed' ? `

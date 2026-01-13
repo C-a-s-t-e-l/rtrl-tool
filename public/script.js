@@ -212,52 +212,149 @@ document.addEventListener("DOMContentLoaded", () => {
       handleScrapeError({ error });
     });
 
-    socket.on("job_update", (update) => {
-      if (update.status) {
-        logMessage(elements.logEl, `Job status: ${update.status}`, "info");
+socket.on("job_update", (update) => {
+    if (update.status) {
+      logMessage(elements.logEl, `Job status: ${update.status}`, "info");
 
-        if (window.rtrlApp.jobHistory) {
-          window.rtrlApp.jobHistory.fetchAndRenderJobs();
-        }
+      if (window.rtrlApp.jobHistory) {
+        window.rtrlApp.jobHistory.fetchAndRenderJobs();
+      }
 
-        if (update.status === "completed" || update.status === "failed") {
-          currentJobId = null;
-          setUiState(false, getUiElementsForStateChange());
-
-          const container = document.getElementById("status-card");
-          if (container) container.classList.remove("state-working");
-
+      const targetId = update.id || currentJobId;
+      if (targetId) {
+        const historyBadge = document.getElementById(`job-status-${targetId}`);
+        if (historyBadge) {
           if (update.status === "completed") {
-            const fill = document.getElementById("status-progress-fill");
-            const text = document.getElementById("status-progress-text");
-            if (fill) fill.style.width = "100%";
-            if (text) text.textContent = "100%";
+            historyBadge.className = "job-status status-completed";
+            historyBadge.innerHTML =
+              '<i class="fas fa-check-circle"></i> <span>Completed</span>';
+          } else if (update.status === "failed") {
+            historyBadge.className = "job-status status-failed";
+            historyBadge.innerHTML =
+              '<i class="fas fa-exclamation-triangle"></i> <span>Failed</span>';
+          } else if (update.status === "running") {
+            historyBadge.className = "job-status status-running";
+            historyBadge.innerHTML =
+              '<i class="fas fa-spinner fa-spin"></i> <span>Running</span>';
           }
         }
       }
-    });
+
+      if (update.status === "completed" || update.status === "failed") {
+        currentJobId = null;
+        setUiState(false, getUiElementsForStateChange());
+
+        if (update.status === "completed") {
+            const fill = document.getElementById("progress-fill");
+            const pctLabel = document.getElementById("pct-label");
+            const phaseLabel = document.getElementById("phase-label");
+            
+            if (fill) fill.style.width = "100%";
+            if (pctLabel) pctLabel.textContent = "100%";
+            if (phaseLabel) phaseLabel.textContent = "Phase 3/3: Complete";
+            
+            updateStatusCardPhase('complete');
+        } else {
+            const card = document.getElementById("status-card");
+            const icon = document.getElementById("status-icon");
+            const headline = document.getElementById("status-headline");
+            
+            if(card) {
+                card.className = "status-card phase-error";
+                icon.className = "fas fa-times-circle";
+                headline.textContent = "Job Failed";
+            }
+        }
+      }
+    }
+  });
 
     socket.on("business_found", (business) => {});
 
-    socket.on("progress_update", ({ processed, discovered, added, target }) => {
-      let percentage = 0;
-      const isSearchAll = target === -1;
-      if (isSearchAll) {
-        if (discovered > 0) percentage = (processed / discovered) * 100;
-      } else {
-        if (target > 0) percentage = (added / target) * 100;
-      }
-      if (percentage > 100) percentage = 100;
-      const roundedPercentage = Math.round(percentage);
+socket.on("progress_update", (data) => {
+    const { phase, processed, discovered, added, target, enriched, aiProcessed, aiTarget } = data;
 
-      const fill = document.getElementById("status-progress-fill");
-      const text = document.getElementById("status-progress-text");
-      const wrapper = document.getElementById("status-progress-wrapper");
+    let visualPercent = 0;
+    let phaseText = "Initializing...";
 
-      if (fill) fill.style.width = `${roundedPercentage}%`;
-      if (text) text.textContent = `${roundedPercentage}%`;
-      if (wrapper && roundedPercentage > 0) wrapper.style.opacity = "1";
-    });
+    if (phase === 'scraping') {
+        phaseText = "Phase 1/3: Scraping Data";
+        
+        let scrapePct = 0;
+        const isSearchAll = target === -1;
+        
+        if (isSearchAll) {
+             if (discovered > 0) scrapePct = (processed / discovered);
+        } else {
+             if (target > 0) scrapePct = (added / target);
+        }
+        if (scrapePct > 1) scrapePct = 1;
+        
+        visualPercent = Math.round(scrapePct * 70);
+        updateStatusCardPhase('scraping');
+    } 
+    else if (phase === 'ai') {
+        phaseText = "Phase 2/3: AI Enrichment";
+        
+        let aiPct = 0;
+        if (aiTarget > 0) aiPct = (aiProcessed / aiTarget);
+        if (aiPct > 1) aiPct = 1;
+
+        visualPercent = 70 + Math.round(aiPct * 20); 
+        
+        updateStatusCardPhase('ai');
+    }
+    else if (phase === 'completed') {
+        visualPercent = 100;
+        phaseText = "Phase 3/3: Complete";
+        updateStatusCardPhase('complete');
+    }
+
+    const fill = document.getElementById("progress-fill");
+    const pctLabel = document.getElementById("pct-label");
+    const phaseLabel = document.getElementById("phase-label");
+    const statFound = document.getElementById("stat-found");
+    const statProcessed = document.getElementById("stat-processed");
+    const statEnriched = document.getElementById("stat-enriched");
+
+    if (fill) fill.style.width = `${visualPercent}%`;
+    if (pctLabel) pctLabel.textContent = `${visualPercent}%`;
+    if (phaseLabel) phaseLabel.textContent = phaseText;
+
+    if (statFound) statFound.textContent = discovered || 0;
+    if (statProcessed) statProcessed.textContent = added || 0;
+    if (statEnriched) statEnriched.textContent = enriched || 0;
+
+    if (currentJobId) {
+        const historyCount = document.getElementById(`job-count-${currentJobId}`);
+        if (historyCount) {
+             historyCount.innerHTML = `<i class="fas fa-database"></i> ${added} Results Found`;
+        }
+    }
+});
+
+function updateStatusCardPhase(phase) {
+    const card = document.getElementById("status-card");
+    const icon = document.getElementById("status-icon");
+    const headline = document.getElementById("status-headline");
+    
+    card.classList.remove("phase-scraping", "phase-ai", "phase-complete", "phase-error");
+    icon.classList.remove("fa-play", "fa-check-circle", "fa-exclamation-triangle", "spin-slow");
+
+    if (phase === 'scraping') {
+        card.classList.add("phase-scraping");
+        icon.classList.add("fas", "fa-satellite-dish", "spin-slow");
+        headline.textContent = "Scanning & Scraping...";
+    } else if (phase === 'ai') {
+        card.classList.add("phase-ai");
+        icon.classList.add("fas", "fa-brain", "spin-slow"); 
+        headline.textContent = "AI Analysis Active...";
+    } else if (phase === 'complete') {
+        card.classList.add("phase-complete");
+        icon.classList.add("fas", "fa-check-circle");
+        headline.textContent = "Job Completed Successfully";
+    }
+}
 
 
     function setupPasswordToggle(toggleId, inputId) {

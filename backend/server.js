@@ -381,12 +381,14 @@ const runScrapeJob = async (jobId) => {
         }
       }
       
-      io.to(jobId).emit("progress_update", {
-        processed: processedUrls.size + i + batch.length,
-        discovered: optimizedUrlList.length, 
-        added: allProcessedBusinesses.length,
-        target: finalCount,
-      });
+io.to(jobId).emit("progress_update", {
+    phase: 'scraping',
+    processed: processedUrls.size + i + batch.length,
+    discovered: optimizedUrlList.length, 
+    added: allProcessedBusinesses.length,
+    enriched: 0, 
+    target: finalCount,
+});
     }
 
     if (browser) try { await browser.close(); } catch (e) {}
@@ -403,6 +405,7 @@ const runScrapeJob = async (jobId) => {
 
     if (businessesNeedingAI.length > 0) {
         await addLog(jobId, `[AI] Analyzing ${businessesNeedingAI.length} businesses for owner details...`);
+        let enrichedCount = 0;
         
         for (let i = 0; i < businessesNeedingAI.length; i++) {
             const business = businessesNeedingAI[i];
@@ -419,7 +422,17 @@ const runScrapeJob = async (jobId) => {
 
             if (aiResult.ownerName) {
                 business.OwnerName = aiResult.ownerName;
+                enrichedCount++;
             }
+                io.to(jobId).emit("progress_update", {
+        phase: 'ai', 
+        processed: allProcessedBusinesses.length, 
+        discovered: optimizedUrlList.length,
+        added: allProcessedBusinesses.length,
+        enriched: enrichedCount, 
+        aiTarget: businessesNeedingAI.length, 
+        aiProcessed: i + 1 
+    });
         }
         
         const { error: finalSaveError } = await supabase
