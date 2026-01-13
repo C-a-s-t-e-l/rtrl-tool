@@ -490,55 +490,71 @@ document.addEventListener("DOMContentLoaded", () => {
       });
     }
 
-    supabaseClient.auth.onAuthStateChange(async (event, session) => {
-      currentUserSession = session;
-      if (event === "TOKEN_REFRESHED") return;
+supabaseClient.auth.onAuthStateChange(async (event, session) => {
+    currentUserSession = session;
+    if (event === "TOKEN_REFRESHED") return;
 
-      if (session) {
-        if (socket.connected) {
-          socket.emit("authenticate_socket", session.access_token);
-        }
-        if (elements.loginOverlay) elements.loginOverlay.style.display = "none";
-        if (elements.appContent) elements.appContent.style.display = "block";
-        if (elements.userMenu) elements.userMenu.style.display = "block";
-        if (elements.userInfoSpan)
-          elements.userInfoSpan.textContent =
-            session.user.user_metadata.full_name || "User";
-        if (elements.userEmailDisplay)
-          elements.userEmailDisplay.textContent = session.user.email;
-        elements.startButton.disabled = false;
-        if (elements.userEmailInput.value.trim() === "") {
-          elements.userEmailInput.value = session.user.email;
-          localStorage.setItem("rtrl_last_used_email", session.user.email);
-        }
-        await fetchPostcodeLists();
-        try {
-          const response = await fetch(`${BACKEND_URL}/api/exclusions`, {
-            headers: { Authorization: `Bearer ${session.access_token}` },
-          });
-          if (response.ok) {
-            const { exclusionList } = await response.json();
-            window.rtrlApp.exclusionFeature.populateTags(exclusionList);
-          }
-        } catch (error) {
-          console.error("Could not fetch exclusion list:", error);
-        }
-
-        if (window.rtrlApp.jobHistory)
-          window.rtrlApp.jobHistory.fetchAndRenderJobs();
-      } else {
-        if (elements.loginOverlay) elements.loginOverlay.style.display = "flex";
-        if (elements.appContent) elements.appContent.style.display = "none";
-        if (elements.userMenu) elements.userMenu.style.display = "none";
-        elements.startButton.disabled = true;
-        if (elements.userEmailInput) elements.userEmailInput.value = "";
-        localStorage.removeItem("rtrl_last_used_email");
-        currentJobId = null;
-        subscribedJobId = null;
-        window.rtrlApp.exclusionFeature.populateTags([]);
-        populatePostcodeListDropdown([]);
+    if (session) {
+      if (socket.connected) {
+        socket.emit("authenticate_socket", session.access_token);
       }
-    });
+      if (elements.loginOverlay) elements.loginOverlay.style.display = "none";
+      if (elements.appContent) elements.appContent.style.display = "block";
+      if (elements.userMenu) elements.userMenu.style.display = "block";
+      if (elements.userInfoSpan)
+        elements.userInfoSpan.textContent =
+          session.user.user_metadata.full_name || "User";
+      if (elements.userEmailDisplay)
+        elements.userEmailDisplay.textContent = session.user.email;
+      elements.startButton.disabled = false;
+      if (elements.userEmailInput.value.trim() === "") {
+        elements.userEmailInput.value = session.user.email;
+        localStorage.setItem("rtrl_last_used_email", session.user.email);
+      }
+      await fetchPostcodeLists();
+      try {
+        const response = await fetch(`${BACKEND_URL}/api/exclusions`, {
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        });
+        if (response.ok) {
+          const { exclusionList } = await response.json();
+          window.rtrlApp.exclusionFeature.populateTags(exclusionList);
+        }
+      } catch (error) {
+        console.error("Could not fetch exclusion list:", error);
+      }
+
+      const storedJobId = localStorage.getItem(`rtrl_last_job_id_${session.user.id}`);
+      if (storedJobId) {
+          currentJobId = storedJobId;
+          subscribedJobId = storedJobId;
+          
+          if (socket.connected) {
+              logMessage(elements.logEl, "Restoring active session...", "info");
+              socket.emit("subscribe_to_job", {
+                  jobId: storedJobId,
+                  authToken: session.access_token
+              });
+          }
+      }
+
+      if (window.rtrlApp.jobHistory)
+        window.rtrlApp.jobHistory.fetchAndRenderJobs();
+    } else {
+      if (elements.loginOverlay) elements.loginOverlay.style.display = "flex";
+      if (elements.appContent) elements.appContent.style.display = "none";
+      if (elements.userMenu) elements.userMenu.style.display = "none";
+      elements.startButton.disabled = true;
+      if (elements.userEmailInput) elements.userEmailInput.value = "";
+      localStorage.removeItem("rtrl_last_used_email");
+      
+      currentJobId = null;
+      subscribedJobId = null;
+      
+      window.rtrlApp.exclusionFeature.populateTags([]);
+      populatePostcodeListDropdown([]);
+    }
+  });
 
     let postalCodes = [];
     let customKeywords = [];

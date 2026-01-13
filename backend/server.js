@@ -1315,7 +1315,6 @@ async function collectGoogleMapsUrlsContinuously(
       waitUntil: "domcontentloaded",
       timeout: 60000,
     });
-    
     const noResultsFound = await page.evaluate(
       () =>
         !!Array.from(document.querySelectorAll("div")).find((el) =>
@@ -1329,32 +1328,28 @@ async function collectGoogleMapsUrlsContinuously(
       );
       return;
     }
-
     try {
       await page.click('form[action^="https://consent.google.com"] button', {
         timeout: 10000,
       });
       await addLog(jobId, "   -> Accepted Google consent dialog.");
     } catch (e) {
+      await addLog(jobId, "   -> No Google consent dialog found, proceeding.");
     }
-
+    const feedSelector = 'div[role="feed"]';
     try {
-      await page.waitForSelector('a[href*="/maps/place/"]', { timeout: 15000 });
+      await page.waitForSelector(feedSelector, { timeout: 15000 });
       await addLog(jobId, `   -> Found results list. Scraping all items...`);
-      
       const boundingBox = countryBoundingBoxes[country.toLowerCase()];
       if (boundingBox)
         await addLog(
           jobId,
           `   -> Filtering results to stay within ${country} borders.`
         );
-
       let consecutiveNoProgressAttempts = 0;
       const MAX_NO_PROGRESS = 5;
-
       while (consecutiveNoProgressAttempts < MAX_NO_PROGRESS) {
         const previousSize = discoveredUrlSet.size;
-        
         const visibleLinks = await page.$$eval(
           'a[href*="/maps/place/"]',
           (links) =>
@@ -1363,50 +1358,24 @@ async function collectGoogleMapsUrlsContinuously(
               text: link.innerText || "",
             }))
         );
-
         visibleLinks.forEach((link) => {
           if (boundingBox ? isUrlInBoundingBox(link.href, boundingBox) : true) {
             discoveredUrlSet.add(link.href);
           }
         });
-
         if (discoveredUrlSet.size > previousSize)
           consecutiveNoProgressAttempts = 0;
         else consecutiveNoProgressAttempts++;
-
-        await page.evaluate(async () => {
-          let wrapper = document.querySelector('div[role="feed"]');
-          
-          if (!wrapper) {
-             wrapper = document.querySelector('div[aria-label*="Results for"]');
-          }
-
-          if (!wrapper) {
-             const resultLinks = document.querySelectorAll('a[href*="/maps/place/"]');
-             if (resultLinks.length > 0) {
-                 let parent = resultLinks[0].parentElement;
-                 while (parent && parent.tagName !== 'BODY') {
-                     const style = window.getComputedStyle(parent);
-                     if (style.overflowY === 'auto' || style.overflowY === 'scroll') {
-                         wrapper = parent;
-                         break;
-                     }
-                     parent = parent.parentElement;
-                 }
-             }
-          }
-
-          if (wrapper) {
-            wrapper.scrollTop = wrapper.scrollHeight;
-          }
-        });
-
+        await page.evaluate(
+          (selector) => document.querySelector(selector)?.scrollTo(0, 999999),
+          feedSelector
+        );
         await new Promise((r) => setTimeout(r, 2000));
       }
     } catch (error) {
       await addLog(
         jobId,
-        `   -> No results list found (Timeout). Checking for single result...`
+        `   -> No results list found. Checking for direct navigation...`
       );
       const currentUrl = page.url();
       if (currentUrl.includes("/maps/place/")) {
@@ -1416,7 +1385,11 @@ async function collectGoogleMapsUrlsContinuously(
         );
         discoveredUrlSet.add(currentUrl);
       } else {
-        console.error("Scraping error:", error.message);
+        await addLog(
+          jobId,
+          `   -> No valid results list or direct place page found for this query.`,
+          "error"
+        );
       }
     }
   } catch (error) {
