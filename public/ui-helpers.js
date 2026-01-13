@@ -1,8 +1,71 @@
 function logMessage(el, message, type = "info") {
-  if (!el) return;
-  const timestamp = new Date().toLocaleTimeString();
-  el.textContent += `[${timestamp}] [${type.toUpperCase()}] ${message}\n`;
-  el.scrollTop = el.scrollHeight;
+  const card = document.getElementById("status-card");
+  const icon = document.getElementById("status-icon");
+  const text = document.getElementById("status-text");
+  const progressWrapper = document.getElementById("status-progress-wrapper");
+
+  if (!card || !icon || !text) return;
+
+  const lowerMsg = message.toLowerCase();
+
+  if (type === "error" && (lowerMsg.includes("connection lost") || lowerMsg.includes("socket"))) {
+    card.className = "status-card state-error";
+    icon.className = "fas fa-wifi";
+    text.textContent = "Connection Lost";
+    return;
+  }
+  
+  if (type === "success" && lowerMsg.includes("connected")) {
+    text.textContent = "Reconnected";
+    setTimeout(() => {
+        if(text.textContent === "Reconnected") {
+            card.className = "status-card";
+            icon.className = "fas fa-play";
+            text.textContent = "Ready to Start";
+        }
+    }, 2000);
+    return;
+  }
+
+  if (type === "info" && !lowerMsg.includes("complete") && !lowerMsg.includes("finished")) {
+    card.className = "status-card state-working";
+    
+    if (lowerMsg.includes("ai")) {
+        icon.className = "fas fa-brain";
+        text.textContent = "AI Analyzing Data...";
+    } 
+    else if (lowerMsg.includes("email")) {
+        icon.className = "fas fa-paper-plane";
+        text.textContent = "Sending Results...";
+    }
+    else {
+        icon.className = "fas fa-search-location";
+        text.textContent = "Scraping in Progress...";
+    }
+
+    if(progressWrapper) progressWrapper.style.opacity = "1";
+    return;
+  }
+
+  if (lowerMsg.includes("completed") || lowerMsg.includes("success")) {
+    card.className = "status-card state-success";
+    icon.className = "fas fa-check-circle";
+    text.textContent = "Research Complete";
+    
+    // Max out progress bar
+    const fill = document.getElementById("status-progress-fill");
+    const label = document.getElementById("status-progress-text");
+    if(fill) fill.style.width = "100%";
+    if(label) label.textContent = "100%";
+    
+    return;
+  }
+
+  if (type === "error") {
+    card.className = "status-card state-error";
+    icon.className = "fas fa-exclamation-triangle";
+    text.textContent = "An Error Occurred";
+  }
 }
 
 function setUiState(isResearching, elements) {

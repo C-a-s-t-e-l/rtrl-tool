@@ -124,6 +124,7 @@ const appendJobResult = async (jobId, newResult) => {
   return saveQueues[jobId];
 };
 
+
 const runScrapeJob = async (jobId) => {
   await updateJobStatus(jobId, "running");
   const { data: job, error: fetchError } = await supabase
@@ -131,6 +132,7 @@ const runScrapeJob = async (jobId) => {
     .select("*")
     .eq("id", jobId)
     .single();
+    
   if (fetchError || !job) {
     console.error(`[Job: ${jobId}] Could not fetch job details. Aborting.`, fetchError);
     await updateJobStatus(jobId, "failed");
@@ -197,17 +199,16 @@ const runScrapeJob = async (jobId) => {
 
     await addLog(jobId, `--- Starting URL Collection Phase ---`);
     if (masterUrlMap.size > 0) {
-      await addLog(jobId, `[Resume] Loaded ${masterUrlMap.size} URLs from previous session. Continuing collection.`);
+      await addLog(jobId, `[Resume] Loaded ${masterUrlMap.size} URLs from previous session.`);
     }
-
 
     const isIndividualSearch = businessNames && businessNames.length > 0;
     const searchItems = isIndividualSearch ? businessNames : (categoriesToLoop && categoriesToLoop.length > 0 ? categoriesToLoop : []);
 
     for (const item of searchItems) {
-      await addLog(jobId, isIndividualSearch ? `\n--- Searching for business: "${item}" ---` : `\n--- Searching for category: "${item}" ---`);
+      await addLog(jobId, isIndividualSearch ? `\nSearching for business: "${item}"` : `\nSearching for category: "${item}"`);
       
-      browser = await launchBrowser(`[System] Launching fresh browser for "${item}"...`);
+      browser = await launchBrowser(`[System] Launching browser for "${item}"...`);
       let collectionPage = await browser.newPage();
 
       let locationQueries = [];
@@ -235,67 +236,45 @@ const runScrapeJob = async (jobId) => {
         let initialSize = masterUrlMap.size;
         discoveredUrlsForThisSubArea.forEach((url) => { if (!masterUrlMap.has(url)) masterUrlMap.set(url, item); });
         let newUrlsFound = masterUrlMap.size - initialSize;
-        await addLog(jobId, `   -> Found ${newUrlsFound} new URLs in this area. Total unique URLs so far: ${masterUrlMap.size}`);
+        if(newUrlsFound > 0) await addLog(jobId, `   -> Found ${newUrlsFound} new URLs.`);
       }
 
       if (collectionPage) try { await collectionPage.close(); } catch (e) {}
       if (browser) {
         try { await browser.close(); } catch (e) {}
-        await addLog(jobId, `[System] Closed browser for "${item}" to conserve resources.`);
       }
       browser = null;
 
       const currentUrlsToSave = Array.from(masterUrlMap, ([url, specificCategory]) => ({ url, category: specificCategory }));
-      const { error: saveError } = await supabase
-        .from("jobs")
-        .update({ collected_urls: currentUrlsToSave })
-        .eq("id", jobId);
-
-      if (saveError) {
-        await addLog(jobId, `[Warning] Failed to save URL collection progress: ${saveError.message}`, "error");
-      } else {
-        await addLog(jobId, `[Checkpoint] Saved ${currentUrlsToSave.length} total URLs to the database.`);
-      }
+      const { error: saveError } = await supabase.from("jobs").update({ collected_urls: currentUrlsToSave }).eq("id", jobId);
     }
 
-
-
     const finalCollectedUrls = Array.from(masterUrlMap, ([url, specificCategory]) => ({ url, category: specificCategory }));
-    await addLog(jobId, `\n--- URL Collection Complete. Found ${finalCollectedUrls.length} total unique businesses. ---`);
+    await addLog(jobId, `\n--- Collection Complete. Found ${finalCollectedUrls.length} businesses. ---`);
     
     let optimizedUrlList = finalCollectedUrls;
-
     if (radiusKm && filterCenterLat !== null && filterCenterLng !== null) {
-        await addLog(jobId, `[Optimization] Pre-filtering URLs based on radius (${radiusKm}km)...`);
-        
         const initialCount = optimizedUrlList.length;
-        
         optimizedUrlList = finalCollectedUrls.filter(item => {
             const coords = extractCoordinatesFromUrl(item.url);
             if (!coords) return true; 
             const distance = calculateDistance(filterCenterLat, filterCenterLng, coords.lat, coords.lng);
             return distance <= (parseFloat(radiusKm) + 0.2);
         });
-
-        const removedCount = initialCount - optimizedUrlList.length;
-        if (removedCount > 0) {
-            await addLog(jobId, `[Optimization] Removed ${removedCount} URLs that were clearly outside the radius. ${optimizedUrlList.length} remaining.`);
-        } else {
-            await addLog(jobId, `[Optimization] All URLs appear to be within range.`);
+        if (initialCount - optimizedUrlList.length > 0) {
+            await addLog(jobId, `[Optimization] Filtered to ${optimizedUrlList.length} locations within radius.`);
         }
     }
 
-    await addLog(jobId, `--- Starting Data Processing Phase ---`);
-    browser = await launchBrowser("[Browser Lifecycle] Launching new browser for data processing...");
+    await addLog(jobId, `--- Starting Phase 1: Data Extraction ---`);
+    browser = await launchBrowser("[System] Launching browser for data extraction...");
 
     const finalCount = businessNames && businessNames.length > 0 ? -1 : parameters.count || -1;
     const isSearchAll = finalCount === -1;
     const targetCount = isSearchAll ? Infinity : finalCount;
 
     const processedUrls = new Set(allProcessedBusinesses.map((b) => b.GoogleMapsURL));
-     const urlsToProcess = optimizedUrlList.filter(item => !processedUrls.has(item.url));
-
-    await addLog(jobId, `Total URLs to process: ${urlsToProcess.length}. Previously processed: ${processedUrls.size}.`);
+    const urlsToProcess = optimizedUrlList.filter(item => !processedUrls.has(item.url));
 
     const addedBusinessKeys = new Set(allProcessedBusinesses.map((b) => {
       const name = b.BusinessName?.toLowerCase().trim() || "";
@@ -312,9 +291,9 @@ const runScrapeJob = async (jobId) => {
       if (allProcessedBusinesses.length >= targetCount) break;
 
       if (processedInThisSession > 0 && processedInThisSession % BROWSER_RESTART_THRESHOLD === 0) {
-        await addLog(jobId, `[System] Browser has processed ${processedInThisSession} items. Restarting for stability...`);
+        await addLog(jobId, `[System] Recycling browser for stability...`);
         await browser.close();
-        browser = await launchBrowser("[System] New browser instance is ready.");
+        browser = await launchBrowser("[System] Browser ready.");
       }
 
       const batch = urlsToProcess.slice(i, i + CONCURRENCY);
@@ -345,19 +324,7 @@ const runScrapeJob = async (jobId) => {
                       }
                   }
 
-                  if ((!websiteData.OwnerName || websiteData.OwnerName === "") && googleData.BusinessName) {
-                      const aiResult = await findBusinessOwnerWithAI(
-                          googleData.BusinessName,
-                          googleData.Suburb || country,
-                          googleData.Website,
-                          jobId,
-                          addLog
-                      );
 
-                      if (aiResult.ownerName) {
-                          websiteData.OwnerName = aiResult.ownerName;
-                      }
-                  }
 
                   const fullBusinessData = { ...googleData, ...websiteData };
                   const rawCategory = businessNames && businessNames.length > 0 ? googleData.ScrapedCategory || "N/A" : processItem.category || "N/A";
@@ -368,7 +335,6 @@ const runScrapeJob = async (jobId) => {
               return await promiseWithRetry(scrapingTask, 3, 300000, jobId, processItem.url);
 
           } catch (err) {
-              await addLog(jobId, `[FINAL_FAILURE] Skipped URL ${processItem.url}: ${err.message}`, "error");
               if (detailPage && !detailPage.isClosed()) { try { await detailPage.close(); } catch (e) {} }
               return null; 
           } finally {
@@ -380,51 +346,41 @@ const runScrapeJob = async (jobId) => {
       const results = await Promise.all(promises);
       for (const businessData of results) {
         if (businessData && allProcessedBusinesses.length < targetCount) {
-            if (exclusionList && exclusionList.length > 0) {
-                const normalizedBusinessName = normalizeForExclusionCheck(businessData.BusinessName);
-                const isExcluded = exclusionList.some(excludedItem => {
-                    const normalizedExcludedItem = normalizeForExclusionCheck(excludedItem);
-                    return normalizedBusinessName.includes(normalizedExcludedItem);
-                });
-                if (isExcluded) {
-                    await addLog(jobId, `-> SKIPPED (On exclusion list): ${businessData.BusinessName}`);
-                    continue; 
-                }
-            }
+          
+          if (exclusionList && exclusionList.length > 0) {
+            const normalizedBusinessName = normalizeForExclusionCheck(businessData.BusinessName);
+            const isExcluded = exclusionList.some(excludedItem => normalizedBusinessName.includes(normalizeForExclusionCheck(excludedItem)));
+            if (isExcluded) continue; 
+          }
 
           if (radiusKm && filterCenterLat !== null && filterCenterLng !== null) {
             const businessCoords = extractCoordinatesFromUrl(businessData.GoogleMapsURL);
             if (businessCoords) {
               const distance = calculateDistance(filterCenterLat, filterCenterLng, businessCoords.lat, businessCoords.lng);
-              if (distance > (parseFloat(radiusKm) + 0.2)) {
-                await addLog(jobId, `-> SKIPPED (Outside Radius): ${businessData.BusinessName} is ${distance.toFixed(2)}km away.`);
-                continue; 
-              }
+              if (distance > (parseFloat(radiusKm) + 0.2)) continue; 
             }
           }
+
           const name = businessData.BusinessName?.toLowerCase().trim() || "";
           const phone = normalizePhoneNumber(businessData.Phone);
           const address = normalizeAddress(businessData.StreetAddress);
           const email = businessData.Email1?.toLowerCase().trim() || "";
-          let uniqueIdentifier = "", reason = "";
-          if (phone) { uniqueIdentifier = `phone::${name}::${phone}`; reason = `by Phone (${phone})`; }
-          else if (address) { uniqueIdentifier = `address::${name}::${address}`; reason = `by Address (${businessData.StreetAddress})`; }
-          else if (email) { uniqueIdentifier = `email::${name}::${email}`; reason = `by Email (${email})`; }
-          else { uniqueIdentifier = `name_only::${name}`; reason = "by Name Only"; }
+          let uniqueIdentifier = "";
+          
+          if (phone) uniqueIdentifier = `phone::${name}::${phone}`;
+          else if (address) uniqueIdentifier = `address::${name}::${address}`;
+          else if (email) uniqueIdentifier = `email::${name}::${email}`;
+          else uniqueIdentifier = `name_only::${name}`;
 
-          if (addedBusinessKeys.has(uniqueIdentifier)) {
-            await addLog(jobId, `-> SKIPPED (Duplicate ${reason}): ${businessData.BusinessName}`);
-          } else {
+          if (!addedBusinessKeys.has(uniqueIdentifier)) {
             addedBusinessKeys.add(uniqueIdentifier);
             allProcessedBusinesses.push(businessData);
-            
             await appendJobResult(jobId, businessData);
-            
-            const status = isSearchAll ? `(Total Added: ${allProcessedBusinesses.length})` : `(${allProcessedBusinesses.length}/${finalCount})`;
-            await addLog(jobId, `-> ADDED: ${businessData.BusinessName}. ${status}`);
+            await addLog(jobId, `-> Processed: ${businessData.BusinessName}`);
           }
         }
       }
+      
       io.to(jobId).emit("progress_update", {
         processed: processedUrls.size + i + batch.length,
         discovered: optimizedUrlList.length, 
@@ -433,14 +389,57 @@ const runScrapeJob = async (jobId) => {
       });
     }
 
-    await addLog(jobId, `Scraping completed. Found and processed a total of ${allProcessedBusinesses.length} businesses.`);
-    
-    await addLog(jobId, `[Deduplication] Starting deduplication process...`);
+    if (browser) try { await browser.close(); } catch (e) {}
+    browser = null;
+
+    await addLog(jobId, `\n--- Phase 2: AI Enrichment Starting ---`);
+
+    const businessesNeedingAI = allProcessedBusinesses.filter(b => 
+        (!b.OwnerName || b.OwnerName.trim() === "") && 
+        b.BusinessName && 
+        b.Website &&
+        b.BusinessName.trim() !== ""
+    );
+
+    if (businessesNeedingAI.length > 0) {
+        await addLog(jobId, `[AI] Analyzing ${businessesNeedingAI.length} businesses for owner details...`);
+        
+        for (let i = 0; i < businessesNeedingAI.length; i++) {
+            const business = businessesNeedingAI[i];
+            
+            if (i % 5 === 0) await addLog(jobId, `[AI] Processing batch ${i+1}/${businessesNeedingAI.length}...`);
+
+            const aiResult = await findBusinessOwnerWithAI(
+                business.BusinessName,
+                business.Suburb || country,
+                business.Website,
+                jobId,
+                null 
+            );
+
+            if (aiResult.ownerName) {
+                business.OwnerName = aiResult.ownerName;
+            }
+        }
+        
+        const { error: finalSaveError } = await supabase
+            .from("jobs")
+            .update({ results: allProcessedBusinesses })
+            .eq("id", jobId);
+
+        if (finalSaveError) {
+             console.error("Failed to save AI results", finalSaveError);
+        } else {
+             await addLog(jobId, `[AI] Enrichment complete. Database updated.`);
+        }
+    } else {
+        await addLog(jobId, `[AI] No businesses required enrichment.`);
+    }
+
+    await addLog(jobId, `[System] Finalizing and sending emails...`);
     const { uniqueBusinesses, duplicates } = deduplicateBusinesses(allProcessedBusinesses);
-    await addLog(jobId, `[Deduplication] Process complete. Found ${uniqueBusinesses.length} unique businesses and ${duplicates.length} duplicates.`);
     
     if (userEmail && uniqueBusinesses.length > 0) {
-      await addLog(jobId, `[Email] Preparing to send results to ${userEmail}...`);
       const mainSearchArea = searchParamsForEmail.area || "selected_area";
       const uniqueBusinessesForEmail = uniqueBusinesses.map((business) => ({
         ...business, Suburb: business.Suburb || mainSearchArea.replace(/_/g, " "),
@@ -449,17 +448,16 @@ const runScrapeJob = async (jobId) => {
         ...business, Suburb: business.Suburb || mainSearchArea.replace(/_/g, " "),
       }));
       const emailParams = { ...searchParamsForEmail };
-      if (parameters.radiusKm) {
-        emailParams.radiusKm = parameters.radiusKm;
-      }
+      if (parameters.radiusKm) emailParams.radiusKm = parameters.radiusKm;
+      
       const emailStatus = await sendResultsByEmail(userEmail, uniqueBusinessesForEmail, emailParams, duplicatesForEmail);
       await addLog(jobId, `[Email] ${emailStatus}`);
-    } else if (userEmail) {
-        await addLog(jobId, `[Email] No unique businesses found after deduplication. Skipping email.`);
     }
+
     await updateJobStatus(jobId, "completed");
+
   } catch (error) {
-    console.error(`[Job: ${jobId}] A critical error occurred during scraping:`, error);
+    console.error(`[Job: ${jobId}] Critical error:`, error);
     await addLog(jobId, `[ERROR] Critical failure: ${error.message.split("\n")[0]}`, "error");
     await updateJobStatus(jobId, "failed");
   } finally {

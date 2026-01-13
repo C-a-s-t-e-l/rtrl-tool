@@ -546,27 +546,20 @@
           </aside>
 
           <div class="results-display">
-            <div class="card">
-              <div class="card-header">
-                <h2>
-                  <i class="fas fa-tasks" id="researchStatusIcon"></i> Research
-                  in Progress
-                </h2>
-              </div>
-              <label>Progress</label>
-              <div class="progress-bar-container">
-                <div class="progress-bar">
-                  <div id="progressBar"></div>
-                </div>
-                <span id="progressPercentage" class="progress-percentage"
-                  >0%</span
-                >
-              </div>
-              <label>System Log</label>
-              <pre id="log" class="log-console">
-Waiting to start research...</pre
-              >
-            </div>
+<div id="status-card" class="status-card">
+    <div class="status-icon-box">
+        <div class="pulse-wave"></div>
+        <i id="status-icon" class="fas fa-play"></i>
+    </div>
+    <h3 id="status-text">Ready to Start</h3>
+    
+    <div id="status-progress-wrapper" class="status-progress-wrapper" style="opacity: 0;">
+        <div class="status-progress-track">
+            <div id="status-progress-fill" class="status-progress-fill" style="width: 0%"></div>
+        </div>
+        <span id="status-progress-text">0%</span>
+    </div>
+</div>
 
             <div class="card" id="jobHistoryCard">
               <div class="card-header results-header">
