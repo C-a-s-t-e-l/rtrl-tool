@@ -170,13 +170,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
         if (card) {
           card.className = "status-card state-working";
-          icon.className = "fas fa-sync-alt fa-spin";
-          text.textContent = "Resuming Session...";
+          if (icon) icon.className = "fas fa-sync-alt fa-spin";
+          if (text) text.textContent = "Resuming Session...";
           if (progressWrapper) progressWrapper.style.opacity = "1";
         }
       }
     });
-
 
     socket.on("job_created", ({ jobId }) => {
       logMessage(
@@ -212,145 +211,167 @@ document.addEventListener("DOMContentLoaded", () => {
       handleScrapeError({ error });
     });
 
-socket.on("job_update", (update) => {
-    if (update.status) {
-      logMessage(elements.logEl, `Job status: ${update.status}`, "info");
+    socket.on("job_update", (update) => {
+      if (update.status) {
+        if (elements.logEl) {
+          logMessage(elements.logEl, `Job status: ${update.status}`, "info");
+        }
 
-      if (window.rtrlApp.jobHistory) {
-        window.rtrlApp.jobHistory.fetchAndRenderJobs();
-      }
+        if (window.rtrlApp.jobHistory) {
+          window.rtrlApp.jobHistory.fetchAndRenderJobs();
+        }
 
-      const targetId = update.id || currentJobId;
-      if (targetId) {
-        const historyBadge = document.getElementById(`job-status-${targetId}`);
-        if (historyBadge) {
-          if (update.status === "completed") {
-            historyBadge.className = "job-status status-completed";
-            historyBadge.innerHTML =
-              '<i class="fas fa-check-circle"></i> <span>Completed</span>';
-          } else if (update.status === "failed") {
-            historyBadge.className = "job-status status-failed";
-            historyBadge.innerHTML =
-              '<i class="fas fa-exclamation-triangle"></i> <span>Failed</span>';
-          } else if (update.status === "running") {
-            historyBadge.className = "job-status status-running";
-            historyBadge.innerHTML =
-              '<i class="fas fa-spinner fa-spin"></i> <span>Running</span>';
+        const targetId = update.id || currentJobId;
+        if (targetId) {
+          const historyBadge = document.getElementById(`job-status-${targetId}`);
+          if (historyBadge) {
+            if (update.status === "completed") {
+              historyBadge.className = "job-status status-completed";
+              historyBadge.innerHTML =
+                '<i class="fas fa-check-circle"></i> <span>Completed</span>';
+            } else if (update.status === "failed") {
+              historyBadge.className = "job-status status-failed";
+              historyBadge.innerHTML =
+                '<i class="fas fa-exclamation-triangle"></i> <span>Failed</span>';
+            } else if (update.status === "running") {
+              historyBadge.className = "job-status status-running";
+              historyBadge.innerHTML =
+                '<i class="fas fa-spinner fa-spin"></i> <span>Running</span>';
+            }
           }
         }
-      }
 
-      if (update.status === "completed" || update.status === "failed") {
-        currentJobId = null;
-        setUiState(false, getUiElementsForStateChange());
+        if (update.status === "completed" || update.status === "failed") {
+          currentJobId = null;
+          setUiState(false, getUiElementsForStateChange());
 
-        if (update.status === "completed") {
+          if (update.status === "completed") {
             const fill = document.getElementById("progress-fill");
             const pctLabel = document.getElementById("pct-label");
             const phaseLabel = document.getElementById("phase-label");
-            
+
             if (fill) fill.style.width = "100%";
             if (pctLabel) pctLabel.textContent = "100%";
             if (phaseLabel) phaseLabel.textContent = "Phase 3/3: Complete";
-            
-            updateStatusCardPhase('complete');
-        } else {
+
+            updateStatusCardPhase("complete");
+          } else {
             const card = document.getElementById("status-card");
             const icon = document.getElementById("status-icon");
             const headline = document.getElementById("status-headline");
-            
-            if(card) {
-                card.className = "status-card phase-error";
-                icon.className = "fas fa-times-circle";
-                headline.textContent = "Job Failed";
-            }
+
+            if (card) card.className = "status-card phase-error";
+            if (icon) icon.className = "fas fa-times-circle";
+            if (headline) headline.textContent = "Job Failed";
+          }
         }
       }
-    }
-  });
+    });
 
     socket.on("business_found", (business) => {});
 
- socket.on("progress_update", (data) => {
-    const { phase, processed, discovered, added, target, enriched, aiProcessed, aiTarget } = data;
+    socket.on("progress_update", (data) => {
+      const {
+        phase,
+        processed,
+        discovered,
+        added,
+        target,
+        enriched,
+        aiProcessed,
+        aiTarget,
+      } = data;
 
-    let visualPercent = 0;
-    let phaseText = "Initializing...";
+      let visualPercent = 0;
+      let phaseText = "Initializing...";
 
-    if (phase === 'scraping') {
+      if (phase === "scraping") {
         phaseText = "Phase 1/3: Scraping Data";
         let scrapePct = 0;
         const isSearchAll = target === -1;
         if (isSearchAll) {
-             if (discovered > 0) scrapePct = (processed / discovered);
+          if (discovered > 0) scrapePct = processed / discovered;
         } else {
-             if (target > 0) scrapePct = (added / target);
+          if (target > 0) scrapePct = added / target;
         }
         if (scrapePct > 1) scrapePct = 1;
-        visualPercent = Math.round(scrapePct * 70); 
-        updateStatusCardPhase('scraping');
-    } 
-    else if (phase === 'ai') {
+        visualPercent = Math.round(scrapePct * 70);
+        updateStatusCardPhase("scraping");
+      } else if (phase === "ai") {
         phaseText = "Phase 2/3: AI Enrichment";
         let aiPct = 0;
-        if (aiTarget > 0) aiPct = (aiProcessed / aiTarget);
+        if (aiTarget > 0) aiPct = aiProcessed / aiTarget;
         if (aiPct > 1) aiPct = 1;
-        visualPercent = 70 + Math.round(aiPct * 25); 
-        updateStatusCardPhase('ai');
-    }
-    else if (phase === 'completed') {
+        visualPercent = 70 + Math.round(aiPct * 25);
+        updateStatusCardPhase("ai");
+      } else if (phase === "completed") {
         visualPercent = 100;
         phaseText = "Phase 3/3: Complete";
-        updateStatusCardPhase('complete');
-    }
+        updateStatusCardPhase("complete");
+      }
 
-    const fill = document.getElementById("progress-fill");
-    const pctLabel = document.getElementById("pct-label");
-    const phaseLabel = document.getElementById("phase-label");
-    
-    const statFound = document.getElementById("stat-found");
-    const statProcessed = document.getElementById("stat-processed");
-    const statEnriched = document.getElementById("stat-enriched");
+      const fill = document.getElementById("progress-fill");
+      const pctLabel = document.getElementById("pct-label");
+      const phaseLabel = document.getElementById("phase-label");
 
-    if (fill) fill.style.width = `${visualPercent}%`;
-    if (pctLabel) pctLabel.textContent = `${visualPercent}%`;
-    if (phaseLabel) phaseLabel.textContent = phaseText;
+      const statFound = document.getElementById("stat-found");
+      const statProcessed = document.getElementById("stat-processed");
+      const statEnriched = document.getElementById("stat-enriched");
 
-    if (statFound) statFound.textContent = discovered || 0;
-    if (statProcessed) statProcessed.textContent = added || 0;
-    if (statEnriched) statEnriched.textContent = enriched || 0;
+      if (fill) fill.style.width = `${visualPercent}%`;
+      if (pctLabel) pctLabel.textContent = `${visualPercent}%`;
+      if (phaseLabel) phaseLabel.textContent = phaseText;
 
-    if (currentJobId) {
-        const historyCount = document.getElementById(`job-count-${currentJobId}`);
+      if (statFound) statFound.textContent = discovered || 0;
+      if (statProcessed) statProcessed.textContent = added || 0;
+      if (statEnriched) statEnriched.textContent = enriched || 0;
+
+      if (currentJobId) {
+        const historyCount = document.getElementById(
+          `job-count-${currentJobId}`
+        );
         if (historyCount) {
-             historyCount.innerHTML = `<i class="fas fa-database"></i> ${added} Results Found`;
+          historyCount.innerHTML = `<i class="fas fa-database"></i> ${added} Results Found`;
         }
-    }
-  });
+      }
+    });
 
-function updateStatusCardPhase(phase) {
-    const card = document.getElementById("status-card");
-    const icon = document.getElementById("status-icon");
-    const headline = document.getElementById("status-headline");
-    
-    card.classList.remove("phase-scraping", "phase-ai", "phase-complete", "phase-error");
-    icon.classList.remove("fa-play", "fa-check-circle", "fa-exclamation-triangle", "spin-slow");
+    function updateStatusCardPhase(phase) {
+      const card = document.getElementById("status-card");
+      const icon = document.getElementById("status-icon");
+      const headline = document.getElementById("status-headline");
 
-    if (phase === 'scraping') {
+      if (!card) return;
+
+      card.classList.remove(
+        "phase-scraping",
+        "phase-ai",
+        "phase-complete",
+        "phase-error"
+      );
+      if (icon) {
+        icon.classList.remove(
+          "fa-play",
+          "fa-check-circle",
+          "fa-exclamation-triangle",
+          "spin-slow"
+        );
+      }
+
+      if (phase === "scraping") {
         card.classList.add("phase-scraping");
-        icon.classList.add("fas", "fa-satellite-dish", "spin-slow");
-        headline.textContent = "Scanning & Scraping...";
-    } else if (phase === 'ai') {
+        if (icon) icon.classList.add("fas", "fa-satellite-dish", "spin-slow");
+        if (headline) headline.textContent = "Scanning & Scraping...";
+      } else if (phase === "ai") {
         card.classList.add("phase-ai");
-        icon.classList.add("fas", "fa-brain", "spin-slow"); 
-        headline.textContent = "AI Analysis Active...";
-    } else if (phase === 'complete') {
+        if (icon) icon.classList.add("fas", "fa-brain", "spin-slow");
+        if (headline) headline.textContent = "AI Analysis Active...";
+      } else if (phase === "complete") {
         card.classList.add("phase-complete");
-        icon.classList.add("fas", "fa-check-circle");
-        headline.textContent = "Job Completed Successfully";
+        if (icon) icon.classList.add("fas", "fa-check-circle");
+        if (headline) headline.textContent = "Job Completed Successfully";
+      }
     }
-}
-
 
     function setupPasswordToggle(toggleId, inputId) {
       const toggleBtn = document.getElementById(toggleId);
