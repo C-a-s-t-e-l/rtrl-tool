@@ -21,12 +21,11 @@ puppeteer.use(StealthPlugin());
 const app = express();
 const server = http.createServer(app);
 
-const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:3000";
 const io = new Server(server, {
   cors: { origin: FRONTEND_URL, methods: ["GET", "POST"] },
   transports: ['websocket', 'polling'],
-  pingInterval: 25000,
-  pingTimeout: 60000,
+  pingInterval: 25000, 
+  pingTimeout: 240000, 
 });
 
 const PORT = process.env.PORT || 3000;
@@ -124,7 +123,6 @@ const appendJobResult = async (jobId, newResult) => {
   return saveQueues[jobId];
 };
 
-
 const runScrapeJob = async (jobId) => {
   await updateJobStatus(jobId, "running");
   const { data: job, error: fetchError } = await supabase
@@ -204,11 +202,12 @@ const runScrapeJob = async (jobId) => {
 
     const isIndividualSearch = businessNames && businessNames.length > 0;
     const searchItems = isIndividualSearch ? businessNames : (categoriesToLoop && categoriesToLoop.length > 0 ? categoriesToLoop : []);
+    const finalCount = businessNames && businessNames.length > 0 ? -1 : parameters.count || -1; // Moved up for reference in loop
 
     for (const item of searchItems) {
-      await addLog(jobId, isIndividualSearch ? `\nSearching for business: "${item}"` : `\nSearching for category: "${item}"`);
+      await addLog(jobId, isIndividualSearch ? `\n--- Searching for business: "${item}" ---` : `\n--- Searching for category: "${item}" ---`);
       
-      browser = await launchBrowser(`[System] Launching browser for "${item}"...`);
+      browser = await launchBrowser(`[System] Launching fresh browser for "${item}"...`);
       let collectionPage = await browser.newPage();
 
       let locationQueries = [];
@@ -236,12 +235,26 @@ const runScrapeJob = async (jobId) => {
         let initialSize = masterUrlMap.size;
         discoveredUrlsForThisSubArea.forEach((url) => { if (!masterUrlMap.has(url)) masterUrlMap.set(url, item); });
         let newUrlsFound = masterUrlMap.size - initialSize;
-        if(newUrlsFound > 0) await addLog(jobId, `   -> Found ${newUrlsFound} new URLs.`);
+        
+        if(newUrlsFound > 0) {
+            await addLog(jobId, `   -> Found ${newUrlsFound} new URLs. (Total: ${masterUrlMap.size})`);
+            
+            // --- FIX: EMIT PROGRESS UPDATE DURING DISCOVERY ---
+            io.to(jobId).emit("progress_update", {
+                phase: 'discovery',
+                discovered: masterUrlMap.size,
+                processed: 0,
+                added: allProcessedBusinesses.length,
+                target: finalCount
+            });
+            // --------------------------------------------------
+        }
       }
 
       if (collectionPage) try { await collectionPage.close(); } catch (e) {}
       if (browser) {
         try { await browser.close(); } catch (e) {}
+        await addLog(jobId, `[System] Closed browser for "${item}" to conserve resources.`);
       }
       browser = null;
 
@@ -250,7 +263,7 @@ const runScrapeJob = async (jobId) => {
     }
 
     const finalCollectedUrls = Array.from(masterUrlMap, ([url, specificCategory]) => ({ url, category: specificCategory }));
-    await addLog(jobId, `\n--- Collection Complete. Found ${finalCollectedUrls.length} businesses. ---`);
+    await addLog(jobId, `\n--- URL Collection Complete. Found ${finalCollectedUrls.length} total unique businesses. ---`);
     
     let optimizedUrlList = finalCollectedUrls;
     if (radiusKm && filterCenterLat !== null && filterCenterLng !== null) {
@@ -269,7 +282,6 @@ const runScrapeJob = async (jobId) => {
     await addLog(jobId, `--- Starting Phase 1: Data Extraction ---`);
     browser = await launchBrowser("[System] Launching browser for data extraction...");
 
-    const finalCount = businessNames && businessNames.length > 0 ? -1 : parameters.count || -1;
     const isSearchAll = finalCount === -1;
     const targetCount = isSearchAll ? Infinity : finalCount;
 
@@ -324,7 +336,19 @@ const runScrapeJob = async (jobId) => {
                       }
                   }
 
+                  if ((!websiteData.OwnerName || websiteData.OwnerName === "") && googleData.BusinessName) {
+                      const aiResult = await findBusinessOwnerWithAI(
+                          googleData.BusinessName,
+                          googleData.Suburb || country,
+                          googleData.Website,
+                          jobId,
+                          null 
+                      );
 
+                      if (aiResult.ownerName) {
+                          websiteData.OwnerName = aiResult.ownerName;
+                      }
+                  }
 
                   const fullBusinessData = { ...googleData, ...websiteData };
                   const rawCategory = businessNames && businessNames.length > 0 ? googleData.ScrapedCategory || "N/A" : processItem.category || "N/A";
