@@ -8,7 +8,7 @@ if (apiKey) {
     aiClient = new GoogleGenAI({ apiKey: apiKey });
 }
 
-const MODEL_NAME = "gemini-2.5-flash";
+const MODEL_NAME = "gemini-2.5-flash"; 
 
 let requestQueue = Promise.resolve();
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
@@ -20,63 +20,91 @@ async function findBusinessOwnerWithAI(businessName, location, website, jobId, a
         await sleep(2000); 
 
         try {
-            if (addLog) await addLog(jobId, `AI Researching: ${businessName}...`);
-
-            const prompt = `
-            Task: Identify the Owner, Founder, or Principal of "${businessName}" in "${location}".
-            Context Url: "${website || ""}"
+            const result = await performAiSearch(businessName, location, website, false);
             
-            STRICT RULES:
-            1. Search Google/LinkedIn/About Us pages.
-            2. REJECT slogans (e.g. "I Am The", "With Our").
-            3. REJECT generic roles (e.g. "The Team").
-            4. FORMAT: "Name (Title)".
-            5. If multiple, separate with semicolon.
-            6. If NOT found, return: "NOT_FOUND".
-            `;
-
-            const response = await aiClient.models.generateContent({
-                model: MODEL_NAME, 
-                contents: prompt,
-                config: {
-                    tools: [{ googleSearch: {} }],
-                    safetySettings: [
-                        { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
-                        { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
-                        { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
-                        { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" },
-                    ],
-                },
-            });
-
-            let text = "";
-            if (response.candidates?.[0]?.content?.parts) {
-                text = response.candidates[0].content.parts
-                    .map(part => part.text || "")
-                    .join("")
-                    .trim();
+            if (result.isValid) {
+                if (addLog) await addLog(jobId, `[AI] Found: ${result.name}`);
+                return { ownerName: result.name, source: "AI_Search" };
             }
-
-            if (!text) return { ownerName: "", source: "AI_Empty" };
-
-            const cleanResult = sanitizeOutput(text);
-
-            if (cleanResult.isValid) {
-                if (addLog) await addLog(jobId, `AI Found: ${cleanResult.name}`);
-                return { ownerName: cleanResult.name, source: "AI_Search" };
-            } else {
-                if (addLog) await addLog(jobId, `[AI] Result rejected: "${text.substring(0,40)}..." (${cleanResult.reason})`);
-                return { ownerName: "", source: "AI_Rejected" };
-            }
-
         } catch (error) {
-            if (addLog) await addLog(jobId, `[AI Error] ${error.message}`);
-            return { ownerName: "", source: "AI_Failed" };
+            console.error("AI Attempt 1 failed:", error.message);
         }
+
+        
+        await sleep(3000); 
+        
+        try {
+            const result = await performAiSearch(businessName, location, website, true); 
+            
+            if (result.isValid) {
+                if (addLog) await addLog(jobId, `[AI] Found (Deep Search): ${result.name}`);
+                return { ownerName: result.name, source: "AI_Retry" };
+            }
+        } catch (error) {
+            console.error("AI Attempt 2 failed:", error.message);
+        }
+
+        return { ownerName: "", source: "AI_Not_Found" };
     });
 
     requestQueue = task.catch(() => {});
     return task;
+}
+
+async function performAiSearch(businessName, location, website, isAggressive) {
+    const prompt = isAggressive 
+        ? `
+        Task: Find the Owner/Director/Principal of "${businessName}" in "${location}".
+        Action: Search specifically for "LinkedIn ${businessName} ${location} owner" or "director".
+        Rules:
+        1. Return the name if you are reasonably confident.
+        2. Format: "Name (Title)"
+        3. If not found, return "NOT_FOUND".
+        `
+        : `
+        Task: Identify the Owner, Founder, or Principal of "${businessName}" in "${location}".
+        Context Url: "${website || ""}"
+        Rules:
+        1. Search Google/LinkedIn/About Us pages.
+        2. REJECT generic headers (e.g. "Our Team", "Welcome").
+        3. FORMAT: "Name (Title)".
+        4. If NOT found, return: "NOT_FOUND".
+        `;
+
+    try {
+        const response = await aiClient.models.generateContent({
+            model: MODEL_NAME, 
+            contents: prompt,
+            config: {
+                tools: [{ googleSearch: {} }], 
+                safetySettings: [
+                    { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+                    { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+                    { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+                    { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" },
+                ],
+            },
+        });
+
+        let text = "";
+        if (response.candidates?.[0]?.content?.parts) {
+            text = response.candidates[0].content.parts
+                .map(part => part.text || "")
+                .join("")
+                .trim();
+        }
+
+        if (!text) return { isValid: false, reason: "Empty Response" };
+
+        return sanitizeOutput(text);
+
+    } catch (err) {
+        if (err.message && err.message.includes("429")) {
+            console.warn("AI Rate Limit Hit. Backing off...");
+            await sleep(5000);
+        }
+        throw err;
+    }
 }
 
 function sanitizeOutput(rawText) {
@@ -92,7 +120,7 @@ function sanitizeOutput(rawText) {
         }
     }
 
-    if (clean.includes("NOT_FOUND") || clean.includes("unable to find")) {
+    if (clean.includes("NOT_FOUND") || clean.includes("unable to find") || clean.length < 3) {
         return { isValid: false, reason: "Not Found" };
     }
 
@@ -105,12 +133,9 @@ function sanitizeOutput(rawText) {
     const validParts = [];
 
     for (let part of parts) {
-        if (part.includes("(") && !part.includes(")")) part += ")";
-
-        if (part.length < 4 || part.length > 60) continue;
-        
         if (!part.includes("(") || !part.includes(")")) {
-            if (part.split(" ").length >= 2 && part.split(" ").length <= 4) {
+            const wordCount = part.split(" ").length;
+            if (wordCount >= 2 && wordCount <= 4) {
                 part = `${part} (Owner?)`; 
             } else {
                 continue; 
