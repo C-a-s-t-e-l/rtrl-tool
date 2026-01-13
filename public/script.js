@@ -271,7 +271,7 @@ socket.on("job_update", (update) => {
 
     socket.on("business_found", (business) => {});
 
-socket.on("progress_update", (data) => {
+  socket.on("progress_update", (data) => {
     const { phase, processed, discovered, added, target, enriched, aiProcessed, aiTarget } = data;
 
     let visualPercent = 0;
@@ -290,7 +290,8 @@ socket.on("progress_update", (data) => {
         }
         if (scrapePct > 1) scrapePct = 1;
         
-        visualPercent = Math.round(scrapePct * 70);
+        visualPercent = Math.round(scrapePct * 70); 
+        
         updateStatusCardPhase('scraping');
     } 
     else if (phase === 'ai') {
@@ -300,7 +301,7 @@ socket.on("progress_update", (data) => {
         if (aiTarget > 0) aiPct = (aiProcessed / aiTarget);
         if (aiPct > 1) aiPct = 1;
 
-        visualPercent = 70 + Math.round(aiPct * 20); 
+        visualPercent = 70 + Math.round(aiPct * 25); 
         
         updateStatusCardPhase('ai');
     }
@@ -313,6 +314,7 @@ socket.on("progress_update", (data) => {
     const fill = document.getElementById("progress-fill");
     const pctLabel = document.getElementById("pct-label");
     const phaseLabel = document.getElementById("phase-label");
+    
     const statFound = document.getElementById("stat-found");
     const statProcessed = document.getElementById("stat-processed");
     const statEnriched = document.getElementById("stat-enriched");
@@ -331,7 +333,7 @@ socket.on("progress_update", (data) => {
              historyCount.innerHTML = `<i class="fas fa-database"></i> ${added} Results Found`;
         }
     }
-});
+  });
 
 function updateStatusCardPhase(phase) {
     const card = document.getElementById("status-card");

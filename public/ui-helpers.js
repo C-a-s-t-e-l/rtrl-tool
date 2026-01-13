@@ -1,7 +1,7 @@
 function logMessage(el, message, type = "info") {
   const card = document.getElementById("status-card");
   const icon = document.getElementById("status-icon");
-  const headline = document.getElementById("status-headline"); 
+  const headline = document.getElementById("status-headline");
   const subtext = document.getElementById("status-subtext");
 
   if (!card || !icon || !headline) return;
@@ -31,11 +31,16 @@ function logMessage(el, message, type = "info") {
   }
 
   if (type === "info" && !lowerMsg.includes("complete") && !lowerMsg.includes("finished")) {
-    if (subtext && message.length < 80) subtext.textContent = message;
     
-    if (!card.classList.contains("phase-scraping") && !card.classList.contains("phase-ai")) {
-        card.classList.add("phase-scraping");
+
+    if (lowerMsg.includes("starting phase 2")) {
+        headline.textContent = "AI Analysis Active";
+        if (subtext) subtext.textContent = "Enriching business data...";
     }
+    else if (lowerMsg.includes("finalizing")) {
+        if (subtext) subtext.textContent = "Generating files and sending email...";
+    }
+    
     return;
   }
 
@@ -44,7 +49,7 @@ function logMessage(el, message, type = "info") {
     card.classList.add("phase-complete");
     icon.className = "fas fa-check-circle";
     headline.textContent = "Research Complete";
-    if (subtext) subtext.textContent = "All tasks finished successfully.";
+    if (subtext) subtext.textContent = "Check your email for results.";
     
     const fill = document.getElementById("progress-fill");
     const label = document.getElementById("pct-label");
@@ -61,7 +66,7 @@ function logMessage(el, message, type = "info") {
     card.classList.add("phase-error");
     icon.className = "fas fa-exclamation-triangle";
     headline.textContent = "An Error Occurred";
-    if (subtext) subtext.textContent = message;
+    if (subtext) subtext.textContent = "Please try again or check settings.";
   }
 }
 
