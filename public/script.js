@@ -271,7 +271,7 @@ socket.on("job_update", (update) => {
 
     socket.on("business_found", (business) => {});
 
-  socket.on("progress_update", (data) => {
+ socket.on("progress_update", (data) => {
     const { phase, processed, discovered, added, target, enriched, aiProcessed, aiTarget } = data;
 
     let visualPercent = 0;
@@ -279,30 +279,23 @@ socket.on("job_update", (update) => {
 
     if (phase === 'scraping') {
         phaseText = "Phase 1/3: Scraping Data";
-        
         let scrapePct = 0;
         const isSearchAll = target === -1;
-        
         if (isSearchAll) {
              if (discovered > 0) scrapePct = (processed / discovered);
         } else {
              if (target > 0) scrapePct = (added / target);
         }
         if (scrapePct > 1) scrapePct = 1;
-        
         visualPercent = Math.round(scrapePct * 70); 
-        
         updateStatusCardPhase('scraping');
     } 
     else if (phase === 'ai') {
         phaseText = "Phase 2/3: AI Enrichment";
-        
         let aiPct = 0;
         if (aiTarget > 0) aiPct = (aiProcessed / aiTarget);
         if (aiPct > 1) aiPct = 1;
-
         visualPercent = 70 + Math.round(aiPct * 25); 
-        
         updateStatusCardPhase('ai');
     }
     else if (phase === 'completed') {
