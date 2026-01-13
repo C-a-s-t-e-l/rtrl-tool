@@ -1197,21 +1197,33 @@ function updateStatusCardPhase(phase) {
 
       const card = document.getElementById("status-card");
       const icon = document.getElementById("status-icon");
-      const text = document.getElementById("status-text");
-      const progressWrapper = document.getElementById(
-        "status-progress-wrapper"
-      );
-      const fill = document.getElementById("status-progress-fill");
-      const pct = document.getElementById("status-progress-text");
+      const headline = document.getElementById("status-headline");
+      const subtext = document.getElementById("status-subtext");
+      
+      const fill = document.getElementById("progress-fill");
+      const pct = document.getElementById("pct-label");
+      const phaseLabel = document.getElementById("phase-label");
+
+      const statFound = document.getElementById("stat-found");
+      const statProcessed = document.getElementById("stat-processed");
+      const statEnriched = document.getElementById("stat-enriched");
 
       if (card) {
-        card.className = "status-card state-working";
-        icon.className = "fas fa-circle-notch fa-spin";
-        text.textContent = "Starting Job...";
-        if (progressWrapper) progressWrapper.style.opacity = "1";
-        if (fill) fill.style.width = "0%";
-        if (pct) pct.textContent = "0%";
+        card.classList.remove("phase-scraping", "phase-ai", "phase-complete", "phase-error");
+        card.classList.add("phase-scraping");
       }
+
+      if (icon) icon.className = "fas fa-circle-notch fa-spin";
+      if (headline) headline.textContent = "Starting Job...";
+      if (subtext) subtext.textContent = "Initializing queue...";
+
+      if (fill) fill.style.width = "0%";
+      if (pct) pct.textContent = "0%";
+      if (phaseLabel) phaseLabel.textContent = "Phase 1/3: Initializing";
+
+      if (statFound) statFound.textContent = "0";
+      if (statProcessed) statProcessed.textContent = "0";
+      if (statEnriched) statEnriched.textContent = "0";
 
       const namesText = elements.businessNamesInput.value.trim();
       const businessNames = namesText
