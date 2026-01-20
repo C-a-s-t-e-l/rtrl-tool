@@ -21,8 +21,33 @@ puppeteer.use(StealthPlugin());
 const app = express();
 const server = http.createServer(app);
 
+const allowedOrigins = [
+  "http://localhost:3000",
+  "http://127.0.0.1:3000",
+  "https://rtrl-prospector.vercel.app", 
+  process.env.FRONTEND_URL                
+].filter(Boolean);
+
+const corsOptions = {
+  origin: function (origin, callback) {
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      console.log(`[CORS] Request from unknown origin: ${origin}. Allowing temporarily for compatibility.`);
+      callback(null, true);
+    }
+  },
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "ngrok-skip-browser-warning"],
+  credentials: true
+};
+
+app.use(cors(corsOptions));
+
 const io = new Server(server, {
-  cors: { origin: FRONTEND_URL, methods: ["GET", "POST"] },
+  cors: corsOptions,
   transports: ['websocket', 'polling'],
   pingInterval: 25000, 
   pingTimeout: 240000, 
@@ -123,6 +148,7 @@ const appendJobResult = async (jobId, newResult) => {
   return saveQueues[jobId];
 };
 
+
 const runScrapeJob = async (jobId) => {
   await updateJobStatus(jobId, "running");
   const { data: job, error: fetchError } = await supabase
@@ -130,7 +156,7 @@ const runScrapeJob = async (jobId) => {
     .select("*")
     .eq("id", jobId)
     .single();
-    
+
   if (fetchError || !job) {
     console.error(`[Job: ${jobId}] Could not fetch job details. Aborting.`, fetchError);
     await updateJobStatus(jobId, "failed");
@@ -138,10 +164,10 @@ const runScrapeJob = async (jobId) => {
   }
 
   if (!job.parameters) {
-        await addLog(jobId, "[FATAL_ERROR] Job started with no parameters. Aborting.", "error");
-        await updateJobStatus(jobId, "failed");
-        return;
-    }
+    await addLog(jobId, "[FATAL_ERROR] Job started with no parameters. Aborting.", "error");
+    await updateJobStatus(jobId, "failed");
+    return;
+  }
 
   const { parameters } = job;
   const {
@@ -202,11 +228,11 @@ const runScrapeJob = async (jobId) => {
 
     const isIndividualSearch = businessNames && businessNames.length > 0;
     const searchItems = isIndividualSearch ? businessNames : (categoriesToLoop && categoriesToLoop.length > 0 ? categoriesToLoop : []);
-    const finalCount = businessNames && businessNames.length > 0 ? -1 : parameters.count || -1; // Moved up for reference in loop
+    const finalCount = businessNames && businessNames.length > 0 ? -1 : parameters.count || -1;
 
     for (const item of searchItems) {
       await addLog(jobId, isIndividualSearch ? `\n--- Searching for business: "${item}" ---` : `\n--- Searching for category: "${item}" ---`);
-      
+
       browser = await launchBrowser(`[System] Launching fresh browser for "${item}"...`);
       let collectionPage = await browser.newPage();
 
@@ -233,27 +259,41 @@ const runScrapeJob = async (jobId) => {
         const discoveredUrlsForThisSubArea = new Set();
         await collectGoogleMapsUrlsContinuously(collectionPage, finalSearchQuery, jobId, discoveredUrlsForThisSubArea, country);
         let initialSize = masterUrlMap.size;
-        discoveredUrlsForThisSubArea.forEach((url) => { if (!masterUrlMap.has(url)) masterUrlMap.set(url, item); });
+
+        discoveredUrlsForThisSubArea.forEach((url) => {
+          if (masterUrlMap.has(url)) return;
+
+          if (radiusKm && filterCenterLat !== null && filterCenterLng !== null) {
+            const coords = extractCoordinatesFromUrl(url);
+            if (coords) {
+              const distance = calculateDistance(filterCenterLat, filterCenterLng, coords.lat, coords.lng);
+              if (distance > (parseFloat(radiusKm) + 0.2)) {
+                return;
+              }
+            }
+          }
+
+          masterUrlMap.set(url, item);
+        });
+
         let newUrlsFound = masterUrlMap.size - initialSize;
-        
-        if(newUrlsFound > 0) {
-            await addLog(jobId, `   -> Found ${newUrlsFound} new URLs. (Total: ${masterUrlMap.size})`);
-            
-            // --- FIX: EMIT PROGRESS UPDATE DURING DISCOVERY ---
-            io.to(jobId).emit("progress_update", {
-                phase: 'discovery',
-                discovered: masterUrlMap.size,
-                processed: 0,
-                added: allProcessedBusinesses.length,
-                target: finalCount
-            });
-            // --------------------------------------------------
+
+        if (newUrlsFound > 0) {
+          await addLog(jobId, `   -> Found ${newUrlsFound} new URLs within radius. (Total: ${masterUrlMap.size})`);
+
+          io.to(jobId).emit("progress_update", {
+            phase: 'discovery',
+            discovered: masterUrlMap.size,
+            processed: 0,
+            added: allProcessedBusinesses.length,
+            target: finalCount
+          });
         }
       }
 
-      if (collectionPage) try { await collectionPage.close(); } catch (e) {}
+      if (collectionPage) try { await collectionPage.close(); } catch (e) { }
       if (browser) {
-        try { await browser.close(); } catch (e) {}
+        try { await browser.close(); } catch (e) { }
         await addLog(jobId, `[System] Closed browser for "${item}" to conserve resources.`);
       }
       browser = null;
@@ -263,21 +303,9 @@ const runScrapeJob = async (jobId) => {
     }
 
     const finalCollectedUrls = Array.from(masterUrlMap, ([url, specificCategory]) => ({ url, category: specificCategory }));
-    await addLog(jobId, `\n--- URL Collection Complete. Found ${finalCollectedUrls.length} total unique businesses. ---`);
-    
+    await addLog(jobId, `\n--- URL Collection Complete. Found ${finalCollectedUrls.length} total unique businesses within parameters. ---`);
+
     let optimizedUrlList = finalCollectedUrls;
-    if (radiusKm && filterCenterLat !== null && filterCenterLng !== null) {
-        const initialCount = optimizedUrlList.length;
-        optimizedUrlList = finalCollectedUrls.filter(item => {
-            const coords = extractCoordinatesFromUrl(item.url);
-            if (!coords) return true; 
-            const distance = calculateDistance(filterCenterLat, filterCenterLng, coords.lat, coords.lng);
-            return distance <= (parseFloat(radiusKm) + 0.2);
-        });
-        if (initialCount - optimizedUrlList.length > 0) {
-            await addLog(jobId, `[Optimization] Filtered to ${optimizedUrlList.length} locations within radius.`);
-        }
-    }
 
     await addLog(jobId, `--- Starting Phase 1: Data Extraction ---`);
     browser = await launchBrowser("[System] Launching browser for data extraction...");
@@ -310,78 +338,78 @@ const runScrapeJob = async (jobId) => {
 
       const batch = urlsToProcess.slice(i, i + CONCURRENCY);
       const promises = batch.map(async (processItem) => {
-          let detailPage = null;
-          try {
-              const scrapingTask = async () => {
-                  if (detailPage && !detailPage.isClosed()) { try { await detailPage.close(); } catch(e){} }
-                  detailPage = await browser.newPage();
-                  await detailPage.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36");
-                  await detailPage.setRequestInterception(true);
-                  detailPage.on("request", (req) => {
-                      if (["image", "stylesheet", "font", "media"].includes(req.resourceType())) req.abort();
-                      else req.continue();
-                  });
-                  
-                  let googleData = await scrapeGoogleMapsDetails(detailPage, processItem.url, jobId, country);
-                  if (!googleData || !googleData.BusinessName) return null;
-                  
-                  let websiteData = {};
-                  if (googleData.Website) websiteData = await scrapeWebsiteForGoldData(detailPage, googleData.Website, jobId);
-                  
-                  const badKeywords = ["account", "sales", "admin", "info@", "contact", "enquiries"];
-                  if (websiteData.OwnerName) {
-                      const lowerName = websiteData.OwnerName.toLowerCase();
-                      if (badKeywords.some(kw => lowerName.includes(kw)) || /\d/.test(lowerName)) {
-                          websiteData.OwnerName = ""; 
-                      }
-                  }
+        let detailPage = null;
+        try {
+          const scrapingTask = async () => {
+            if (detailPage && !detailPage.isClosed()) { try { await detailPage.close(); } catch (e) { } }
+            detailPage = await browser.newPage();
+            await detailPage.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36");
+            await detailPage.setRequestInterception(true);
+            detailPage.on("request", (req) => {
+              if (["image", "stylesheet", "font", "media"].includes(req.resourceType())) req.abort();
+              else req.continue();
+            });
 
-                  if ((!websiteData.OwnerName || websiteData.OwnerName === "") && googleData.BusinessName) {
-                      const aiResult = await findBusinessOwnerWithAI(
-                          googleData.BusinessName,
-                          googleData.Suburb || country,
-                          googleData.Website,
-                          jobId,
-                          null 
-                      );
+            let googleData = await scrapeGoogleMapsDetails(detailPage, processItem.url, jobId, country);
+            if (!googleData || !googleData.BusinessName) return null;
 
-                      if (aiResult.ownerName) {
-                          websiteData.OwnerName = aiResult.ownerName;
-                      }
-                  }
+            let websiteData = {};
+            if (googleData.Website) websiteData = await scrapeWebsiteForGoldData(detailPage, googleData.Website, jobId);
 
-                  const fullBusinessData = { ...googleData, ...websiteData };
-                  const rawCategory = businessNames && businessNames.length > 0 ? googleData.ScrapedCategory || "N/A" : processItem.category || "N/A";
-                  fullBusinessData.Category = rawCategory.replace(/"/g, "");
-                  return fullBusinessData;
-              };
+            const badKeywords = ["account", "sales", "admin", "info@", "contact", "enquiries"];
+            if (websiteData.OwnerName) {
+              const lowerName = websiteData.OwnerName.toLowerCase();
+              if (badKeywords.some(kw => lowerName.includes(kw)) || /\d/.test(lowerName)) {
+                websiteData.OwnerName = "";
+              }
+            }
 
-              return await promiseWithRetry(scrapingTask, 3, 300000, jobId, processItem.url);
+            if ((!websiteData.OwnerName || websiteData.OwnerName === "") && googleData.BusinessName) {
+              const aiResult = await findBusinessOwnerWithAI(
+                googleData.BusinessName,
+                googleData.Suburb || country,
+                googleData.Website,
+                jobId,
+                null
+              );
 
-          } catch (err) {
-              if (detailPage && !detailPage.isClosed()) { try { await detailPage.close(); } catch (e) {} }
-              return null; 
-          } finally {
-              processedInThisSession++;
-              if (detailPage && !detailPage.isClosed()) { try { await detailPage.close(); } catch (e) {} }
-          }
+              if (aiResult.ownerName) {
+                websiteData.OwnerName = aiResult.ownerName;
+              }
+            }
+
+            const fullBusinessData = { ...googleData, ...websiteData };
+            const rawCategory = businessNames && businessNames.length > 0 ? googleData.ScrapedCategory || "N/A" : processItem.category || "N/A";
+            fullBusinessData.Category = rawCategory.replace(/"/g, "");
+            return fullBusinessData;
+          };
+
+          return await promiseWithRetry(scrapingTask, 3, 300000, jobId, processItem.url);
+
+        } catch (err) {
+          if (detailPage && !detailPage.isClosed()) { try { await detailPage.close(); } catch (e) { } }
+          return null;
+        } finally {
+          processedInThisSession++;
+          if (detailPage && !detailPage.isClosed()) { try { await detailPage.close(); } catch (e) { } }
+        }
       });
 
       const results = await Promise.all(promises);
       for (const businessData of results) {
         if (businessData && allProcessedBusinesses.length < targetCount) {
-          
+
           if (exclusionList && exclusionList.length > 0) {
             const normalizedBusinessName = normalizeForExclusionCheck(businessData.BusinessName);
             const isExcluded = exclusionList.some(excludedItem => normalizedBusinessName.includes(normalizeForExclusionCheck(excludedItem)));
-            if (isExcluded) continue; 
+            if (isExcluded) continue;
           }
 
           if (radiusKm && filterCenterLat !== null && filterCenterLng !== null) {
             const businessCoords = extractCoordinatesFromUrl(businessData.GoogleMapsURL);
             if (businessCoords) {
               const distance = calculateDistance(filterCenterLat, filterCenterLng, businessCoords.lat, businessCoords.lng);
-              if (distance > (parseFloat(radiusKm) + 0.2)) continue; 
+              if (distance > (parseFloat(radiusKm) + 0.2)) continue;
             }
           }
 
@@ -390,7 +418,7 @@ const runScrapeJob = async (jobId) => {
           const address = normalizeAddress(businessData.StreetAddress);
           const email = businessData.Email1?.toLowerCase().trim() || "";
           let uniqueIdentifier = "";
-          
+
           if (phone) uniqueIdentifier = `phone::${name}::${phone}`;
           else if (address) uniqueIdentifier = `address::${name}::${address}`;
           else if (email) uniqueIdentifier = `email::${name}::${email}`;
@@ -404,78 +432,78 @@ const runScrapeJob = async (jobId) => {
           }
         }
       }
-      
-io.to(jobId).emit("progress_update", {
-    phase: 'scraping',
-    processed: processedUrls.size + i + batch.length,
-    discovered: optimizedUrlList.length, 
-    added: allProcessedBusinesses.length,
-    enriched: 0, 
-    target: finalCount,
-});
+
+      io.to(jobId).emit("progress_update", {
+        phase: 'scraping',
+        processed: processedUrls.size + i + batch.length,
+        discovered: optimizedUrlList.length,
+        added: allProcessedBusinesses.length,
+        enriched: 0,
+        target: finalCount,
+      });
     }
 
-    if (browser) try { await browser.close(); } catch (e) {}
+    if (browser) try { await browser.close(); } catch (e) { }
     browser = null;
 
     await addLog(jobId, `\n--- Phase 2: AI Enrichment Starting ---`);
 
-    const businessesNeedingAI = allProcessedBusinesses.filter(b => 
-        (!b.OwnerName || b.OwnerName.trim() === "") && 
-        b.BusinessName && 
-        b.Website &&
-        b.BusinessName.trim() !== ""
+    const businessesNeedingAI = allProcessedBusinesses.filter(b =>
+      (!b.OwnerName || b.OwnerName.trim() === "") &&
+      b.BusinessName &&
+      b.Website &&
+      b.BusinessName.trim() !== ""
     );
 
     if (businessesNeedingAI.length > 0) {
-        await addLog(jobId, `[AI] Analyzing ${businessesNeedingAI.length} businesses for owner details...`);
-        let enrichedCount = 0;
-        
-        for (let i = 0; i < businessesNeedingAI.length; i++) {
-            const business = businessesNeedingAI[i];
-            
-            if (i % 5 === 0) await addLog(jobId, `[AI] Processing batch ${i+1}/${businessesNeedingAI.length}...`);
+      await addLog(jobId, `[AI] Analyzing ${businessesNeedingAI.length} businesses for owner details...`);
+      let enrichedCount = 0;
 
-            const aiResult = await findBusinessOwnerWithAI(
-                business.BusinessName,
-                business.Suburb || country,
-                business.Website,
-                jobId,
-                null 
-            );
+      for (let i = 0; i < businessesNeedingAI.length; i++) {
+        const business = businessesNeedingAI[i];
 
-            if (aiResult.ownerName) {
-                business.OwnerName = aiResult.ownerName;
-                enrichedCount++;
-            }
-                io.to(jobId).emit("progress_update", {
-        phase: 'ai', 
-        processed: allProcessedBusinesses.length, 
-        discovered: optimizedUrlList.length,
-        added: allProcessedBusinesses.length,
-        enriched: enrichedCount, 
-        aiTarget: businessesNeedingAI.length, 
-        aiProcessed: i + 1 
-    });
+        if (i % 5 === 0) await addLog(jobId, `[AI] Processing batch ${i + 1}/${businessesNeedingAI.length}...`);
+
+        const aiResult = await findBusinessOwnerWithAI(
+          business.BusinessName,
+          business.Suburb || country,
+          business.Website,
+          jobId,
+          null
+        );
+
+        if (aiResult.ownerName) {
+          business.OwnerName = aiResult.ownerName;
+          enrichedCount++;
         }
-        
-        const { error: finalSaveError } = await supabase
-            .from("jobs")
-            .update({ results: allProcessedBusinesses })
-            .eq("id", jobId);
+        io.to(jobId).emit("progress_update", {
+          phase: 'ai',
+          processed: allProcessedBusinesses.length,
+          discovered: optimizedUrlList.length,
+          added: allProcessedBusinesses.length,
+          enriched: enrichedCount,
+          aiTarget: businessesNeedingAI.length,
+          aiProcessed: i + 1
+        });
+      }
 
-        if (finalSaveError) {
-             console.error("Failed to save AI results", finalSaveError);
-        } else {
-             await addLog(jobId, `[AI] Enrichment complete. Database updated.`);
-        }
+      const { error: finalSaveError } = await supabase
+        .from("jobs")
+        .update({ results: allProcessedBusinesses })
+        .eq("id", jobId);
+
+      if (finalSaveError) {
+        console.error("Failed to save AI results", finalSaveError);
+      } else {
+        await addLog(jobId, `[AI] Enrichment complete. Database updated.`);
+      }
     } else {
-        await addLog(jobId, `[AI] No businesses required enrichment.`);
+      await addLog(jobId, `[AI] No businesses required enrichment.`);
     }
 
     await addLog(jobId, `[System] Finalizing and sending emails...`);
     const { uniqueBusinesses, duplicates } = deduplicateBusinesses(allProcessedBusinesses);
-    
+
     if (userEmail && uniqueBusinesses.length > 0) {
       const mainSearchArea = searchParamsForEmail.area || "selected_area";
       const uniqueBusinessesForEmail = uniqueBusinesses.map((business) => ({
@@ -486,7 +514,7 @@ io.to(jobId).emit("progress_update", {
       }));
       const emailParams = { ...searchParamsForEmail };
       if (parameters.radiusKm) emailParams.radiusKm = parameters.radiusKm;
-      
+
       const emailStatus = await sendResultsByEmail(userEmail, uniqueBusinessesForEmail, emailParams, duplicatesForEmail);
       await addLog(jobId, `[Email] ${emailStatus}`);
     }
@@ -498,7 +526,7 @@ io.to(jobId).emit("progress_update", {
     await addLog(jobId, `[ERROR] Critical failure: ${error.message.split("\n")[0]}`, "error");
     await updateJobStatus(jobId, "failed");
   } finally {
-    if (browser) try { await browser.close(); } catch (e) {}
+    if (browser) try { await browser.close(); } catch (e) { }
     delete saveQueues[jobId];
     cleanupTempDirs();
   }
@@ -610,7 +638,6 @@ io.on("connection", (socket) => {
   });
 });
 
-app.use(cors());
 app.use(express.json());
 app.get("/api/config", (req, res) =>
   res.json({ googleMapsApiKey: GOOGLE_MAPS_API_KEY })
@@ -1360,10 +1387,12 @@ async function collectGoogleMapsUrlsContinuously(
     } catch (e) {
       await addLog(jobId, "   -> No Google consent dialog found, proceeding.");
     }
-    const feedSelector = 'div[role="feed"]';
+    
+    // START FIX: Wait for result links
     try {
-      await page.waitForSelector(feedSelector, { timeout: 15000 });
+      await page.waitForSelector('a[href*="/maps/place/"]', { timeout: 15000 });
       await addLog(jobId, `   -> Found results list. Scraping all items...`);
+      
       const boundingBox = countryBoundingBoxes[country.toLowerCase()];
       if (boundingBox)
         await addLog(
@@ -1390,9 +1419,14 @@ async function collectGoogleMapsUrlsContinuously(
         if (discoveredUrlSet.size > previousSize)
           consecutiveNoProgressAttempts = 0;
         else consecutiveNoProgressAttempts++;
+        
+        // Use the old scroll method but with the role="feed" selector check inside evaluate
         await page.evaluate(
-          (selector) => document.querySelector(selector)?.scrollTo(0, 999999),
-          feedSelector
+          (selector) => {
+             const feed = document.querySelector(selector);
+             if(feed) feed.scrollTo(0, 999999);
+          },
+          'div[role="feed"]'
         );
         await new Promise((r) => setTimeout(r, 2000));
       }
@@ -1416,6 +1450,7 @@ async function collectGoogleMapsUrlsContinuously(
         );
       }
     }
+    // END FIX
   } catch (error) {
     await addLog(
       jobId,
