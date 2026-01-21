@@ -447,7 +447,7 @@ const runScrapeJob = async (jobId) => {
         processed: processedUrls.size + i + batch.length,
         discovered: optimizedUrlList.length,
         added: allProcessedBusinesses.length,
-        enriched: 0,
+        enriched: allProcessedBusinesses.filter(b => b.OwnerName && b.OwnerName.trim().length > 0).length,
         target: finalCount,
       });
     }
@@ -490,7 +490,7 @@ const runScrapeJob = async (jobId) => {
           processed: allProcessedBusinesses.length,
           discovered: optimizedUrlList.length,
           added: allProcessedBusinesses.length,
-          enriched: enrichedCount,
+          enriched: allProcessedBusinesses.filter(b => b.OwnerName && b.OwnerName.trim().length > 0).length,
           aiTarget: businessesNeedingAI.length,
           aiProcessed: i + 1
         });

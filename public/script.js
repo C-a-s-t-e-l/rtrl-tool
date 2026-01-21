@@ -156,12 +156,23 @@ const socket = io(BACKEND_URL, {
       }, 15000);
     });
 
-    socket.on("queue_position", (data) => {
+socket.on("queue_position", (data) => {
+    const card = document.getElementById("status-card");
+    if (card && card.classList.contains("state-working")) {
+        return; 
+    }
+
     const subtext = document.getElementById("status-subtext");
     const headline = document.getElementById("status-headline");
+    const icon = document.getElementById("status-icon");
+
     if (headline && subtext) {
-        headline.textContent = "In Queue";
-        subtext.textContent = `You are #${data.position} in line. Please wait.`;
+        headline.textContent = "Job Queued";
+        
+        subtext.textContent = `Server is busy processing another job. You are #${data.position} in the waiting list.`;
+        
+        if (icon) icon.className = "fas fa-clock"; 
+        if (card) card.className = "status-card"; 
     }
 });
 
@@ -245,9 +256,21 @@ const socket = io(BACKEND_URL, {
               historyBadge.innerHTML =
                 '<i class="fas fa-exclamation-triangle"></i> <span>Failed</span>';
             } else if (update.status === "running") {
-              historyBadge.className = "job-status status-running";
-              historyBadge.innerHTML =
-                '<i class="fas fa-spinner fa-spin"></i> <span>Running</span>';
+                const headline = document.getElementById("status-headline");
+                const subtext = document.getElementById("status-subtext");
+                const icon = document.getElementById("status-icon");
+                const card = document.getElementById("status-card");
+                const progressWrapper = document.getElementById("status-progress-wrapper");
+
+                if (headline) headline.textContent = "Job Active";
+                if (subtext) subtext.textContent = "Initializing scraper...";
+                if (icon) icon.className = "fas fa-circle-notch fa-spin";
+                
+                if (progressWrapper) progressWrapper.style.opacity = "1";
+
+                if (card) {
+                    card.className = "status-card state-working phase-scraping";
+                }
             }
           }
         }
