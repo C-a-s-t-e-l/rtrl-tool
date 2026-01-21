@@ -617,28 +617,24 @@ io.on("connection", (socket) => {
 
   socket.on("subscribe_to_job", async ({ jobId, authToken }) => {
     if (!authToken) return;
-    const {
-      data: { user },
-    } = await supabase.auth.getUser(authToken);
+    const { data: { user } } = await supabase.auth.getUser(authToken);
     if (!user) return;
+
     const { data: job, error } = await supabase
       .from("jobs")
-      .select("id, user_id")
+      .select("*")
       .eq("id", jobId)
       .single();
+
     if (job && job.user_id === user.id) {
       socket.join(jobId);
       console.log(`User ${user.email} subscribed to updates for job ${jobId}`);
-      const { data: fullJobState } = await supabase
-        .from("jobs")
-        .select("*")
-        .eq("id", jobId)
-        .single();
-      socket.emit("job_state", fullJobState);
-    } else {
-      console.warn(
-        `SECURITY: User ${user.email} failed to subscribe to job ${jobId}`
-      );
+      
+      socket.emit("job_state", job);
+      const queueIndex = jobQueue.indexOf(jobId);
+      if (queueIndex !== -1) {
+          socket.emit("queue_position", { position: queueIndex + 1 });
+      }
     }
   });
 

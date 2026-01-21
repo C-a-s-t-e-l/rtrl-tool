@@ -142,6 +142,15 @@ const socket = io(BACKEND_URL, {
           authToken: currentUserSession.access_token,
         });
       }
+      const savedJobId = localStorage.getItem("rtrl_active_job_id");
+      if (savedJobId && currentUserSession) {
+          currentJobId = savedJobId;
+          subscribedJobId = savedJobId;
+          socket.emit("subscribe_to_job", {
+              jobId: savedJobId,
+              authToken: currentUserSession.access_token,
+          });
+      }
     });
 
     socket.on("disconnect", (reason) => {
@@ -176,44 +185,48 @@ socket.on("queue_position", (data) => {
     }
 });
 
-    socket.on("job_state", (job) => {
-      if (job.status === "running" || job.status === "queued") {
-        setUiState(true, getUiElementsForStateChange());
+socket.on("job_state", (job) => {
+      if (job.status === "completed" || job.status === "failed") {
+          localStorage.removeItem("rtrl_active_job_id");
+      }
 
+      if (job.status === "running") {
+        setUiState(true, getUiElementsForStateChange());
         currentJobId = job.id;
-        subscribedJobId = job.id;
+        
+        const card = document.getElementById("status-card");
+        const icon = document.getElementById("status-icon");
+        const headline = document.getElementById("status-headline");
+        const subtext = document.getElementById("status-subtext");
+        const progressWrapper = document.getElementById("status-progress-wrapper");
+
+        if (card) card.className = "status-card state-working phase-scraping";
+        if (icon) icon.className = "fas fa-circle-notch fa-spin";
+        if (headline) headline.textContent = "Job Active";
+        if (subtext) subtext.textContent = "Resuming session...";
+        if (progressWrapper) progressWrapper.style.opacity = "1";
+      
+      } else if (job.status === "queued") {
+        setUiState(true, getUiElementsForStateChange());
+        currentJobId = job.id;
 
         const card = document.getElementById("status-card");
         const icon = document.getElementById("status-icon");
-        const text = document.getElementById("status-text");
-        const progressWrapper = document.getElementById(
-          "status-progress-wrapper"
-        );
+        const headline = document.getElementById("status-headline");
+        const subtext = document.getElementById("status-subtext");
 
-        if (card) {
-          card.className = "status-card state-working";
-          if (icon) icon.className = "fas fa-sync-alt fa-spin";
-          if (text) text.textContent = "Resuming Session...";
-          if (progressWrapper) progressWrapper.style.opacity = "1";
-        }
+        if (headline) headline.textContent = "Job Queued";
+        if (subtext) subtext.textContent = "Checking queue position...";
+        if (icon) icon.className = "fas fa-clock";
+        if (card) card.className = "status-card";
       }
     });
 
-    socket.on("job_created", ({ jobId }) => {
-      logMessage(
-        elements.logEl,
-        "Job created successfully. Queuing...",
-        "info"
-      );
+socket.on("job_created", ({ jobId }) => {
+      logMessage(elements.logEl, "Job created successfully. Queuing...", "info");
       currentJobId = jobId;
-      if (currentUserSession && currentUserSession.user) {
-        const userId = currentUserSession.user.id;
-        localStorage.setItem(`rtrl_last_job_id_${userId}`, jobId);
-      }
-
-      if (window.rtrlApp.jobHistory) {
-        window.rtrlApp.jobHistory.fetchAndRenderJobs();
-      }
+      
+      localStorage.setItem("rtrl_active_job_id", jobId);
 
       if (subscribedJobId !== currentJobId) {
         socket.emit("subscribe_to_job", {
@@ -276,6 +289,7 @@ socket.on("queue_position", (data) => {
         }
 
         if (update.status === "completed" || update.status === "failed") {
+          localStorage.removeItem("rtrl_active_job_id");
           currentJobId = null;
           setUiState(false, getUiElementsForStateChange());
 
