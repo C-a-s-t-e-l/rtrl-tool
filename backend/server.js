@@ -70,10 +70,19 @@ const supabase = createClient(
 let isWorkerRunning = false;
 let jobQueue = [];
 
+const broadcastQueuePositions = () => {
+  jobQueue.forEach((queuedJobId, index) => {
+    io.to(queuedJobId).emit("queue_position", { position: index + 1 });
+  });
+};
+
 const processQueue = async () => {
   if (isWorkerRunning || jobQueue.length === 0) return;
   isWorkerRunning = true;
   const jobId = jobQueue.shift();
+
+  broadcastQueuePositions();
+
   console.log(`[Worker] Picked up job ${jobId}`);
   try {
     await runScrapeJob(jobId);
@@ -596,6 +605,7 @@ io.on("connection", (socket) => {
       if (insertError) throw insertError;
       socket.emit("job_created", { jobId: newJob.id });
       jobQueue.push(newJob.id);
+      socket.emit("queue_position", { position: jobQueue.length });
       processQueue();
     } catch (dbError) {
       console.error("Error creating job:", dbError);

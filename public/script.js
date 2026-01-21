@@ -156,6 +156,15 @@ const socket = io(BACKEND_URL, {
       }, 15000);
     });
 
+    socket.on("queue_position", (data) => {
+    const subtext = document.getElementById("status-subtext");
+    const headline = document.getElementById("status-headline");
+    if (headline && subtext) {
+        headline.textContent = "In Queue";
+        subtext.textContent = `You are #${data.position} in line. Please wait.`;
+    }
+});
+
     socket.on("job_state", (job) => {
       if (job.status === "running" || job.status === "queued") {
         setUiState(true, getUiElementsForStateChange());
