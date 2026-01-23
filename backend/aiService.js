@@ -1,3 +1,5 @@
+//currently using gemini -- remind to move to tavily for better hit rate for owner name,s
+
 const { GoogleGenAI } = require("@google/genai");
 require("dotenv").config();
 
