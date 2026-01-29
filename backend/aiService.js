@@ -1,131 +1,74 @@
-//currently using gemini -- remind to move to tavily for better hit rate for owner name,s
-
 const { GoogleGenAI } = require("@google/genai");
 require("dotenv").config();
 
 const apiKey = process.env.GEMINI_API_KEY;
-let aiClient = null;
-
-if (apiKey) {
-    aiClient = new GoogleGenAI({ apiKey: apiKey });
-}
-
+const aiClient = apiKey ? new GoogleGenAI({ apiKey: apiKey }) : null;
 const MODEL_NAME = "gemini-2.5-flash";
 
-let requestQueue = Promise.resolve();
-const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-
 async function findBusinessOwnerWithAI(businessName, location, website, jobId, addLog) {
-    const task = requestQueue.then(async () => {
-        if (!aiClient) return { ownerName: "", source: "" };
+    if (!aiClient) return { ownerName: "", source: "No_API_Key" };
 
-        await sleep(2000); 
+    try {
+        const prompt = `
+        TASK: Extract decision-maker data for: "${businessName}" in "${location}".
+        CONTEXT WEBSITE: "${website || "None"}"
 
-        try {
-            if (addLog) await addLog(jobId, `AI Researching: ${businessName}...`);
+        STRICT RULES:
+        1. **NO SENTENCES.** Return ONLY the name/entity.
+        2. **PRIORITY:**
+           - Priority A: Human Owner/Founder Name (e.g. "John Smith").
+           - Priority B: Legal Entity Name if human is hidden (e.g. "KGM IMPORT/EXPORT PTY LTD").
+           - Priority C: If neither found, write "Private Owner".
+        3. **DO NOT** use the text "Owner Name (Title)" in your output.
+        4. **DO NOT** leave the name field blank.
 
-            const prompt = `
-            Task: Identify the Owner, Founder, or Principal of "${businessName}" in "${location}".
-            Context Url: "${website || ""}"
-            
-            STRICT RULES:
-            1. Search Google/LinkedIn/About Us pages.
-            2. REJECT slogans (e.g. "I Am The", "With Our").
-            3. REJECT generic roles (e.g. "The Team").
-            4. FORMAT: "Name (Title)".
-            5. If multiple, separate with semicolon.
-            6. If NOT found, return: "NOT_FOUND".
-            `;
+        OUTPUT FORMAT (Pipe Separated):
+        Name or Entity | Email | Phone | Correct Business Name
 
-            const response = await aiClient.models.generateContent({
-                model: MODEL_NAME, 
-                contents: prompt,
-                config: {
-                    tools: [{ googleSearch: {} }],
-                    safetySettings: [
-                        { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
-                        { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
-                        { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
-                        { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" },
-                    ],
-                },
-            });
+        EXAMPLES:
+        Input: Cafe Azul
+        Output: KGM IMPORT/EXPORT PTY LTD | info@cafeazul.com | 0399999999 | Cafe Azul
 
-            let text = "";
-            if (response.candidates?.[0]?.content?.parts) {
-                text = response.candidates[0].content.parts
-                    .map(part => part.text || "")
-                    .join("")
-                    .trim();
+        Input: Axil Coffee
+        Output: David Makin (Founder) | contact@axil.com | 0400000000 | Axil Coffee Roasters
+        `;
+
+        const response = await aiClient.models.generateContent({
+            model: MODEL_NAME,
+            contents: [{ role: "user", parts: [{ text: prompt }] }],
+            config: {
+                tools: [{ googleSearch: {} }],
+                temperature: 0.1 
             }
+        });
 
-            if (!text) return { ownerName: "", source: "AI_Empty" };
-
-            const cleanResult = sanitizeOutput(text);
-
-            if (cleanResult.isValid) {
-                if (addLog) await addLog(jobId, `AI Found: ${cleanResult.name}`);
-                return { ownerName: cleanResult.name, source: "AI_Search" };
-            } else {
-                if (addLog) await addLog(jobId, `[AI] Result rejected: "${text.substring(0,40)}..." (${cleanResult.reason})`);
-                return { ownerName: "", source: "AI_Rejected" };
-            }
-
-        } catch (error) {
-            if (addLog) await addLog(jobId, `[AI Error] ${error.message}`);
-            return { ownerName: "", source: "AI_Failed" };
+        let responseText = "";
+        if (response.candidates && response.candidates[0] && response.candidates[0].content.parts[0]) {
+            responseText = response.candidates[0].content.parts[0].text.trim();
         }
-    });
 
-    requestQueue = task.catch(() => {});
-    return task;
-}
+        responseText = responseText.replace(/The owner is /gi, "")
+                                   .replace(/Located at /gi, "")
+                                   .replace(/Owner Name \(Title\)/gi, "Private Owner");
 
-function sanitizeOutput(rawText) {
-    let clean = rawText
-        .replace(/^FOUND:/i, "")
-        .replace(/\*/g, "") 
-        .trim();
-
-    if (clean.length > 50 && !clean.includes(";")) {
-        const sentenceMatch = clean.match(/^([A-Z][a-zA-Z'\-\s]+?) (is|was|has been) (the|identified as)/i);
-        if (sentenceMatch && sentenceMatch[1].split(" ").length <= 4) {
-            clean = `${sentenceMatch[1]} (Owner)`; 
-        }
-    }
-
-    if (clean.includes("NOT_FOUND") || clean.includes("unable to find")) {
-        return { isValid: false, reason: "Not Found" };
-    }
-
-    const garbageWords = ["welcome", "about us", "contact", "menu", "home", "our team", "meet the", "i am the", "with our", "senior /"];
-    if (garbageWords.some(word => clean.toLowerCase().startsWith(word))) {
-        return { isValid: false, reason: "Detected Slogan/Header" };
-    }
-
-    const parts = clean.split(";").map(p => p.trim());
-    const validParts = [];
-
-    for (let part of parts) {
-        if (part.includes("(") && !part.includes(")")) part += ")";
-
-        if (part.length < 4 || part.length > 60) continue;
+        const parts = responseText.split('|').map(p => p.trim());
         
-        if (!part.includes("(") || !part.includes(")")) {
-            if (part.split(" ").length >= 2 && part.split(" ").length <= 4) {
-                part = `${part} (Owner?)`; 
-            } else {
-                continue; 
-            }
+        let rawName = parts[0] || "Private Owner";
+        if (rawName.length > 50 && !rawName.includes("PTY")) {
+            rawName = "Private Owner"; 
         }
-        validParts.push(part);
-    }
 
-    if (validParts.length === 0) {
-        return { isValid: false, reason: "Bad Format" };
-    }
+        return {
+            ownerName: rawName,
+            aiEmail: (!parts[1] || parts[1].includes("NOT_FOUND")) ? "" : parts[1],
+            aiPhone: (!parts[2] || parts[2].includes("NOT_FOUND")) ? "" : parts[2],
+            resolvedName: (!parts[3] || parts[3].includes("NOT_FOUND")) ? businessName : parts[3],
+            source: "Google_Grounding_v2.5"
+        };
 
-    return { isValid: true, name: validParts.join("; ") };
+    } catch (error) {
+        return { ownerName: "Private Owner", source: "AI_Error" };
+    }
 }
 
 module.exports = { findBusinessOwnerWithAI };
