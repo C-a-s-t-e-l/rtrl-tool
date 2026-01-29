@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -290,7 +290,25 @@
                 </h3>
                 <i class="fas fa-chevron-down toggle-icon open"></i>
               </div>
+
               <div class="collapsible-content" id="bulkSearchContainer">
+                <div class="form-group toggle-wrapper">
+                  <div class="toggle-header">
+                    <label class="toggle-label-main">
+                      <i class="fas fa-robot" style="color: #8b5cf6"></i> Enable
+                      AI Enrichment
+                    </label>
+                    <label class="switch">
+                      <input type="checkbox" id="useAiToggle" checked />
+                      <span class="slider round"></span>
+                    </label>
+                  </div>
+                  <p class="toggle-description">
+                    Finds Owner Names and specialized contact info.
+                    <br /><strong>Note:</strong> Consumes API rates. Disable for
+                    faster, general scraping.
+                  </p>
+                </div>
                 <div class="form-group" id="customCategoryGroup">
                   <label for="customCategoryInput"
                     >Custom Keywords / Category</label
@@ -547,41 +565,45 @@
           </aside>
 
           <div class="results-display">
-<div id="status-card" class="status-card">
-    <div class="status-content">
-        <div class="status-icon-box">
-            <i id="status-icon" class="fas fa-play"></i>
-        </div>
-        
-        <h3 id="status-headline" class="status-headline">Ready to Start</h3>
-        <p id="status-subtext" class="status-subtext">Waiting for input...</p>
+            <div id="status-card" class="status-card">
+              <div class="status-content">
+                <div class="status-icon-box">
+                  <i id="status-icon" class="fas fa-play"></i>
+                </div>
 
-        <div class="progress-container">
-            <div class="progress-track">
-                <div id="progress-fill" class="progress-fill"></div>
-            </div>
-            <div class="progress-labels">
-                <span id="phase-label">Phase 0/3</span>
-                <span id="pct-label">0%</span>
-            </div>
-        </div>
+                <h3 id="status-headline" class="status-headline">
+                  Ready to Start
+                </h3>
+                <p id="status-subtext" class="status-subtext">
+                  Waiting for input...
+                </p>
 
-        <div class="stats-grid">
-            <div class="stat-item">
-                <span id="stat-found" class="stat-value">0</span>
-                <span class="stat-label">Found</span>
+                <div class="progress-container">
+                  <div class="progress-track">
+                    <div id="progress-fill" class="progress-fill"></div>
+                  </div>
+                  <div class="progress-labels">
+                    <span id="phase-label">Phase 0/3</span>
+                    <span id="pct-label">0%</span>
+                  </div>
+                </div>
+
+                <div class="stats-grid">
+                  <div class="stat-item">
+                    <span id="stat-found" class="stat-value">0</span>
+                    <span class="stat-label">Found</span>
+                  </div>
+                  <div class="stat-item">
+                    <span id="stat-processed" class="stat-value">0</span>
+                    <span class="stat-label">Scraped</span>
+                  </div>
+                  <div class="stat-item">
+                    <span id="stat-enriched" class="stat-value">0</span>
+                    <span class="stat-label">Enriched</span>
+                  </div>
+                </div>
+              </div>
             </div>
-            <div class="stat-item">
-                <span id="stat-processed" class="stat-value">0</span>
-                <span class="stat-label">Scraped</span>
-            </div>
-            <div class="stat-item">
-                <span id="stat-enriched" class="stat-value">0</span>
-                <span class="stat-label">Enriched</span>
-            </div>
-        </div>
-    </div>
-</div>
 
             <div class="card" id="jobHistoryCard">
               <div class="card-header results-header">

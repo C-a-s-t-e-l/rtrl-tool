@@ -1,10 +1,9 @@
 document.addEventListener("DOMContentLoaded", () => {
-    // --- CONFIGURATION ---
+
     const BACKEND_URL = "https://backend.rtrlprospector.space";
     const SUPABASE_URL = "https://qbktnernawpprarckvzx.supabase.co";
     const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFia3RuZXJuYXdwcHJhcmNrdnp4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTc1OTQ3NTgsImV4cCI6MjA3MzE3MDc1OH0.9asOynIZEOqc8f_mNTjWTNXIPK1ph6IQF6ADbYdFclM";
   
-    // --- INITIALIZATION ---
     const { createClient } = supabase;
     const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   
@@ -12,7 +11,6 @@ document.addEventListener("DOMContentLoaded", () => {
     let currentJobId = null;
     let subscribedJobId = null;
   
-    // Global State Container
     window.rtrlApp = {
       ...window.rtrlApp,
       state: {},
@@ -29,7 +27,6 @@ document.addEventListener("DOMContentLoaded", () => {
     };
   
     function initializeMainApp() {
-      // Load Google Maps API from Backend Config
       async function loadGoogleMaps() {
         try {
           const response = await fetch(`${BACKEND_URL}/api/config`, {
@@ -51,9 +48,9 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       }
   
-      // --- DOM ELEMENTS ---
       const elements = {
         startButton: document.getElementById("startButton"),
+        useAiToggle: document.getElementById("useAiToggle"), 
         primaryCategorySelect: document.getElementById("primaryCategorySelect"),
         subCategoryGroup: document.getElementById("subCategoryGroup"),
         subCategoryCheckboxContainer: document.getElementById("subCategoryCheckboxContainer"),
@@ -101,10 +98,23 @@ document.addEventListener("DOMContentLoaded", () => {
         signupEmailInput: document.getElementById("signup-email-input"),
         signupPasswordInput: document.getElementById("signup-password-input"),
         signupEmailBtn: document.getElementById("signup-email-btn"),
-        // Progress Bars & Stats
         progressBar: document.getElementById("progressBar"),
         progressPercentage: document.getElementById("progressPercentage"),
       };
+
+          if (elements.useAiToggle) {
+        const savedAiState = localStorage.getItem("rtrl_use_ai_enrichment");
+        
+        if (savedAiState !== null) {
+            elements.useAiToggle.checked = (savedAiState === "true");
+        } else {
+            elements.useAiToggle.checked = true; 
+        }
+
+        elements.useAiToggle.addEventListener("change", (e) => {
+            localStorage.setItem("rtrl_use_ai_enrichment", e.target.checked);
+        });
+    }
   
       // --- SOCKET.IO CONNECTION ---
       const socket = io(BACKEND_URL, {
@@ -1112,7 +1122,6 @@ document.addEventListener("DOMContentLoaded", () => {
   
         setUiState(true, getUiElementsForStateChange());
   
-        // Reset Dashboard UI
         const headline = document.getElementById("status-headline");
         const subtext = document.getElementById("status-subtext");
         const icon = document.getElementById("status-icon");
@@ -1127,7 +1136,6 @@ document.addEventListener("DOMContentLoaded", () => {
              if (progressWrapper) progressWrapper.style.opacity = "1";
         }
   
-        // Reset stats
         document.getElementById("stat-found").textContent = "0";
         document.getElementById("stat-processed").textContent = "0";
         document.getElementById("stat-enriched").textContent = "0";
@@ -1146,11 +1154,14 @@ document.addEventListener("DOMContentLoaded", () => {
           .filter((v) => v !== "select_all");
         const exclusionList = window.rtrlApp.exclusionFeature.getExclusionList();
         const modifierText = elements.categoryModifierInput ? elements.categoryModifierInput.value.trim() : "";
+        const useAiEnrichment = elements.useAiToggle ? elements.useAiToggle.checked : true;
+
         const scrapeParams = {
           country: elements.countryInput.value,
           businessNames: businessNames.length > 0 ? businessNames : [],
           userEmail: elements.userEmailInput.value.trim(),
           exclusionList: exclusionList,
+          useAiEnrichment: useAiEnrichment, 
         };
   
         if (window.rtrlApp.state.selectedAnchorPoint) {

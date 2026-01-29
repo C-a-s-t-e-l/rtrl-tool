@@ -175,7 +175,7 @@ const runScrapeJob = async (jobId) => {
 
   const { parameters } = job;
   const {
-    categoriesToLoop, location, postalCode, country, count, businessNames, anchorPoint, radiusKm, userEmail, searchParamsForEmail, exclusionList,
+    categoriesToLoop, location, postalCode, country, count, businessNames, anchorPoint, radiusKm, userEmail, searchParamsForEmail, exclusionList, useAiEnrichment 
   } = parameters;
 
   let filterCenterLat = null, filterCenterLng = null;
@@ -271,20 +271,30 @@ const runScrapeJob = async (jobId) => {
         const promises = batch.map(async (processItem) => {
             let detailPage = null;
             try {
-                const task = async () => {
+const task = async () => {
                     detailPage = await browser.newPage();
                     await detailPage.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36");
 
                     let googleData = await scrapeGoogleMapsDetails(detailPage, processItem.url, jobId, country);
                     if (!googleData || !googleData.BusinessName) return null;
 
-                    const aiResult = await findBusinessOwnerWithAI(
-                        googleData.BusinessName,
-                        googleData.Suburb || country,
-                        googleData.Website,
-                        jobId,
-                        null 
-                    );
+                    let aiResult = {
+                        ownerName: "",
+                        aiEmail: "",
+                        aiPhone: "",
+                        resolvedName: googleData.BusinessName,
+                        source: "Skipped"
+                    };
+
+                    if (useAiEnrichment !== false) {
+                        aiResult = await findBusinessOwnerWithAI(
+                            googleData.BusinessName,
+                            googleData.Suburb || country,
+                            googleData.Website,
+                            jobId,
+                            null 
+                        );
+                    }
 
                     let websiteData = { OwnerName: "", Email1: "", Phone: "" };
                     if (googleData.Website) {
