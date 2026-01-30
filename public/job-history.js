@@ -90,7 +90,7 @@ function renderJob(job) {
                 <div style="line-height: 1.6;">
                     <span style="color: #64748b; font-weight: 700; text-transform: uppercase; font-size: 0.7rem;">Keywords & Industry</span><br>
                     <strong>Method:</strong> ${keywordType}<br>
-                    <strong>Items:</strong> ${keywordList}
+                    <strong>Keywords:</strong> ${keywordList}
                 </div>
                 <div style="line-height: 1.6;">
                     <span style="color: #64748b; font-weight: 700; text-transform: uppercase; font-size: 0.7rem;">System Settings</span><br>
