@@ -31,21 +31,21 @@ function renderJob(job) {
     const date = new Date(created_at).toLocaleString();
     const totalResults = results || 0;
 
-    let searchType = "📍 Suburb/Area Search";
+    let searchType = "Suburb/Area Search";
     let locationDetail = s.area || p.location || "N/A";
 
     if (p.radiusKm) {
-        searchType = "⭕ Radius Search";
+        searchType = "Radius Search";
         locationDetail = `${p.radiusKm} km radius around ${s.area || 'selected point'}`;
     } else if (p.postalCode && p.postalCode.length > 0) {
-        searchType = "📮 Postcode Search";
+        searchType = "Postcode Search";
         locationDetail = `Postcodes: ${p.postalCode.join(", ")}`;
     } else if (p.businessNames && p.businessNames.length > 0) {
-        searchType = "🏢 Specific Name Search";
+        searchType = "Specific Name Search";
         locationDetail = `${p.businessNames.length} individual business names`;
     }
 
-    const keywordType = s.customCategory ? "⌨️ Custom Keyword Search" : "🗂️ Preset Category Search";
+    const keywordType = s.customCategory ? "Custom Keyword Search" : "Preset Category Search";
     const keywordList = p.categoriesToLoop ? p.categoriesToLoop.join(", ") : (p.businessNames ? "N/A (Name Search)" : "None");
 
     let statusIcon = 'fa-clock', statusClass = 'status-queued', statusText = 'Queued';
@@ -94,7 +94,7 @@ function renderJob(job) {
                 </div>
                 <div style="line-height: 1.6;">
                     <span style="color: #64748b; font-weight: 700; text-transform: uppercase; font-size: 0.7rem;">System Settings</span><br>
-                    <strong>AI Enrichment:</strong> ${p.useAiEnrichment ? "✅ ENABLED (High Detail)" : "❌ DISABLED (Basic Info)"}<br>
+                    <strong>AI Enrichment:</strong> ${p.useAiEnrichment ? "ENABLED (High Detail)" : "DISABLED (Basic Info)"}<br>
                     <strong>Limit:</strong> ${p.count === -1 ? "Find All Available" : p.count + " Businesses"}
                 </div>
             </div>
