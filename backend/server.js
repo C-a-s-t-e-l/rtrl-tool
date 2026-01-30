@@ -856,7 +856,6 @@ app.post("/api/jobs/:jobId/send-quick-body", async (req, res) => {
         }
 
         emailBody += `___________________________________\n`;
-        emailBody += `Kind Regards\n`;
 
         const mailOptions = {
             from: `"RTRL Prospector" <${process.env.EMAIL_USER}>`,
