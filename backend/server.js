@@ -807,6 +807,82 @@ app.get("/api/jobs/:jobId/download/:fileType", async (req, res) => {
     }
 });
 
+app.post("/api/jobs/:jobId/send-quick-body", async (req, res) => {
+    try {
+        const { jobId } = req.params;
+        const authHeader = req.headers.authorization;
+        if (!authHeader) return res.status(401).json({ error: 'Unauthorized' });
+        
+        const token = authHeader.split(' ')[1];
+        const { data: { user }, error: userError } = await supabase.auth.getUser(token);
+        if (userError || !user) return res.status(401).json({ error: 'Unauthorized' });
+
+        const { data: job, error: jobError } = await supabase
+            .from('jobs')
+            .select('results, parameters')
+            .eq('id', jobId)
+            .single();
+
+        if (jobError || !job) return res.status(404).json({ error: 'Job not found' });
+
+        const results = job.results || [];
+        const categoriesMap = {};
+
+        results.forEach(item => {
+            if (item.Phone) {
+                let num = String(item.Phone).replace(/\D/g, '');
+                if (num.startsWith('614')) {
+                    num = '0' + num.substring(2);
+                }
+                
+                if (num.startsWith('04')) {
+                    const cat = item.Category || 'General';
+                    if (!categoriesMap[cat]) {
+                        categoriesMap[cat] = new Set();
+                    }
+                    categoriesMap[cat].add(num);
+                }
+            }
+        });
+
+        let emailBody = `Search: ${job.parameters.searchParamsForEmail.area}\n`;
+        emailBody += `Total Mobile Leads: ${Object.values(categoriesMap).reduce((acc, set) => acc + set.size, 0)}\n`;
+        emailBody += `___________________________________\n\n`;
+
+        for (const [category, phones] of Object.entries(categoriesMap)) {
+            emailBody += `CATEGORY: ${category.toUpperCase()}\n`;
+            emailBody += Array.from(phones).join('\n');
+            emailBody += `\n\n`;
+        }
+
+        emailBody += `___________________________________\n`;
+        emailBody += `Kind Regards\n`;
+
+        const mailOptions = {
+            from: `"RTRL Prospector" <${process.env.EMAIL_USER}>`,
+            to: job.parameters.userEmail,
+            subject: `Mobile List: ${job.parameters.searchParamsForEmail.area}`,
+            text: emailBody
+        };
+
+        const nodemailer = require('nodemailer');
+        const transporter = nodemailer.createTransport({
+            service: 'gmail',
+            auth: {
+                user: process.env.EMAIL_USER,
+                pass: process.env.EMAIL_PASS,
+            },
+        });
+
+        await transporter.sendMail(mailOptions);
+        res.status(200).json({ success: true });
+
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
 app.post("/api/jobs/:jobId/resend-email", async (req, res) => {
     try {
         const { jobId } = req.params;
