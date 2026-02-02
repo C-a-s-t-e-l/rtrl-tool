@@ -221,48 +221,45 @@ document.addEventListener("DOMContentLoaded", () => {
       handleScrapeError({ error });
     });
 
-    socket.on("job_update", (update) => {
-      if (update.status) {
-        if (elements.logEl)
-          logMessage(elements.logEl, `Job status: ${update.status}`, "info");
-        if (window.rtrlApp.jobHistory)
-          window.rtrlApp.jobHistory.fetchAndRenderJobs();
-        const targetId = update.id || currentJobId;
-        if (targetId) {
-          const historyBadge = document.getElementById(
-            `job-status-${targetId}`,
-          );
-          if (historyBadge) {
-            if (update.status === "completed") {
-              historyBadge.className = "job-status status-completed";
-              historyBadge.innerHTML =
-                '<i class="fas fa-check-circle"></i> <span>Completed</span>';
-            } else if (update.status === "failed") {
-              historyBadge.className = "job-status status-failed";
-              historyBadge.innerHTML =
-                '<i class="fas fa-exclamation-triangle"></i> <span>Failed</span>';
-            } else if (update.status === "running") {
-              historyBadge.className = "job-status status-running";
-              historyBadge.innerHTML =
-                '<i class="fas fa-spinner fa-spin"></i> <span>Running</span>';
+socket.on("job_update", (update) => {
+        if (update.status) {
+          if (elements.logEl) {
+            logMessage(elements.logEl, `Job status: ${update.status}`, "info");
+          }
+
+          if (window.rtrlApp.jobHistory) {
+            window.rtrlApp.jobHistory.fetchAndRenderJobs();
+          }
+
+          const targetId = update.id || currentJobId;
+          if (targetId) {
+            const historyBadge = document.getElementById(`job-status-${targetId}`);
+            if (historyBadge) {
+              if (update.status === "completed") {
+                historyBadge.className = "job-status status-completed";
+                historyBadge.innerHTML = '<i class="fas fa-check-circle"></i> <span>Completed</span>';
+              } else if (update.status === "failed") {
+                historyBadge.className = "job-status status-failed";
+                historyBadge.innerHTML = '<i class="fas fa-exclamation-triangle"></i> <span>Failed</span>';
+              } else if (update.status === "running") {
+                historyBadge.className = "job-status status-running";
+                historyBadge.innerHTML = '<i class="fas fa-spinner fa-spin"></i> <span>Running</span>';
+              }
+            }
+          }
+
+          if (update.id === currentJobId || (update.status === "completed" && currentJobId)) {
+            if (update.status === "running") {
+              updateDashboardUi("running");
+            } else if (update.status === "completed" || update.status === "failed") {
+              localStorage.removeItem("rtrl_active_job_id");
+              currentJobId = null;
+              setUiState(false, getUiElementsForStateChange());
+              updateDashboardUi(update.status);
             }
           }
         }
-        if (update.id === currentJobId) {
-          if (update.status === "running") {
-            updateDashboardUi("running");
-          } else if (
-            update.status === "completed" ||
-            update.status === "failed"
-          ) {
-            localStorage.removeItem("rtrl_active_job_id");
-            currentJobId = null;
-            setUiState(false, getUiElementsForStateChange());
-            updateDashboardUi(update.status);
-          }
-        }
-      }
-    });
+      });
 
     socket.on("progress_update", (data) => {
       const {
@@ -316,38 +313,46 @@ document.addEventListener("DOMContentLoaded", () => {
         document.getElementById("stat-enriched").textContent = enriched || 0;
     });
 
-    function updateDashboardUi(status, data = {}) {
-      const headline = document.getElementById("status-headline");
-      const subtext = document.getElementById("status-subtext");
-      const icon = document.getElementById("status-icon");
-      const card = document.getElementById("status-card");
-      if (!headline || !card) return;
-      card.className = "status-card";
-      if (status === "running") {
-        card.classList.add("state-working", "phase-scraping");
-        headline.textContent = "Job Active";
-        subtext.textContent = "Processing data...";
-        if (icon) icon.className = "fas fa-circle-notch fa-spin";
-      } else if (status === "queued") {
-        headline.textContent = "Job Queued";
-        subtext.textContent = `Server is busy. You are #${data.position || "?"} in the waiting list.`;
-        if (icon) icon.className = "fas fa-clock";
-      } else if (status === "completed") {
-        card.classList.add("phase-complete");
-        headline.textContent = "Job Completed";
-        subtext.textContent = "Check your email for results.";
-        if (icon) icon.className = "fas fa-check-circle";
-        document.getElementById("progress-fill").style.width = "100%";
-        document.getElementById("pct-label").textContent = "100%";
-        document.getElementById("phase-label").textContent =
-          "Phase 3/3: Complete";
-      } else if (status === "failed") {
-        card.classList.add("phase-error");
-        headline.textContent = "Job Failed";
-        subtext.textContent = "Please check job history or try again.";
-        if (icon) icon.className = "fas fa-times-circle";
+function updateDashboardUi(status, data = {}) {
+        const headline = document.getElementById("status-headline");
+        const subtext = document.getElementById("status-subtext");
+        const icon = document.getElementById("status-icon");
+        const card = document.getElementById("status-card");
+        
+        if (!headline || !card) return;
+
+        card.className = "status-card";
+
+        if (status === "running") {
+          card.classList.add("state-working", "phase-scraping");
+          headline.textContent = "Job Active";
+          subtext.textContent = "Processing data...";
+          if (icon) icon.className = "fas fa-circle-notch fa-spin";
+        } else if (status === "queued") {
+          headline.textContent = "Job Queued";
+          subtext.textContent = `Server is busy. You are #${data.position || "?"} in the waiting list.`;
+          if (icon) icon.className = "fas fa-clock";
+        } else if (status === "completed") {
+          card.classList.add("phase-complete");
+          headline.textContent = "Job Completed";
+          subtext.textContent = "Check your email for results.";
+          if (icon) icon.className = "fas fa-check-circle";
+          
+          const fill = document.getElementById("progress-fill");
+          const pct = document.getElementById("pct-label");
+          const phase = document.getElementById("phase-label");
+          
+          if (fill) fill.style.width = "100%";
+          if (pct) pct.textContent = "100%";
+          if (phase) phase.textContent = "Phase 3/3: Complete";
+          
+        } else if (status === "failed") {
+          card.classList.add("phase-error");
+          headline.textContent = "Job Failed";
+          subtext.textContent = "Please check job history or try again.";
+          if (icon) icon.className = "fas fa-times-circle";
+        }
       }
-    }
 
     function updateStatusCardPhase(phase) {
       const card = document.getElementById("status-card");
