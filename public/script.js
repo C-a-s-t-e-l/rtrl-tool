@@ -13,10 +13,17 @@ document.addEventListener("DOMContentLoaded", () => {
 
   window.rtrlApp = {
     ...window.rtrlApp,
-    state: {},
+    state: {
+      selectedAnchorPoint: null,
+      currentSearchParameters: {},
+      googleMapsService: null,
+      googleMapsGeocoder: null,
+    },
     timers: {},
     postalCodes: [],
     customKeywords: [],
+    map: null,
+    searchCircle: null,
     startResearch: () => {},
     fetchPlaceSuggestions: () => {},
     handleLocationSelection: () => {},
@@ -391,75 +398,72 @@ document.addEventListener("DOMContentLoaded", () => {
     setupPasswordToggle("toggle-login-password", "password-input");
     setupPasswordToggle("toggle-signup-password", "signup-password-input");
 
-    if (elements.loginGoogleBtn) {
-      elements.loginGoogleBtn.addEventListener("click", async () => {
+    document
+      .getElementById("login-google")
+      ?.addEventListener("click", async () => {
         await supabaseClient.auth.signInWithOAuth({
           provider: "google",
           options: { redirectTo: window.location.origin },
         });
       });
-    }
-
-    if (elements.toSignupBtn) {
-      elements.toSignupBtn.addEventListener("click", (e) => {
-        e.preventDefault();
-        elements.flipCardContainer.classList.add("flipped");
+    document
+      .getElementById("login-microsoft")
+      ?.addEventListener("click", async () => {
+        await supabaseClient.auth.signInWithOAuth({
+          provider: "azure",
+          options: { scopes: "email", redirectTo: window.location.origin },
+        });
       });
-    }
-    if (elements.toSigninBtn) {
-      elements.toSigninBtn.addEventListener("click", (e) => {
-        e.preventDefault();
+    document.getElementById("to-signup-btn")?.addEventListener("click", (e) => {
+      e.preventDefault();
+      elements.flipCardContainer.classList.add("flipped");
+    });
+    document.getElementById("to-signin-btn")?.addEventListener("click", (e) => {
+      e.preventDefault();
+      elements.flipCardContainer.classList.remove("flipped");
+    });
+
+    elements.loginEmailBtn?.addEventListener("click", async () => {
+      const email = elements.emailInputAuth.value;
+      const password = elements.passwordInputAuth.value;
+      if (!email || !password)
+        return alert("Please enter both email and password.");
+      elements.loginEmailBtn.disabled = true;
+      const { error } = await supabaseClient.auth.signInWithPassword({
+        email,
+        password,
+      });
+      if (error) {
+        alert(error.message);
+        elements.loginEmailBtn.disabled = false;
+      }
+    });
+
+    elements.signupEmailBtn?.addEventListener("click", async () => {
+      const email = elements.signupEmailInput.value;
+      const password = elements.signupPasswordInput.value;
+      if (!email || !password)
+        return alert("Please enter both email and password.");
+      elements.signupEmailBtn.disabled = true;
+      const { data, error } = await supabaseClient.auth.signUp({
+        email,
+        password,
+      });
+      if (error) {
+        alert(error.message);
+        elements.signupEmailBtn.disabled = false;
+      } else if (!data.session) {
+        alert("Check email!");
         elements.flipCardContainer.classList.remove("flipped");
-      });
-    }
+        elements.signupEmailBtn.disabled = false;
+      }
+    });
 
-    if (elements.loginEmailBtn) {
-      elements.loginEmailBtn.addEventListener("click", async () => {
-        const email = elements.emailInputAuth.value;
-        const password = elements.passwordInputAuth.value;
-        if (!email || !password)
-          return alert("Please enter both email and password.");
-        elements.loginEmailBtn.disabled = true;
-        const { error } = await supabaseClient.auth.signInWithPassword({
-          email,
-          password,
-        });
-        if (error) {
-          alert(error.message);
-          elements.loginEmailBtn.disabled = false;
-        }
-      });
-    }
-
-    if (elements.signupEmailBtn) {
-      elements.signupEmailBtn.addEventListener("click", async () => {
-        const email = elements.signupEmailInput.value;
-        const password = elements.signupPasswordInput.value;
-        if (!email || !password)
-          return alert("Please enter both email and password.");
-        elements.signupEmailBtn.disabled = true;
-        const { data, error } = await supabaseClient.auth.signUp({
-          email,
-          password,
-        });
-        if (error) {
-          alert(error.message);
-          elements.signupEmailBtn.disabled = false;
-        } else if (!data.session) {
-          alert("Check email!");
-          elements.flipCardContainer.classList.remove("flipped");
-          elements.signupEmailBtn.disabled = false;
-        }
-      });
-    }
-
-    if (elements.logoutButton) {
-      elements.logoutButton.addEventListener("click", async (e) => {
-        e.preventDefault();
-        await supabaseClient.auth.signOut();
-        window.location.reload();
-      });
-    }
+    elements.logoutButton?.addEventListener("click", async (e) => {
+      e.preventDefault();
+      await supabaseClient.auth.signOut();
+      window.location.reload();
+    });
 
     supabaseClient.auth.onAuthStateChange(async (event, session) => {
       currentUserSession = session;
@@ -576,15 +580,9 @@ document.addEventListener("DOMContentLoaded", () => {
       });
     }
 
-    window.rtrlApp.state = {
-      selectedAnchorPoint: null,
-      currentSearchParameters: {},
-      googleMapsService: null,
-      googleMapsGeocoder: null,
-    };
-
     const categories = {
       "Select Category": [],
+      "Alterations and tailoring": [],
       "Baby and nursery": [
         "ALL",
         "Baby and infant toys",
@@ -593,6 +591,7 @@ document.addEventListener("DOMContentLoaded", () => {
         "Prams, strollers and carriers",
         "Tableware and feeding",
       ],
+      Banks: [],
       "Beauty and wellness": [
         "ALL",
         "Bath and body",
@@ -611,6 +610,8 @@ document.addEventListener("DOMContentLoaded", () => {
         "Office supplies",
         "Stationery",
       ],
+      "Car and auto": [],
+      Childcare: [],
       "Clothing and accessories": [
         "ALL",
         "Babies' and toddlers'",
@@ -621,6 +622,11 @@ document.addEventListener("DOMContentLoaded", () => {
         "Sunglasses",
         "Women's fashion",
       ],
+      "Community services": [],
+      "Department stores": [],
+      "Designer and boutique": [],
+      "Discount and variety": [],
+      "Dry cleaning": [],
       "Electronics and technology": [
         "ALL",
         "Cameras",
@@ -639,6 +645,7 @@ document.addEventListener("DOMContentLoaded", () => {
         "Learning and education",
         "Music",
       ],
+      Florists: [],
       "Food and drink": [
         "ALL",
         "Asian",
@@ -665,6 +672,7 @@ document.addEventListener("DOMContentLoaded", () => {
         "Sandwiches and salads",
         "Takeaway",
       ],
+      "Foreign currency exchange": [],
       "Fresh food and groceries": [
         "ALL",
         "Bakeries",
@@ -719,6 +727,14 @@ document.addEventListener("DOMContentLoaded", () => {
         "Luxury",
         "Premium brands",
       ],
+      "Pawn brokers": [],
+      "Phone repairs": [],
+      "Photographic services": [],
+      "Post office": [],
+      "Power, gas and communication services": [],
+      "Professional services": [],
+      "Real estate agents": [],
+      "Shoe repair and key cutting": [],
       "Sporting goods": [
         "ALL",
         "Activewear",
@@ -726,6 +742,7 @@ document.addEventListener("DOMContentLoaded", () => {
         "Outdoors and camping",
         "Tech and wearables",
       ],
+      Tobacconists: [],
       "Toys and hobbies": [
         "ALL",
         "Arts and crafts",
@@ -733,6 +750,7 @@ document.addEventListener("DOMContentLoaded", () => {
         "Hobbies",
         "Toys",
       ],
+      "Travel agents": [],
     };
     const countries = [
       { value: "AU", text: "Australia" },
@@ -743,14 +761,23 @@ document.addEventListener("DOMContentLoaded", () => {
       { value: "PH", text: "Philippines" },
     ];
 
+    async function getPlaceDetails(placeId) {
+      return new Promise((resolve, reject) => {
+        if (!window.rtrlApp.state.googleMapsGeocoder) return reject();
+        window.rtrlApp.state.googleMapsGeocoder.geocode(
+          { placeId },
+          (results, status) => {
+            if (status === google.maps.GeocoderStatus.OK && results[0])
+              resolve(results[0]);
+            else reject();
+          },
+        );
+      });
+    }
+
     window.rtrlApp.handleLocationSelection = async (item) => {
       try {
-        const details = await new Promise((r) =>
-          window.rtrlApp.state.googleMapsGeocoder.geocode(
-            { placeId: item.place_id },
-            (results) => r(results[0]),
-          ),
-        );
+        const details = await getPlaceDetails(item.place_id);
         const countryName =
           (
             details.address_components.find((c) =>
@@ -766,12 +793,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     window.rtrlApp.handleAnchorPointSelection = async (item) => {
       try {
-        const details = await new Promise((r) =>
-          window.rtrlApp.state.googleMapsGeocoder.geocode(
-            { placeId: item.place_id },
-            (results) => r(results[0]),
-          ),
-        );
+        const details = await getPlaceDetails(item.place_id);
         const { lat, lng } = details.geometry.location;
         const newCenter = L.latLng(lat(), lng());
         window.rtrlApp.state.selectedAnchorPoint = {
@@ -788,12 +810,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     window.rtrlApp.handlePostalCodeSelection = async (item) => {
       try {
-        const details = await new Promise((r) =>
-          window.rtrlApp.state.googleMapsGeocoder.geocode(
-            { placeId: item.place_id },
-            (results) => r(results[0]),
-          ),
-        );
+        const details = await getPlaceDetails(item.place_id);
         const pc = details.address_components.find((c) =>
           c.types.includes("postal_code"),
         );
@@ -814,8 +831,9 @@ document.addEventListener("DOMContentLoaded", () => {
         (c) =>
           c.text.toLowerCase() === elements.countryInput.value.toLowerCase(),
       )?.value;
+      if (!iso || !window.rtrlApp.state.googleMapsGeocoder) return;
       window.rtrlApp.state.googleMapsGeocoder.geocode(
-        { componentRestrictions: { country: iso || "AU", postalCode: v } },
+        { componentRestrictions: { country: iso, postalCode: v } },
         (res, status) => {
           if (status === google.maps.GeocoderStatus.OK && res[0]) {
             const pcComp = res[0].address_components.find((c) =>
@@ -951,9 +969,14 @@ document.addEventListener("DOMContentLoaded", () => {
       if (ns.length > 0) p.count = -1;
       else if (window.rtrlApp.customKeywords.length > 0)
         p.categoriesToLoop = window.rtrlApp.customKeywords;
-      else
-        p.categoriesToLoop =
-          ss.length > 0 ? ss : [elements.primaryCategorySelect.value];
+      else {
+        let b = ss.length > 0 ? ss : [elements.primaryCategorySelect.value];
+        p.categoriesToLoop = elements.categoryModifierInput.value.trim()
+          ? b.map(
+              (c) => `"${elements.categoryModifierInput.value.trim()}" ${c}`,
+            )
+          : b;
+      }
       if (ns.length === 0)
         p.count =
           elements.findAllBusinessesCheckbox.checked ||
@@ -966,7 +989,15 @@ document.addEventListener("DOMContentLoaded", () => {
           ? window.rtrlApp.postalCodes.join("_")
           : elements.locationInput.value.split(",")[0];
       p.searchParamsForEmail = {
+        primaryCategory: elements.primaryCategorySelect.value,
+        subCategory: ss.length > 1 ? "multiple_subcategories" : ss[0] || "",
+        subCategoryList: ss,
+        customCategory:
+          window.rtrlApp.customKeywords.length > 0
+            ? window.rtrlApp.customKeywords.join(", ")
+            : elements.categoryModifierInput.value,
         area: areaKey,
+        postcodes: window.rtrlApp.postalCodes,
         country: elements.countryInput.value,
       };
       socket.emit("start_scrape_job", {
@@ -1052,10 +1083,23 @@ document.addEventListener("DOMContentLoaded", () => {
       s: document.getElementById("status-subtext"),
       i: document.getElementById("status-icon"),
       c: document.getElementById("status-card"),
+      f: document.getElementById("progress-fill"),
+      p: document.getElementById("pct-label"),
+      ph: document.getElementById("phase-label"),
+      fnd: document.getElementById("stat-found"),
+      prc: document.getElementById("stat-processed"),
+      enr: document.getElementById("stat-enriched"),
     };
     if (ui.c) ui.c.className = "status-card";
     if (ui.h) ui.h.textContent = "Search Parameters Loaded";
+    if (ui.s) ui.s.textContent = "Sidebar updated from history.";
     if (ui.i) ui.i.className = "fas fa-file-import";
+    if (ui.f) ui.f.style.width = "0%";
+    if (ui.p) ui.p.textContent = "0%";
+    if (ui.ph) ui.ph.textContent = "Phase 0/3: Ready";
+    if (ui.fnd) ui.fnd.textContent = "0";
+    if (ui.prc) ui.prc.textContent = "0";
+    if (ui.enr) ui.enr.textContent = "0";
     window.rtrlApp.postalCodes.length = 0;
     window.rtrlApp.customKeywords.length = 0;
     document.querySelectorAll(".tag").forEach((t) => t.remove());
@@ -1107,7 +1151,7 @@ document.addEventListener("DOMContentLoaded", () => {
           window.rtrlApp.map.invalidateSize();
           window.rtrlApp.map.setView(nc, 11);
           window.rtrlApp.drawSearchCircle(nc);
-        }, 100);
+        }, 150);
       }
     } else {
       el.location.value = p.location || "";
