@@ -673,7 +673,7 @@ document.addEventListener("DOMContentLoaded", () => {
   
     initializeMainApp();
 
-    window.rtrlApp.cloneJobIntoForm = (params) => {
+window.rtrlApp.cloneJobIntoForm = (params) => {
         const el = {
             primaryCat: document.getElementById("primaryCategorySelect"),
             customCat: document.getElementById("customCategoryInput"),
@@ -686,13 +686,44 @@ document.addEventListener("DOMContentLoaded", () => {
             radius: document.getElementById("radiusSlider"),
             aiToggle: document.getElementById("useAiToggle")
         };
+
+        const ui = {
+            headline: document.getElementById("status-headline"),
+            subtext: document.getElementById("status-subtext"),
+            icon: document.getElementById("status-icon"),
+            card: document.getElementById("status-card"),
+            fill: document.getElementById("progress-fill"),
+            pct: document.getElementById("pct-label"),
+            phase: document.getElementById("phase-label"),
+            found: document.getElementById("stat-found"),
+            processed: document.getElementById("stat-processed"),
+            enriched: document.getElementById("stat-enriched")
+        };
+
+        if (ui.card) ui.card.className = "status-card";
+        if (ui.headline) ui.headline.textContent = "Search Parameters Loaded";
+        if (ui.subtext) ui.subtext.textContent = "Sidebar updated from history. Click Start Research to begin.";
+        if (ui.icon) ui.icon.className = "fas fa-file-import";
+        if (ui.fill) ui.fill.style.width = "0%";
+        if (ui.pct) ui.pct.textContent = "0%";
+        if (ui.phase) ui.phase.textContent = "Phase 0/3: Ready";
+        if (ui.found) ui.found.textContent = "0";
+        if (ui.processed) ui.processed.textContent = "0";
+        if (ui.enriched) ui.enriched.textContent = "0";
+
         window.rtrlApp.postalCodes.length = 0;
         window.rtrlApp.customKeywords.length = 0;
         document.querySelectorAll(".tag").forEach(tag => tag.remove());
+
         if (el.aiToggle) el.aiToggle.checked = params.useAiEnrichment !== false;
         el.country.value = params.country || "Australia";
-        if (params.count === -1) { el.findAll.checked = true; el.count.value = ""; el.count.disabled = true; }
-        else { el.findAll.checked = false; el.count.value = params.count; el.count.disabled = false; }
+
+        if (params.count === -1) { 
+            el.findAll.checked = true; el.count.value = ""; el.count.disabled = true; 
+        } else { 
+            el.findAll.checked = false; el.count.value = params.count; el.count.disabled = false; 
+        }
+
         if (params.businessNames && params.businessNames.length > 0) {
             el.names.value = params.businessNames.join("\n");
             document.getElementById("individualSearchContainer").classList.remove("collapsed");
@@ -707,16 +738,35 @@ document.addEventListener("DOMContentLoaded", () => {
                 });
             }
         }
+
         if (params.radiusKm && params.anchorPoint) {
             el.radius.value = params.radiusKm;
             document.getElementById("radiusValue").textContent = `${params.radiusKm} km`;
-            el.anchor.value = params.searchParamsForEmail?.area || "";
+            el.anchor.value = params.searchParamsForEmail?.area || "Selected Area";
+
+            const coords = params.anchorPoint.split(',');
+            if (coords.length === 2) {
+                const lat = parseFloat(coords[0]);
+                const lng = parseFloat(coords[1]);
+                const newCenter = L.latLng(lat, lng);
+
+                window.rtrlApp.state.selectedAnchorPoint = {
+                    center: newCenter,
+                    name: params.searchParamsForEmail?.area || "Selected Area"
+                };
+
+                const mapEl = document.getElementById('map');
+                if (mapEl && mapEl._leaflet_id) {
+                    window.rtrlApp.drawSearchCircle(newCenter);
+                }
+            }
             document.getElementById("radiusSearchContainer").classList.remove("collapsed");
         } else {
             el.location.value = params.location || "";
             if (params.postalCode) params.postalCode.forEach(pc => window.rtrlApp.validateAndAddTag(pc));
             document.getElementById("locationSearchContainer").classList.remove("collapsed");
         }
+
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 });
