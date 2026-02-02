@@ -142,8 +142,6 @@ document.addEventListener("DOMContentLoaded", () => {
       }
       const savedJobId = localStorage.getItem("rtrl_active_job_id");
       if (savedJobId && currentUserSession) {
-        currentJobId = savedJobId;
-        subscribedJobId = savedJobId;
         socket.emit("subscribe_to_job", {
           jobId: savedJobId,
           authToken: currentUserSession.access_token,
@@ -170,13 +168,10 @@ document.addEventListener("DOMContentLoaded", () => {
         );
       if (window.rtrlApp.jobHistory)
         window.rtrlApp.jobHistory.fetchAndRenderJobs();
-      if (subscribedJobId !== currentJobId) {
-        socket.emit("subscribe_to_job", {
-          jobId,
-          authToken: currentUserSession.access_token,
-        });
-        subscribedJobId = currentJobId;
-      }
+      socket.emit("subscribe_to_job", {
+        jobId,
+        authToken: currentUserSession.access_token,
+      });
     });
 
     socket.on("queue_position", (data) => {
@@ -206,42 +201,24 @@ document.addEventListener("DOMContentLoaded", () => {
     );
     socket.on("job_error", ({ error }) => {
       logMessage(elements.logEl, `Error: ${error}`, "error");
-      handleScrapeError({ error });
+      handleScrapeError();
     });
 
     socket.on("job_update", (update) => {
       if (update.status) {
-        if (elements.logEl)
-          logMessage(elements.logEl, `Job status: ${update.status}`, "info");
         if (window.rtrlApp.jobHistory)
           window.rtrlApp.jobHistory.fetchAndRenderJobs();
-        const targetId = update.id || currentJobId;
-        if (targetId) {
-          const hb = document.getElementById(`job-status-${targetId}`);
-          if (hb) {
-            if (update.status === "completed") {
-              hb.className = "job-status status-completed";
-              hb.innerHTML =
-                '<i class="fas fa-check-circle"></i> <span>Completed</span>';
-            } else if (update.status === "failed") {
-              hb.className = "job-status status-failed";
-              hb.innerHTML =
-                '<i class="fas fa-exclamation-triangle"></i> <span>Failed</span>';
-            } else if (update.status === "running") {
-              hb.className = "job-status status-running";
-              hb.innerHTML =
-                '<i class="fas fa-spinner fa-spin"></i> <span>Running</span>';
-            }
-          }
-        }
-        if (update.id === currentJobId) {
+        if (
+          update.id === currentJobId ||
+          (!currentJobId && update.status === "running")
+        ) {
+          currentJobId = update.id;
           if (update.status === "running") updateDashboardUi("running");
           else if (
             update.status === "completed" ||
             update.status === "failed"
           ) {
             localStorage.removeItem("rtrl_active_job_id");
-            currentJobId = null;
             setUiState(false, getUiElementsForStateChange());
             updateDashboardUi(update.status);
           }
@@ -288,19 +265,14 @@ document.addEventListener("DOMContentLoaded", () => {
         phaseText = "Phase 3/3: Complete";
         updateStatusCardPhase("complete");
       }
-      if (document.getElementById("progress-fill"))
-        document.getElementById("progress-fill").style.width =
-          `${visualPercent}%`;
-      if (document.getElementById("pct-label"))
-        document.getElementById("pct-label").textContent = `${visualPercent}%`;
-      if (document.getElementById("phase-label"))
-        document.getElementById("phase-label").textContent = phaseText;
-      if (document.getElementById("stat-found"))
-        document.getElementById("stat-found").textContent = discovered || 0;
-      if (document.getElementById("stat-processed"))
-        document.getElementById("stat-processed").textContent = added || 0;
-      if (document.getElementById("stat-enriched"))
-        document.getElementById("stat-enriched").textContent = enriched || 0;
+
+      document.getElementById("progress-fill").style.width =
+        `${visualPercent}%`;
+      document.getElementById("pct-label").textContent = `${visualPercent}%`;
+      document.getElementById("phase-label").textContent = phaseText;
+      document.getElementById("stat-found").textContent = discovered || 0;
+      document.getElementById("stat-processed").textContent = added || 0;
+      document.getElementById("stat-enriched").textContent = enriched || 0;
     });
 
     function updateDashboardUi(status, data = {}) {
@@ -805,18 +777,23 @@ document.addEventListener("DOMContentLoaded", () => {
         { componentRestrictions: { country: iso || "AU", postalCode: v } },
         (res, status) => {
           if (status === "OK" && res[0]) {
-            const sub = res[0].address_components.find((c) =>
-              c.types.includes("locality"),
+            const pcComp = res[0].address_components.find((c) =>
+              c.types.includes("postal_code"),
             );
-            window.rtrlApp.postalCodes.push(v);
-            const tag = document.createElement("span");
-            tag.className = "tag";
-            tag.innerHTML = `<span>${sub ? sub.long_name + " " : ""}${v}</span> <span class="tag-close-btn" data-value="${v}">&times;</span>`;
-            elements.postalCodeContainer.insertBefore(
-              tag,
-              elements.postalCodeInput,
-            );
-            elements.postalCodeInput.value = "";
+            if (pcComp && pcComp.long_name === v) {
+              const sub = res[0].address_components.find((c) =>
+                c.types.includes("locality"),
+              );
+              window.rtrlApp.postalCodes.push(v);
+              const tag = document.createElement("span");
+              tag.className = "tag";
+              tag.innerHTML = `<span>${sub ? sub.long_name + " " : ""}${v}</span> <span class="tag-close-btn" data-value="${v}">&times;</span>`;
+              elements.postalCodeContainer.insertBefore(
+                tag,
+                elements.postalCodeInput,
+              );
+              elements.postalCodeInput.value = "";
+            }
           }
         },
       );
@@ -981,6 +958,33 @@ document.addEventListener("DOMContentLoaded", () => {
         anchorPointInput: elements.anchorPointInput,
         radiusSlider: elements.radiusSlider,
       };
+    }
+
+    function initializeApp() {
+      window.rtrlApp.jobHistory.init(
+        () => currentUserSession?.access_token,
+        BACKEND_URL,
+      );
+      window.rtrlApp.exclusionFeature.init(
+        () => currentUserSession?.access_token,
+      );
+      if (localStorage.getItem("rtrl_last_used_email"))
+        elements.userEmailInput.value = localStorage.getItem(
+          "rtrl_last_used_email",
+        );
+      populatePrimaryCategories(elements.primaryCategorySelect, categories, "");
+      setupPostcodeListHandlers();
+      setupEventListeners(
+        elements,
+        socket,
+        categories,
+        countries,
+        window.rtrlApp.postalCodes,
+        window.rtrlApp.customKeywords,
+        window.rtrlApp.map,
+        window.rtrlApp.searchCircle,
+      );
+      loadGoogleMaps();
     }
 
     window.rtrlApp.map = L.map("map").setView([-33.8688, 151.2093], 10);
