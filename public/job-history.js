@@ -2,12 +2,11 @@ window.rtrlApp.jobHistory = (function () {
     let containerEl, listContainer;
     let tokenProvider = () => null;
     let backendUrl = '';
+    let historyCache = [];
 
     function init(provider, url) {
         containerEl = document.getElementById('jobHistoryCard');
-        if (!containerEl) {
-            return;
-        }
+        if (!containerEl) return;
         listContainer = document.getElementById('job-list-container');
         tokenProvider = provider;
         backendUrl = url;
@@ -16,15 +15,22 @@ window.rtrlApp.jobHistory = (function () {
             listContainer.addEventListener('click', (e) => {
                 const resendButton = e.target.closest('.resend-email-btn');
                 if (resendButton) {
-                    const jobId = resendButton.dataset.jobId;
-                    resendEmail(jobId, resendButton);
+                    resendEmail(resendButton.dataset.jobId, resendButton);
                 }
 
                 const quickListBtn = e.target.closest('.email-body-list-btn');
                 if (quickListBtn) {
-                    const jobId = quickListBtn.dataset.jobId;
                     if (confirm("Would you like to email the categorized list of mobile numbers directly to your inbox?")) {
-                        sendQuickBodyEmail(jobId, quickListBtn);
+                        sendQuickBodyEmail(quickListBtn.dataset.jobId, quickListBtn);
+                    }
+                }
+
+                const cloneBtn = e.target.closest('.clone-job-btn');
+                if (cloneBtn) {
+                    const jobId = cloneBtn.dataset.jobId;
+                    const job = historyCache.find(j => j.id === jobId);
+                    if (job && window.rtrlApp.cloneJobIntoForm) {
+                        window.rtrlApp.cloneJobIntoForm(job.parameters);
                     }
                 }
             });
@@ -69,8 +75,8 @@ window.rtrlApp.jobHistory = (function () {
         const fileLinks = `
             <a href="${backendUrl}/api/jobs/${id}/download/full_xlsx?authToken=${authToken}" class="file-link" download><i class="fas fa-file-excel"></i> Full List (.xlsx)</a>
             <a href="${backendUrl}/api/jobs/${id}/download/duplicates_xlsx?authToken=${authToken}" class="file-link" download><i class="fas fa-copy"></i> Duplicates (.xlsx)</a>
-            <a href="${backendUrl}/api/jobs/${id}/download/sms_csv?authToken=${authToken}" class="file-link" download><i class="fas fa-mobile-alt"></i> Mobile List (.csv)</a>
-            <a href="${backendUrl}/api/jobs/${id}/download/contacts_csv?authToken=${authToken}" class="file-link" download><i class="fas fa-address-book"></i> Email List (.csv)</a>
+            <a href="${backendUrl}/api/jobs/${id}/download/sms_csv?authToken=${authToken}" class="file-link" download><i class="fas fa-mobile-alt"></i> SMS List (.csv)</a>
+            <a href="${backendUrl}/api/jobs/${id}/download/contacts_csv?authToken=${authToken}" class="file-link" download><i class="fas fa-address-book"></i> Contacts Primary (.csv)</a>
             <a href="${backendUrl}/api/jobs/${id}/download/csv_zip?authToken=${authToken}" class="file-link" download><i class="fas fa-file-archive"></i> Contacts CSV Splits (.zip)</a>
             <a href="${backendUrl}/api/jobs/${id}/download/txt_zip?authToken=${authToken}" class="file-link" download><i class="fas fa-file-alt"></i> Contacts TXT Splits (.zip)</a>
         `;
@@ -101,12 +107,12 @@ window.rtrlApp.jobHistory = (function () {
                     </div>
                     <div style="line-height: 1.6;">
                         <span style="color: #64748b; font-weight: 700; text-transform: uppercase; font-size: 0.7rem;">System Settings</span><br>
-                        <strong>AI Enrichment:</strong> ${p.useAiEnrichment ? "ENABLED (High Detail)" : "DISABLED (Basic Info)"}<br>
-                        <strong>Limit:</strong> ${p.count === -1 ? "Find All Available" : p.count + " Businesses"}
+                        <strong>AI Enrichment:</strong> ${p.useAiEnrichment ? "ENABLED" : "DISABLED"}<br>
+                        <strong>Limit:</strong> ${p.count === -1 ? "All Available" : p.count}
                     </div>
                 </div>
 
-                <div class="job-meta" style="border-bottom: 1px solid #eef2f6; padding-bottom: 10px;">
+                <div class="job-meta">
                     <span><i class="fas fa-calendar-alt"></i> ${date}</span>
                     <span id="job-count-${id}"><i class="fas fa-database"></i> ${totalResults} Results Found</span>
                     <span><i class="fas fa-fingerprint"></i> ID: ${id}</span>
@@ -125,12 +131,8 @@ window.rtrlApp.jobHistory = (function () {
                         <div class="action-buttons-container">
                             <a href="${backendUrl}/api/jobs/${id}/download/all?authToken=${authToken}" class="job-action-btn" download><i class="fas fa-file-zipper"></i> Download All (.zip)</a>
                             <button class="job-action-btn resend-email-btn" data-job-id="${id}"><i class="fas fa-paper-plane"></i> Resend Email</button>
-                            <button class="job-action-btn email-body-list-btn" 
-                            style="background: #ffffff; border: 1px solid #d1d5db; color: #374151;" 
-                            data-job-id="${id}">
-                            <i class="fas fa-mobile-alt"></i> Send Mobile List to Email
-                            </button>
-                            <button class="job-action-btn clone-job-btn" style="background: #e0f2fe; border-color: #bae6fd; color: #0369a1;" onclick="alert('Clone feature coming next week! Parameters: ${keywordList}')"><i class="fas fa-sync-alt"></i> Repeat This Search</button>
+                            <button class="job-action-btn email-body-list-btn" data-job-id="${id}"><i class="fas fa-mobile-alt"></i> Send Mobile List</button>
+                            <button class="job-action-btn clone-job-btn" style="background: #e0f2fe; border-color: #bae6fd; color: #0369a1;" data-job-id="${id}"><i class="fas fa-sync-alt"></i> Repeat This Search</button>
                         </div>
                     </div>
                 </div>
@@ -142,99 +144,43 @@ window.rtrlApp.jobHistory = (function () {
     async function resendEmail(jobId, buttonEl) {
         const token = tokenProvider();
         if (!token) return;
-
         const originalText = buttonEl.innerHTML;
         buttonEl.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Sending...`;
         buttonEl.disabled = true;
-
         try {
-            const response = await fetch(`${backendUrl}/api/jobs/${jobId}/resend-email`, {
-                method: 'POST',
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-
-            if (response.ok) {
-                buttonEl.innerHTML = `<i class="fas fa-check"></i> Sent!`;
-            } else {
-                buttonEl.innerHTML = `<i class="fas fa-times"></i> Failed`;
-            }
-        } catch (error) {
-            buttonEl.innerHTML = `<i class="fas fa-times"></i> Error`;
-        } finally {
-            setTimeout(() => {
-                buttonEl.innerHTML = originalText;
-                buttonEl.disabled = false;
-            }, 3000);
-        }
+            const response = await fetch(`${backendUrl}/api/jobs/${jobId}/resend-email`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}` } });
+            buttonEl.innerHTML = response.ok ? `<i class="fas fa-check"></i> Sent!` : `<i class="fas fa-times"></i> Failed`;
+        } catch (error) { buttonEl.innerHTML = `<i class="fas fa-times"></i> Error`; }
+        finally { setTimeout(() => { buttonEl.innerHTML = originalText; buttonEl.disabled = false; }, 3000); }
     }
 
     async function sendQuickBodyEmail(jobId, buttonEl) {
         const token = tokenProvider();
         if (!token) return;
-
         const originalText = buttonEl.innerHTML;
         buttonEl.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Sending...`;
         buttonEl.disabled = true;
-
         try {
-            const response = await fetch(`${backendUrl}/api/jobs/${jobId}/send-quick-body`, {
-                method: 'POST',
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-
-            if (response.ok) {
-                buttonEl.innerHTML = `<i class="fas fa-check"></i> Sent`;
-            } else {
-                buttonEl.innerHTML = `<i class="fas fa-times"></i> Failed`;
-            }
-        } catch (error) {
-            buttonEl.innerHTML = `<i class="fas fa-times"></i> Error`;
-        } finally {
-            setTimeout(() => {
-                buttonEl.innerHTML = originalText;
-                buttonEl.disabled = false;
-            }, 3000);
-        }
+            const response = await fetch(`${backendUrl}/api/jobs/${jobId}/send-quick-body`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}` } });
+            buttonEl.innerHTML = response.ok ? `<i class="fas fa-check"></i> Sent` : `<i class="fas fa-times"></i> Failed`;
+        } catch (error) { buttonEl.innerHTML = `<i class="fas fa-times"></i> Error`; }
+        finally { setTimeout(() => { buttonEl.innerHTML = originalText; buttonEl.disabled = false; }, 3000); }
     }
 
     async function fetchAndRenderJobs() {
         if (!listContainer) return;
         const token = tokenProvider();
         if (!token) return;
-
-        const hasExistingJobs = listContainer.querySelector('.job-item');
-        
-        if (!hasExistingJobs) {
-            listContainer.innerHTML = '<p class="loading-text">Loading history...</p>';
-        }
-
         try {
-            const response = await fetch(`${backendUrl}/api/jobs/history`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-
-            if (!response.ok) {
-                listContainer.innerHTML = '<p class="error-text">Failed to load job history.</p>';
-                return;
+            const response = await fetch(`${backendUrl}/api/jobs/history`, { headers: { 'Authorization': `Bearer ${token}` } });
+            if (response.ok) {
+                const jobs = await response.json();
+                historyCache = jobs;
+                if (jobs.length === 0) { listContainer.innerHTML = '<p class="placeholder-text">No jobs found.</p>'; return; }
+                listContainer.innerHTML = jobs.map(renderJob).join('');
             }
-
-            const jobs = await response.json();
-            if (jobs.length === 0) {
-                listContainer.innerHTML = '<p class="placeholder-text">No jobs found. Start a new research to see your history here.</p>';
-                return;
-            }
-            
-            listContainer.innerHTML = jobs.map(renderJob).join('');
-
-        } catch (error) {
-            if (!hasExistingJobs) {
-                listContainer.innerHTML = '<p class="error-text">An error occurred while loading job history.</p>';
-            }
-        }
+        } catch (error) { listContainer.innerHTML = '<p class="error-text">An error occurred while loading history.</p>'; }
     }
 
-    return {
-        init,
-        fetchAndRenderJobs
-    };
+    return { init, fetchAndRenderJobs };
 })();
