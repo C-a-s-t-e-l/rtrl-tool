@@ -1065,101 +1065,110 @@ document.addEventListener("DOMContentLoaded", () => {
 
   initializeMainApp();
 
-  window.rtrlApp.cloneJobIntoForm = (p) => {
-    const el = {
-      primaryCat: document.getElementById("primaryCategorySelect"),
-      customCat: document.getElementById("customCategoryInput"),
-      location: document.getElementById("locationInput"),
-      country: document.getElementById("countryInput"),
-      count: document.getElementById("count"),
-      findAll: document.getElementById("findAllBusinesses"),
-      names: document.getElementById("businessNamesInput"),
-      anchor: document.getElementById("anchorPointInput"),
-      radius: document.getElementById("radiusSlider"),
-      aiToggle: document.getElementById("useAiToggle"),
-    };
-    const ui = {
-      h: document.getElementById("status-headline"),
-      s: document.getElementById("status-subtext"),
-      i: document.getElementById("status-icon"),
-      c: document.getElementById("status-card"),
-      f: document.getElementById("progress-fill"),
-      p: document.getElementById("pct-label"),
-      ph: document.getElementById("phase-label"),
-      fnd: document.getElementById("stat-found"),
-      prc: document.getElementById("stat-processed"),
-      enr: document.getElementById("stat-enriched"),
-    };
-    if (ui.c) ui.c.className = "status-card";
-    if (ui.h) ui.h.textContent = "Search Parameters Loaded";
-    if (ui.s) ui.s.textContent = "Sidebar updated from history.";
-    if (ui.i) ui.i.className = "fas fa-file-import";
-    if (ui.f) ui.f.style.width = "0%";
-    if (ui.p) ui.p.textContent = "0%";
-    if (ui.ph) ui.ph.textContent = "Phase 0/3: Ready";
-    if (ui.fnd) ui.fnd.textContent = "0";
-    if (ui.prc) ui.prc.textContent = "0";
-    if (ui.enr) ui.enr.textContent = "0";
-    window.rtrlApp.postalCodes.length = 0;
-    window.rtrlApp.customKeywords.length = 0;
-    document.querySelectorAll(".tag").forEach((t) => t.remove());
-    if (el.aiToggle) el.aiToggle.checked = p.useAiEnrichment !== false;
-    el.country.value = p.country || "Australia";
-    if (p.count === -1) {
-      el.findAll.checked = true;
-      el.count.value = "";
-      el.count.disabled = true;
-    } else {
-      el.findAll.checked = false;
-      el.count.value = p.count;
-      el.count.disabled = false;
-    }
-    if (p.businessNames?.length > 0) {
-      el.names.value = p.businessNames.join("\n");
-      document
-        .getElementById("individualSearchContainer")
-        .classList.remove("collapsed");
-    } else {
-      el.names.value = "";
-      p.categoriesToLoop?.forEach((kw) => {
-        window.rtrlApp.customKeywords.push(kw);
-        const t = document.createElement("span");
-        t.className = "tag";
-        t.innerHTML = `<span>${kw}</span> <span class="tag-close-btn" data-value="${kw}">&times;</span>`;
-        document
-          .getElementById("customKeywordContainer")
-          .insertBefore(t, el.customCat);
-      });
-    }
-    if (p.radiusKm && p.anchorPoint) {
-      el.radius.value = p.radiusKm;
-      document.getElementById("radiusValue").textContent = `${p.radiusKm} km`;
-      el.anchor.value = p.searchParamsForEmail?.area || "Selected Area";
-      const co = p.anchorPoint.split(",");
-      if (co.length === 2) {
-        const lat = parseFloat(co[0]);
-        const lng = parseFloat(co[1]);
-        const nc = L.latLng(lat, lng);
-        window.rtrlApp.state.selectedAnchorPoint = {
-          center: nc,
-          name: p.searchParamsForEmail?.area || "Selected Area",
+window.rtrlApp.cloneJobIntoForm = (p) => {
+        const el = { 
+            primaryCat: document.getElementById("primaryCategorySelect"), 
+            customCat: document.getElementById("customCategoryInput"), 
+            location: document.getElementById("locationInput"), 
+            country: document.getElementById("countryInput"), 
+            count: document.getElementById("count"), 
+            findAll: document.getElementById("findAllBusinesses"), 
+            names: document.getElementById("businessNamesInput"), 
+            anchor: document.getElementById("anchorPointInput"), 
+            radius: document.getElementById("radiusSlider"), 
+            aiToggle: document.getElementById("useAiToggle") 
         };
-        document
-          .getElementById("radiusSearchContainer")
-          .classList.remove("collapsed");
-        setTimeout(() => {
-          window.rtrlApp.map.invalidateSize();
-          window.rtrlApp.map.setView(nc, 11);
-          window.rtrlApp.drawSearchCircle(nc);
-        }, 150);
-      }
-    } else {
-      el.location.value = p.location || "";
-      p.postalCode?.forEach((x) => window.rtrlApp.validateAndAddTag(x));
-      document
-        .getElementById("locationSearchContainer")
-        .classList.remove("collapsed");
-    }
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  };
+
+        const ui = { 
+            h: document.getElementById("status-headline"), 
+            s: document.getElementById("status-subtext"), 
+            i: document.getElementById("status-icon"), 
+            c: document.getElementById("status-card"), 
+            f: document.getElementById("progress-fill"), 
+            p: document.getElementById("pct-label"), 
+            ph: document.getElementById("phase-label"), 
+            fnd: document.getElementById("stat-found"), 
+            prc: document.getElementById("stat-processed"), 
+            enr: document.getElementById("stat-enriched") 
+        };
+
+        el.location.value = "";
+        el.anchor.value = "";
+        el.names.value = "";
+        window.rtrlApp.postalCodes.length = 0;
+        window.rtrlApp.customKeywords.length = 0;
+        window.rtrlApp.state.selectedAnchorPoint = null;
+        document.querySelectorAll(".tag").forEach(t => t.remove());
+
+        if (window.rtrlApp.searchCircle) {
+            window.rtrlApp.map.removeLayer(window.rtrlApp.searchCircle);
+            window.rtrlApp.searchCircle = null;
+        }
+
+        if (ui.c) ui.c.className = "status-card";
+        if (ui.h) ui.h.textContent = "Search Parameters Loaded";
+        if (ui.s) ui.s.textContent = "Sidebar updated from history. Check your parameters then click Start.";
+        if (ui.i) ui.i.className = "fas fa-file-import";
+        if (ui.f) ui.f.style.width = "0%";
+        if (ui.p) ui.p.textContent = "0%";
+        if (ui.ph) ui.ph.textContent = "Phase 0/3: Ready";
+        if (ui.fnd) ui.fnd.textContent = "0";
+        if (ui.prc) ui.prc.textContent = "0";
+        if (ui.enr) ui.enr.textContent = "0";
+
+        if (el.aiToggle) el.aiToggle.checked = p.useAiEnrichment !== false;
+        el.country.value = p.country || "Australia";
+        
+        if (p.count === -1) { 
+            el.findAll.checked = true; el.count.value = ""; el.count.disabled = true; 
+        } else { 
+            el.findAll.checked = false; el.count.value = p.count || ""; el.count.disabled = false; 
+        }
+
+        if (p.businessNames && p.businessNames.length > 0) {
+            el.names.value = p.businessNames.join("\n");
+            document.getElementById("individualSearchContainer").classList.remove("collapsed");
+        } else {
+            el.names.value = "";
+            if (p.categoriesToLoop) {
+                p.categoriesToLoop.forEach(kw => {
+                    window.rtrlApp.customKeywords.push(kw);
+                    const t = document.createElement("span"); t.className = "tag";
+                    t.innerHTML = `<span>${kw}</span> <span class="tag-close-btn" data-value="${kw}">&times;</span>`;
+                    document.getElementById("customKeywordContainer").insertBefore(t, el.customCat);
+                });
+            }
+        }
+
+        if (p.radiusKm && p.anchorPoint) {
+            el.radius.value = p.radiusKm;
+            document.getElementById("radiusValue").textContent = `${p.radiusKm} km`;
+            el.anchor.value = p.searchParamsForEmail?.area || "Selected Area";
+
+            const co = p.anchorPoint.split(',');
+            if (co.length === 2) {
+                const nc = L.latLng(parseFloat(co[0]), parseFloat(co[1]));
+                window.rtrlApp.state.selectedAnchorPoint = { 
+                    center: nc, 
+                    name: el.anchor.value 
+                };
+                
+                document.getElementById("radiusSearchContainer").classList.remove("collapsed");
+                
+                setTimeout(() => {
+                    window.rtrlApp.map.invalidateSize();
+                    window.rtrlApp.map.setView(nc, 11);
+                    window.rtrlApp.drawSearchCircle(nc);
+                }, 150);
+            }
+        } else {
+            el.location.value = p.location || "";
+            if (p.postalCode) {
+                p.postalCode.forEach(pc => window.rtrlApp.validateAndAddTag(pc));
+            }
+            document.getElementById("locationSearchContainer").classList.remove("collapsed");
+        }
+
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
 });
