@@ -745,6 +745,13 @@ app.get("/api/jobs/:jobId/download/:fileType", async (req, res) => {
                 contentType = 'text/csv';
                 break;
 
+            case 'mobiles_zip':
+                if (!allFiles.mobileSplits.data) return res.status(404).send('No mobile data found to generate splits.');
+                buffer = allFiles.mobileSplits.data;
+                filename = allFiles.mobileSplits.filename;
+                contentType = 'application/zip';
+                break;    
+
             case 'csv_zip':
                 if (!allFiles.contactsSplits.data) return res.status(404).send('No contact data found to generate CSV splits.');
                 buffer = allFiles.contactsSplits.data;
@@ -785,6 +792,7 @@ app.get("/api/jobs/:jobId/download/:fileType", async (req, res) => {
                     XLSX.utils.book_append_sheet(wb, ws, "Contacts List");
                     zip.file(allFiles.contacts.filename, XLSX.write(wb, { bookType: 'csv', type: 'buffer' }));
                 }
+                if (allFiles.mobileSplits.data) zip.file(allFiles.mobileSplits.filename, allFiles.mobileSplits.data);
                 if (allFiles.contactsSplits.data) zip.file(allFiles.contactsSplits.filename, allFiles.contactsSplits.data);
                 if (allFiles.contactsTxtSplits.data) zip.file(allFiles.contactsTxtSplits.filename, allFiles.contactsTxtSplits.data);
 

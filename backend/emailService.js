@@ -72,6 +72,14 @@ async function sendResultsByEmail(recipientEmail, rawData, searchParams, duplica
                 contentType: 'text/csv',
             });
         }
+
+        if (allFiles.mobileSplits && allFiles.mobileSplits.data) {
+            attachments.push({
+                filename: allFiles.mobileSplits.filename,
+                content: allFiles.mobileSplits.data,
+                contentType: 'application/zip',
+            });
+        }
         
         if (allFiles.contactsTxtSplits && allFiles.contactsTxtSplits.data) {
             attachments.push({

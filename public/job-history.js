@@ -77,6 +77,7 @@ window.rtrlApp.jobHistory = (function () {
             <a href="${backendUrl}/api/jobs/${id}/download/duplicates_xlsx?authToken=${authToken}" class="file-link" download><i class="fas fa-copy"></i> Duplicates (.xlsx)</a>
             <a href="${backendUrl}/api/jobs/${id}/download/sms_csv?authToken=${authToken}" class="file-link" download><i class="fas fa-mobile-alt"></i> SMS List (.csv)</a>
             <a href="${backendUrl}/api/jobs/${id}/download/contacts_csv?authToken=${authToken}" class="file-link" download><i class="fas fa-address-book"></i> Contacts Primary (.csv)</a>
+            <a href="${backendUrl}/api/jobs/${id}/download/mobiles_zip?authToken=${authToken}" class="file-link" downlostyle="border-color: #22c55e; color: #15803d;"><i class="fas fa-file-zipper"></i> Mobile Splits (.zip)</a>
             <a href="${backendUrl}/api/jobs/${id}/download/csv_zip?authToken=${authToken}" class="file-link" download><i class="fas fa-file-archive"></i> Contacts CSV Splits (.zip)</a>
             <a href="${backendUrl}/api/jobs/${id}/download/txt_zip?authToken=${authToken}" class="file-link" download><i class="fas fa-file-alt"></i> Contacts TXT Splits (.zip)</a>
         `;

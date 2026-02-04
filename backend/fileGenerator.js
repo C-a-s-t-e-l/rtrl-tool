@@ -5,7 +5,6 @@ const isValidEmail = (email) => {
     return email && typeof email === 'string' && email.includes('@') && email.includes('.');
 };
 
-
 function generateFilename(searchParams, fileSuffix, fileExtension, creationDate = null) {
     const dateObj = creationDate ? new Date(creationDate) : new Date();
     const date = dateObj.toISOString().split('T')[0].replace(/-/g, '');
@@ -34,12 +33,10 @@ const createLinkObject = (url) => {
 };
 
 async function generateFileData(rawData, searchParams, duplicatesData = [], creationDate = null) {
-
     rawData.sort((a, b) => (a.BusinessName || '').localeCompare(b.BusinessName || ''));
     if (duplicatesData && duplicatesData.length > 0) {
         duplicatesData.sort((a, b) => (a.BusinessName || '').localeCompare(b.BusinessName || ''));
     }
-  
 
     const dateObj = creationDate ? new Date(creationDate) : new Date();
     const date = dateObj.toISOString().split('T')[0].replace(/-/g, '');
@@ -127,7 +124,6 @@ async function generateFileData(rawData, searchParams, duplicatesData = [], crea
     const SPLIT_SIZE = 18;
     let zipBuffer = null;
     let txtZipBuffer = null;
-    const allTxtFileNames = []; 
 
     if (contactsData.length > 0) {
         const zip = new JSZip();
@@ -137,26 +133,19 @@ async function generateFileData(rawData, searchParams, duplicatesData = [], crea
         for (let i = 0; i < contactsData.length; i += SPLIT_SIZE) {
             const chunk = contactsData.slice(i, i + SPLIT_SIZE);
             const splitIndex = Math.floor(i / SPLIT_SIZE) + 1;
-            
             const splitFilename = generateFilename(searchParams, `emails_csv_split_${splitIndex}`, 'csv', creationDate);
-            
             const ws = XLSX.utils.json_to_sheet(chunk, { header: headers });
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, `Contacts Split ${splitIndex}`);
             const csvBuffer = XLSX.write(wb, { bookType: 'csv', type: 'buffer' });
-            
             zip.file(splitFilename, csvBuffer);
         }
         zipBuffer = await zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" });
 
-
         const emailContacts = contactsData.filter(d => isValidEmail(d.email_1));
-
         const contactsByCategory = emailContacts.reduce((acc, item) => {
             const category = item.Category || 'Other'; 
-            if (!acc[category]) {
-                acc[category] = [];
-            }
+            if (!acc[category]) acc[category] = [];
             acc[category].push(item);
             return acc;
         }, {});
@@ -165,20 +154,37 @@ async function generateFileData(rawData, searchParams, duplicatesData = [], crea
             for (let i = 0; i < items.length; i += SPLIT_SIZE) {
                 const chunk = items.slice(i, i + SPLIT_SIZE);
                 const part = Math.floor(i / SPLIT_SIZE) + 1;
-                
-                const emailList = chunk
-                    .map(item => item.email_1)
-                    .join('\n'); 
+                const emailList = chunk.map(item => item.email_1).join('\n'); 
                 const cleanCategory = category.replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_').toLowerCase();
                 const txtFilename = generateFilename(searchParams, `emails_txt_${cleanCategory}_part_${part}`, 'txt', creationDate);
-                
                 txtZip.file(txtFilename, emailList);
-                allTxtFileNames.push(txtFilename); 
             }
         }
-        
         txtZipBuffer = await txtZip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" });
     }
+
+    const mobileZip = new JSZip();
+    const mobilesByCategory = rawData.reduce((acc, item) => {
+        if (item.Phone) {
+            let num = String(item.Phone).replace(/\D/g, '');
+            if (num.startsWith('614')) num = '0' + num.substring(2);
+            if (num.startsWith('04')) {
+                const cat = item.Category || 'General';
+                if (!acc[cat]) acc[cat] = new Set();
+                acc[cat].add(num);
+            }
+        }
+        return acc;
+    }, {});
+
+    let hasMobiles = false;
+    for (const [cat, nums] of Object.entries(mobilesByCategory)) {
+        const cleanCat = cat.replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_').toLowerCase();
+        const filename = `${cleanCat}_mobiles.txt`;
+        mobileZip.file(filename, Array.from(nums).join('\n'));
+        hasMobiles = true;
+    }
+    const mobileZipBuffer = hasMobiles ? await mobileZip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" }) : null;
 
     const duplicatesFormattedData = duplicatesData.map(item => ({
         BusinessName: item.BusinessName,
@@ -221,6 +227,10 @@ async function generateFileData(rawData, searchParams, duplicatesData = [], crea
         contactsTxtSplits: { 
             data: txtZipBuffer,
             filename: generateFilename(searchParams, 'emails_txt_splits', 'zip', creationDate),
+        },
+        mobileSplits: {
+            data: mobileZipBuffer,
+            filename: generateFilename(searchParams, 'mobile_numbers_by_category', 'zip', creationDate)
         },
         duplicates: {
             data: duplicatesFormattedData,
