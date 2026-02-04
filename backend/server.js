@@ -13,6 +13,7 @@ require("dotenv").config();
 const { findBusinessOwnerWithAI } = require("./aiService");
 const { sendResultsByEmail } = require("./emailService");
 const { generateFileData, generateFilename } = require("./fileGenerator");
+const { verifyEmail, getActiveKey } = require("./verifierService");
 const XLSX = require('xlsx');
 const JSZip = require('jszip');
 
@@ -278,6 +279,7 @@ for (const item of searchItems) {
     }
 
     await addLog(jobId, `--- Starting Data Extraction & AI Analysis ---`);
+    console.log(`[Worker] Job ${jobId} picked up. Using Email Verifier Key: ${getActiveKey()}`);
     browser = await launchBrowser("[System] Processing businesses...");
 
     const urlsToProcess = Array.from(masterUrlMap, ([url, cat]) => ({ url, category: cat }))
@@ -323,6 +325,14 @@ const task = async () => {
                     if (googleData.Website) {
                         websiteData = await scrapeWebsiteForGoldData(detailPage, googleData.Website, jobId);
                     }
+
+                    if (websiteData.Email1) {
+                     const isDeliverable = await verifyEmail(websiteData.Email1);
+                     if (!isDeliverable) {
+                        await addLog(jobId, `[Verifier] Cleaning undeliverable email: ${websiteData.Email1}`);
+                         websiteData.Email1 = ""; 
+                    }
+}
 
                     if (aiResult.ownerName) websiteData.OwnerName = aiResult.ownerName;
                     
