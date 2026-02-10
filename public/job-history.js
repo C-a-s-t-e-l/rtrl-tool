@@ -59,7 +59,11 @@ window.rtrlApp.jobHistory = (function () {
         }
 
         const keywordType = s.customCategory ? "Custom Keyword Search" : "Preset Category Search";
-        const keywordList = p.categoriesToLoop ? p.categoriesToLoop.join(", ") : (p.businessNames ? "N/A (Name Search)" : "None");
+        
+        const catDisp = s.primaryCategory || "N/A";
+        const subCatDisp = (s.subCategoryList && s.subCategoryList.length > 0) ? s.subCategoryList.join(", ") : "None";
+        const keywordDisp = s.customCategory || "None";
+        const detailedSummary = `Cat: ${catDisp} ; Sub_Cat: ${subCatDisp} ; Keyword "${keywordDisp}"`;
 
         let statusIcon = 'fa-clock', statusClass = 'status-queued', statusText = 'Queued';
         if (status === 'running') {
@@ -104,7 +108,7 @@ window.rtrlApp.jobHistory = (function () {
                     <div style="line-height: 1.6;">
                         <span style="color: #64748b; font-weight: 700; text-transform: uppercase; font-size: 0.7rem;">Keywords & Industry</span><br>
                         <strong>Method:</strong> ${keywordType}<br>
-                        <strong>Keywords:</strong> ${keywordList}
+                        <strong>Summary:</strong> ${detailedSummary}
                     </div>
                     <div style="line-height: 1.6;">
                         <span style="color: #64748b; font-weight: 700; text-transform: uppercase; font-size: 0.7rem;">System Settings</span><br>
