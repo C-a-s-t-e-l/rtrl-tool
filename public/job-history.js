@@ -58,18 +58,18 @@ window.rtrlApp.jobHistory = (function () {
             locationDetail = `${p.businessNames.length} individual business names`;
         }
 
-        const isBroadKeywordMode = !s.primaryCategory && s.customCategory;
-        const keywordType = isBroadKeywordMode ? "Custom Keyword Search" : "Preset Category Search";
+        const isBroadMode = !s.primaryCategory && s.customCategory;
+        const keywordType = isBroadMode ? "Custom Keyword Search" : "Preset Category Search";
         
         let summaryParts = [];
 
-        if (isBroadKeywordMode) {
-            summaryParts.push(`Keyword: "${s.customCategory}"`);
+        if (isBroadMode) {
+            summaryParts.push(`Custom Keywords: "${s.customCategory}"`);
         } else {
             summaryParts.push(`Cat: ${s.primaryCategory || "N/A"}`);
             summaryParts.push(`Sub_Cat: ${(s.subCategoryList && s.subCategoryList.length > 0) ? s.subCategoryList.join(", ") : "None"}`);
             if (s.customCategory) {
-                summaryParts.push(`Refine Tag: "${s.customCategory}"`);
+                summaryParts.push(`Keyword: "${s.customCategory}"`);
             }
         }
 
