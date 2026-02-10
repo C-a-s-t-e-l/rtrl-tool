@@ -58,12 +58,22 @@ window.rtrlApp.jobHistory = (function () {
             locationDetail = `${p.businessNames.length} individual business names`;
         }
 
-        const keywordType = s.customCategory ? "Custom Keyword Search" : "Preset Category Search";
+        const isBroadKeywordMode = !s.primaryCategory && s.customCategory;
+        const keywordType = isBroadKeywordMode ? "Custom Keyword Search" : "Preset Category Search";
         
-        const catDisp = s.primaryCategory || "N/A";
-        const subCatDisp = (s.subCategoryList && s.subCategoryList.length > 0) ? s.subCategoryList.join(", ") : "None";
-        const keywordDisp = s.customCategory || "None";
-        const detailedSummary = `Cat: ${catDisp} ; Sub_Cat: ${subCatDisp} ; Keyword "${keywordDisp}"`;
+        let summaryParts = [];
+
+        if (isBroadKeywordMode) {
+            summaryParts.push(`Keyword: "${s.customCategory}"`);
+        } else {
+            summaryParts.push(`Cat: ${s.primaryCategory || "N/A"}`);
+            summaryParts.push(`Sub_Cat: ${(s.subCategoryList && s.subCategoryList.length > 0) ? s.subCategoryList.join(", ") : "None"}`);
+            if (s.customCategory) {
+                summaryParts.push(`Refine Tag: "${s.customCategory}"`);
+            }
+        }
+
+        const detailedSummary = summaryParts.join(" ; ");
 
         let statusIcon = 'fa-clock', statusClass = 'status-queued', statusText = 'Queued';
         if (status === 'running') {
