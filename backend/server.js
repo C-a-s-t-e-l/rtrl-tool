@@ -1006,7 +1006,7 @@ app.get("/api/jobs/history", async (req, res) => {
 
         const { data, error } = await supabase
             .from('jobs')
-            .select('id, created_at, parameters, status')
+            .select('id, created_at, parameters, status, results')
             .eq('user_id', user.id)
             .order('created_at', { ascending: false })
             .limit(50);

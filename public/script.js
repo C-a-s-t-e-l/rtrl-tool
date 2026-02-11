@@ -80,7 +80,7 @@ async function refreshUsageTracker() {
     let planName = "Standard Plan";
     if (limit <= 100) planName = "Starter Plan";
     if (limit >= 1000 && limit < 5000) planName = "Power Plan";
-    if (limit >= 5000) planName = "5000 Daily Limit";
+    if (limit >= 5000) planName = "Executive Plan";
     if (elements.dashPlanBadge) elements.dashPlanBadge.textContent = planName;
 
     if (elements.dashUsageStatus) {
