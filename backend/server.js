@@ -200,7 +200,8 @@ const runScrapeJob = async (jobId) => {
 
   const { parameters } = job;
   const {
-    categoriesToLoop, location, postalCode, country, count, businessNames, anchorPoint, radiusKm, userEmail, searchParamsForEmail, exclusionList, useAiEnrichment 
+    categoriesToLoop, location, postalCode, country, count, businessNames, anchorPoint, radiusKm, userEmail, searchParamsForEmail, exclusionList, useAiEnrichment,
+    clientLocalDate 
   } = parameters;
 
   let filterCenterLat = null, filterCenterLng = null;
@@ -397,7 +398,8 @@ const task = async () => {
                 allProcessedBusinesses.push(businessData);
                 await appendJobResult(jobId, businessData);
                 const { error: rpcError } = await supabase.rpc('increment_usage', { 
-                    user_id_param: job.user_id 
+                    user_id_param: job.user_id,
+                    client_local_date_param: clientLocalDate
                 });
 
                 if (rpcError) {
@@ -496,7 +498,7 @@ io.on("connection", (socket) => {
   });
 
   socket.on("start_scrape_job", async (payload) => {
-    const { authToken, ...scrapeParams } = payload;
+    const { authToken, clientLocalDate, ...scrapeParams } = payload;
     if (!authToken)
       return socket.emit("job_error", { error: "Authentication required." });
     const {
@@ -510,7 +512,7 @@ io.on("connection", (socket) => {
         .from("jobs")
         .insert({
           user_id: user.id,
-          parameters: scrapeParams,
+          parameters: { ...scrapeParams, clientLocalDate },
           logs: [`Job created by ${user.email}`],
         })
         .select()

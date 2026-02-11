@@ -1084,6 +1084,14 @@ async function refreshUsageTracker() {
       )
         .map((c) => c.value)
         .filter((v) => v !== "select_all");
+
+      const localToday = new Date();
+      const localYear = localToday.getFullYear();
+      const localMonth = String(localToday.getMonth() + 1).padStart(2, '0'); 
+      const localDay = String(localToday.getDate()).padStart(2, '0');
+      const clientLocalDateParam = `${localYear}-${localMonth}-${localDay}`;
+
+
       const p = {
         country: elements.countryInput.value,
         businessNames: ns,
@@ -1135,6 +1143,7 @@ async function refreshUsageTracker() {
       };
       socket.emit("start_scrape_job", {
         authToken: currentUserSession.access_token,
+        clientLocalDate: clientLocalDateParam,
         ...p,
       });
     };
