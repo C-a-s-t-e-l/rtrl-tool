@@ -1005,13 +1005,25 @@ app.get("/api/jobs/history", async (req, res) => {
 const containerPublicPath = path.join(__dirname, "..", "public");
 app.use(express.static(containerPublicPath, { index: false }));
 app.get(/(.*)/, (req, res) => {
-  const indexPath = path.join(containerPublicPath, "index.html");
-  fs.readFile(indexPath, "utf8", (err, data) => {
+  const requestedPath = req.params[0];
+  const fileName = (requestedPath === "/admin.html" || requestedPath === "admin.html") 
+                   ? "admin.html" 
+                   : "index.html";
+                   
+  const filePath = path.join(containerPublicPath, fileName);
+
+  fs.readFile(filePath, "utf8", (err, data) => {
     if (err) {
-      console.error("Error reading index.html:", err);
+      console.error("Error reading file:", err);
       return res.status(500).send("Error loading the application.");
     }
-    res.send(data.replace(PLACEHOLDER_KEY, GOOGLE_MAPS_API_KEY));
+
+    const finalHtml = data
+      .replace(/%%GOOGLE_MAPS_API_KEY%%/g, process.env.MAPS_API_KEY)
+      .replace(/%%SUPABASE_URL%%/g, process.env.SUPABASE_URL)
+      .replace(/%%SUPABASE_ANON_KEY%%/g, process.env.SUPABASE_ANON_KEY);
+
+    res.send(finalHtml);
   });
 });
 

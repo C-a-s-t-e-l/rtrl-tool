@@ -1,6 +1,6 @@
-const SUPABASE_URL = "YOUR_URL";
-const SUPABASE_ANON_KEY = "YOUR_KEY";
-const BACKEND_URL = "https://backend.rtrlprospector.space";
+const SUPABASE_URL = window.CONFIG.SUPABASE_URL;
+const SUPABASE_ANON_KEY = window.CONFIG.SUPABASE_ANON_KEY;
+const BACKEND_URL = window.location.origin;
 
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 

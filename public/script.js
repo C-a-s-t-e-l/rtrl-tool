@@ -1,8 +1,7 @@
 document.addEventListener("DOMContentLoaded", () => {
-  const BACKEND_URL = "https://backend.rtrlprospector.space";
-  const SUPABASE_URL = "https://qbktnernawpprarckvzx.supabase.co";
-  const SUPABASE_ANON_KEY =
-    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFia3RuZXJuYXdwcHJhcmNrdnp4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTc1OTQ3NTgsImV4cCI6MjA3MzE3MDc1OH0.9asOynIZEOqc8f_mNTjWTNXIPK1ph6IQF6ADbYdFclM";
+  const BACKEND_URL = window.location.origin;
+  const SUPABASE_URL = window.CONFIG.SUPABASE_URL;
+  const SUPABASE_ANON_KEY = window.CONFIG.SUPABASE_ANON_KEY;
 
   const { createClient } = supabase;
   const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -470,51 +469,55 @@ function updateDashboardUi(status, data = {}) {
       window.location.reload();
     });
 
-    supabaseClient.auth.onAuthStateChange(async (event, session) => {
-      currentUserSession = session;
-      if (session) {
-        if (socket.connected)
-          socket.emit("authenticate_socket", session.access_token);
-        elements.loginOverlay.style.display = "none";
-        elements.appContent.style.display = "block";
-        elements.userMenu.style.display = "block";
-        elements.userInfoSpan.textContent =
-          session.user.user_metadata.full_name || "User";
-        elements.userEmailDisplay.textContent = session.user.email;
-        elements.startButton.disabled = false;
-            try {
-      const { data: profile, error } = await supabaseClient
-        .from('profiles')
-        .select('role')
-        .eq('id', session.user.id)
-        .single();
+supabaseClient.auth.onAuthStateChange(async (event, session) => {
+  currentUserSession = session;
+  if (session) {
+    if (socket.connected)
+      socket.emit("authenticate_socket", session.access_token);
+    
+    elements.loginOverlay.style.display = "none";
+    elements.appContent.style.display = "block";
+    elements.userMenu.style.display = "block";
+    elements.userInfoSpan.textContent = session.user.user_metadata.full_name || "User";
+    elements.userEmailDisplay.textContent = session.user.email;
+    elements.startButton.disabled = false;
 
-      if (profile && profile.role === 'admin') {
-        const adminLink = document.getElementById('admin-control-link');
-        if (adminLink) adminLink.style.display = 'flex';
-      }
-    } catch (err) {
-      console.error("Error fetching user role:", err);
-    }
-        if (elements.userEmailInput.value.trim() === "")
-          elements.userEmailInput.value = session.user.email;
-        await fetchPostcodeLists();
-        const response = await fetch(`${BACKEND_URL}/api/exclusions`, {
-          headers: { Authorization: `Bearer ${session.access_token}` },
-        });
-        if (response.ok) {
-          const { exclusionList } = await response.json();
-          window.rtrlApp.exclusionFeature.populateTags(exclusionList);
+    supabaseClient
+      .from('profiles')
+      .select('role')
+      .eq('id', session.user.id)
+      .single()
+      .then(({ data: profile }) => {
+        if (profile && profile.role === 'admin') {
+          const adminLink = document.getElementById('admin-control-link');
+          if (adminLink) adminLink.style.display = 'flex';
         }
-        if (window.rtrlApp.jobHistory)
-          window.rtrlApp.jobHistory.fetchAndRenderJobs();
-      } else {
-        elements.loginOverlay.style.display = "flex";
-        elements.appContent.style.display = "none";
-        elements.userMenu.style.display = "none";
-        elements.startButton.disabled = true;
-      }
-    });
+      })
+      .catch(err => console.error("Admin check failed, but continuing..."));
+
+    if (elements.userEmailInput.value.trim() === "")
+      elements.userEmailInput.value = session.user.email;
+      
+    fetchPostcodeLists(); 
+
+    if (window.rtrlApp.jobHistory) {
+      window.rtrlApp.jobHistory.fetchAndRenderJobs();
+    }
+
+    fetch(`${BACKEND_URL}/api/exclusions`, {
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    }).then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (data) window.rtrlApp.exclusionFeature.populateTags(data.exclusionList);
+      });
+
+  } else {
+    elements.loginOverlay.style.display = "flex";
+    elements.appContent.style.display = "none";
+    elements.userMenu.style.display = "none";
+    elements.startButton.disabled = true;
+  }
+});
 
     let savedPostcodeLists = [];
     async function fetchPostcodeLists() {
