@@ -3,7 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RTRL | Admin Control Center</title>
+        <link
+      rel="icon"
+      type="image/x-icon"
+      href="https://cdn-icons-png.flaticon.com/512/2248/2248814.png"
+    />
+    <title>RTRL | Control Center</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script>
         window.CONFIG = {
@@ -12,68 +17,121 @@
         };
     </script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
-    <link rel="stylesheet" href="admin.css"> <!-- Load admin.css LAST to ensure it overrides style.css -->
+    <link rel="stylesheet" href="admin.css">
 </head>
 <body>
     <div class="admin-layout">
+        <!-- Sidebar -->
         <aside class="admin-sidebar">
-            <div class="sidebar-header">
-                <i class="fas fa-user-shield"></i>
+            <div class="sidebar-brand">
+                <div class="brand-icon"><i class="fas fa-shield-alt"></i></div>
                 <span>Admin Portal</span>
             </div>
-            <nav>
-                <a href="index.html" class="nav-item"><i class="fas fa-arrow-left"></i> Back to Tool</a>
-                <div style="margin-top: 2rem; color: #64748b; font-size: 0.7rem; text-transform: uppercase; font-weight: 700;">System</div>
-                <button id="global-kill-switch" class="btn-kill">
+            
+            <nav class="sidebar-nav">
+                <a href="#" class="nav-link"><i class="fas fa-th-large"></i> Dashboard</a>
+                <a href="#" class="nav-link active"><i class="fas fa-users"></i> Team Management</a>
+            </nav>
+
+            <div class="sidebar-footer">
+                <a href="index.html" class="nav-link"><i class="fas fa-arrow-left"></i> Back to Tool</a>
+                <button id="global-kill-switch" class="kill-switch-btn">
                     <i class="fas fa-power-off"></i> Emergency Stop
                 </button>
-            </nav>
+            </div>
         </aside>
 
+        <!-- Main Content -->
         <main class="admin-main">
-            <header class="admin-header">
-                <h1>Control Center</h1>
-                <div class="usage-summary-card">
-                    <span id="gemini-text">Calculating usage...</span>
-                    <div class="health-bar-bg">
-                        <div id="gemini-bar" class="health-bar-fill" style="width: 0%;"></div>
-                    </div>
+            <header class="main-header">
+                <div class="header-title">
+                    <h1>Control Center</h1>
+                    <p>Overview of your team's activity and usage</p>
                 </div>
             </header>
 
-            <div class="user-card">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
-                    <h2>Team Management</h2>
-                    <button id="open-invite-modal" class="btn-invite">+ Invite User</button>
+            <!-- Stats Grid -->
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-info">
+                        <span class="stat-label">Team Members</span>
+                        <h2 id="stat-team-count">0</h2>
+                    </div>
+                    <div class="stat-icon blue"><i class="fas fa-users"></i></div>
                 </div>
-                
-                <table class="user-table">
+                <div class="stat-card">
+                    <div class="stat-info">
+                        <span class="stat-label">Today's Usage</span>
+                        <h2 id="stat-total-usage">0 / 0</h2>
+                        <div class="stat-progress-bg">
+                            <div id="stat-usage-bar" class="stat-progress-fill" style="width: 0%"></div>
+                        </div>
+                        <span id="stat-usage-pct" class="stat-subtext">0% used</span>
+                    </div>
+                    <div class="stat-icon green"><i class="fas fa-pulse"></i></div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-info">
+                        <span class="stat-label">Daily Credits</span>
+                        <h2 id="stat-daily-limit">0</h2>
+                    </div>
+                    <div class="stat-icon orange"><i class="fas fa-bolt"></i></div>
+                </div>
+            </div>
+
+            <!-- Team Management Section -->
+            <div class="content-card">
+                <div class="card-header">
+                    <div class="header-text">
+                        <h3>Team Management</h3>
+                        <p>Manage your team members and their usage limits</p>
+                    </div>
+                    <button id="open-invite-modal" class="btn-primary-blue"><i class="fas fa-user-plus"></i> Invite User</button>
+                </div>
+
+                <div class="table-controls">
+                    <div class="search-wrapper">
+                        <i class="fas fa-search"></i>
+                        <input type="text" id="user-search" placeholder="Search by email...">
+                    </div>
+                </div>
+
+                <table class="team-table">
                     <thead>
                         <tr>
-                            <th>Email & ID</th>
-                            <th>Role</th>
-                            <th>Today's Usage</th>
-                            <th>Daily Limit</th>
-                            <th>Actions</th>
+                            <th>MEMBER</th>
+                            <th>ROLE</th>
+                            <th>TODAY'S USAGE</th>
+                            <th>DAILY LIMIT</th>
+                            <th>ACTIONS</th>
                         </tr>
                     </thead>
                     <tbody id="user-table-body">
-                        <!-- JS renders rows here -->
+                        <!-- Rows rendered by JS -->
                     </tbody>
                 </table>
             </div>
         </main>
     </div>
 
-    <!-- Modal Overlay -->
-    <div id="invite-modal" class="modal">
-        <div class="modal-content">
-            <h3>Invite New Member</h3>
-            <p>Send a Supabase invitation. They will be added as a 'User' with a default limit of 500.</p>
-            <input type="email" id="invite-email" placeholder="email@rtrlproperty.com.au">
-            <div style="margin-top: 1.5rem; display: flex; gap: 10px;">
-                <button id="send-invite-btn" class="btn-invite">Send Invite</button>
-                <button id="close-modal" style="background: #e2e8f0; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer;">Cancel</button>
+    <!-- Modal -->
+    <div id="invite-modal" class="modal-overlay">
+        <div class="modal-window">
+            <div class="modal-header">
+                <div class="modal-icon"><i class="fas fa-user-plus"></i></div>
+                <button id="close-modal" class="close-x">&times;</button>
+            </div>
+            <div class="modal-body">
+                <h3>Invite New Member</h3>
+                <p>Send an invitation email. They'll be added as a 'User' with a default limit of 500 credits.</p>
+                <div class="input-group">
+                    <label>Email address</label>
+                    <input type="email" id="invite-email" placeholder="colleague@company.com">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="cancel-modal-btn" class="btn-ghost">Cancel</button>
+                <button id="send-invite-btn" class="btn-primary-blue">Send Invite</button>
             </div>
         </div>
     </div>

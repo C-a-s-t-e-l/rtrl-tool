@@ -1,50 +1,92 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
 :root {
-    --admin-bg: #f8fafc;
-    --sidebar-bg: #0f172a;
-    --card-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
-    --accent: #3b82f6;
-    --danger: #ef4444;
-    --success: #10b981;
+    --bg-main: #f8fafc;
+    --sidebar-dark: #1e293b;
+    --text-main: #1e293b;
+    --text-muted: #64748b;
+    --blue-primary: #3b82f6;
+    --border-color: #e2e8f0;
+    --white: #ffffff;
 }
 
-body { background: var(--admin-bg); font-family: 'Inter', sans-serif; margin: 0; }
+body { font-family: 'Inter', sans-serif; background: var(--bg-main); color: var(--text-main); margin: 0; }
+
 .admin-layout { display: flex; min-height: 100vh; }
 
-/* Sidebar */
-.admin-sidebar { width: 280px; background: var(--sidebar-bg); color: white; padding: 2rem; display: flex; flex-direction: column; }
-.sidebar-header { display: flex; align-items: center; gap: 10px; font-size: 1.2rem; font-weight: 700; margin-bottom: 2rem; }
-.nav-item { color: #cbd5e1; text-decoration: none; padding: 12px; border-radius: 8px; margin-bottom: 8px; display: flex; align-items: center; gap: 10px; }
-.nav-item:hover { background: rgba(255,255,255,0.1); color: white; }
+/* Sidebar Styling */
+.admin-sidebar {
+    width: 260px; background: var(--sidebar-dark); color: white;
+    display: flex; flex-direction: column; padding: 1.5rem; position: fixed; height: 100vh;
+}
+.sidebar-brand { display: flex; align-items: center; gap: 12px; font-weight: 700; font-size: 1.1rem; margin-bottom: 2.5rem; }
+.brand-icon { background: rgba(255,255,255,0.1); width: 32px; height: 32px; display: grid; place-items: center; border-radius: 8px; }
+.sidebar-nav { flex-grow: 1; }
+.nav-link { 
+    display: flex; align-items: center; gap: 12px; padding: 12px; color: #94a3b8; 
+    text-decoration: none; border-radius: 8px; font-size: 0.9rem; font-weight: 500; margin-bottom: 4px;
+}
+.nav-link:hover, .nav-link.active { background: rgba(255,255,255,0.05); color: white; }
+.sidebar-footer { border-top: 1px solid rgba(255,255,255,0.1); padding-top: 1.5rem; }
+.kill-switch-btn { 
+    width: 100%; background: #ef4444; color: white; border: none; padding: 12px; 
+    border-radius: 8px; cursor: pointer; font-weight: 600; margin-top: 1rem;
+}
 
 /* Main Content */
-.admin-main { flex: 1; padding: 3rem; }
-.admin-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; }
+.admin-main { flex: 1; margin-left: 260px; padding: 2rem 3rem; }
+.main-header { margin-bottom: 2rem; }
+.header-title h1 { font-size: 1.75rem; font-weight: 700; margin: 0; }
+.header-title p { color: var(--text-muted); margin: 4px 0 0; font-size: 0.9rem; }
 
-/* Global Usage Card */
-.usage-summary-card { background: white; padding: 1.2rem; border-radius: 12px; box-shadow: var(--card-shadow); min-width: 300px; }
-.health-bar-bg { height: 8px; background: #f1f5f9; border-radius: 4px; margin-top: 10px; overflow: hidden; }
-.health-bar-fill { height: 100%; background: var(--accent); transition: width 0.5s; }
+/* Stats Cards */
+.stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; margin-bottom: 2rem; }
+.stat-card { background: var(--white); border-radius: 12px; padding: 1.5rem; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+.stat-label { font-size: 0.8rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase; }
+.stat-info h2 { font-size: 1.5rem; margin: 8px 0; font-weight: 700; }
+.stat-icon { width: 48px; height: 48px; border-radius: 12px; display: grid; place-items: center; font-size: 1.25rem; }
+.stat-icon.blue { background: #eff6ff; color: #3b82f6; }
+.stat-icon.green { background: #f0fdf4; color: #22c55e; }
+.stat-icon.orange { background: #fff7ed; color: #f97316; }
 
-/* User Table */
-.user-card { background: white; border-radius: 12px; box-shadow: var(--card-shadow); padding: 1.5rem; }
-.user-table { width: 100%; border-collapse: collapse; }
-.user-table th { text-align: left; padding: 1rem; color: #64748b; font-size: 0.75rem; text-transform: uppercase; border-bottom: 2px solid #f1f5f9; }
-.user-table td { padding: 1rem; border-bottom: 1px solid #f1f5f9; font-size: 0.9rem; }
+.stat-progress-bg { height: 6px; background: #f1f5f9; border-radius: 3px; margin: 8px 0; overflow: hidden; width: 140px; }
+.stat-progress-fill { height: 100%; background: #22c55e; transition: width 0.5s; }
+.stat-subtext { font-size: 0.75rem; color: var(--text-muted); }
 
-/* Mini Progress Bar for Users */
-.usage-mini-bar { width: 100%; height: 6px; background: #f1f5f9; border-radius: 3px; overflow: hidden; margin-top: 5px; }
-.usage-mini-fill { height: 100%; background: var(--accent); }
+/* Content Card & Table */
+.content-card { background: var(--white); border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); padding: 1.5rem; }
+.card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
+.card-header h3 { font-size: 1.1rem; margin: 0; }
+.card-header p { font-size: 0.85rem; color: var(--text-muted); margin: 4px 0 0; }
 
-/* Status Badges */
-.role-badge { padding: 4px 10px; border-radius: 20px; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; }
-.role-admin { background: #fee2e2; color: #dc2626; }
-.role-user { background: #f1f5f9; color: #475569; }
+.table-controls { margin-bottom: 1.5rem; }
+.search-wrapper { position: relative; max-width: 400px; }
+.search-wrapper i { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-muted); }
+.search-wrapper input { width: 100%; padding: 10px 10px 10px 38px; border-radius: 8px; border: 1px solid var(--border-color); background: #f8fafc; font-size: 0.9rem; }
 
-/* Modal Logic */
-.modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.7); z-index: 1000; align-items: center; justify-content: center; }
-.modal-content { background: white; padding: 2rem; border-radius: 12px; width: 400px; box-shadow: var(--card-shadow); }
+.team-table { width: 100%; border-collapse: collapse; }
+.team-table th { text-align: left; padding: 12px; font-size: 0.75rem; color: var(--text-muted); font-weight: 700; border-bottom: 1px solid var(--border-color); }
+.team-table td { padding: 16px 12px; border-bottom: 1px solid #f8fafc; vertical-align: middle; }
 
-/* Buttons */
-.btn-invite { background: var(--accent); color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-weight: 600; }
-.btn-kill { background: var(--danger); color: white; border: none; padding: 12px; border-radius: 8px; cursor: pointer; margin-top: auto; font-weight: 600; }
-.btn-secondary-small { background: #f8fafc; border: 1px solid #e2e8f0; padding: 6px 10px; border-radius: 6px; cursor: pointer; }
+/* Custom Select & Badges */
+.limit-select {
+    padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border-color); 
+    background: white; font-size: 0.85rem; cursor: pointer; width: 160px;
+}
+.role-badge { padding: 4px 10px; border-radius: 20px; font-size: 0.7rem; font-weight: 700; background: #eff6ff; color: #1d4ed8; }
+
+/* Member Column */
+.member-cell { display: flex; align-items: center; gap: 12px; }
+.avatar { width: 36px; height: 36px; border-radius: 50%; background: #eff6ff; color: #3b82f6; display: grid; place-items: center; font-weight: 600; font-size: 0.85rem; }
+
+/* Modal */
+.modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.6); z-index: 2000; align-items: center; justify-content: center; }
+.modal-window { background: white; border-radius: 16px; width: 100%; max-width: 480px; padding: 2rem; position: relative; }
+.modal-icon { width: 48px; height: 48px; border-radius: 12px; background: #eff6ff; color: #3b82f6; display: grid; place-items: center; font-size: 1.25rem; }
+.close-x { position: absolute; top: 20px; right: 20px; background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--text-muted); }
+.input-group label { display: block; font-size: 0.85rem; font-weight: 600; margin: 1.5rem 0 0.5rem; }
+.input-group input { width: 100%; padding: 12px; border-radius: 10px; border: 2px solid var(--blue-primary); font-size: 1rem; }
+.modal-footer { display: flex; justify-content: flex-end; gap: 12px; margin-top: 2rem; }
+
+.btn-primary-blue { background: var(--blue-primary); color: white; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 600; cursor: pointer; }
+.btn-ghost { background: #f1f5f9; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 600; cursor: pointer; }

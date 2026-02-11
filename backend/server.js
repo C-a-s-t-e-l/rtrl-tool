@@ -396,7 +396,15 @@ const task = async () => {
 
                 allProcessedBusinesses.push(businessData);
                 await appendJobResult(jobId, businessData);
-                await supabase.rpc('increment_usage', { user_id_param: job.user_id });
+                const { error: rpcError } = await supabase.rpc('increment_usage', { 
+                    user_id_param: job.user_id 
+                });
+
+                if (rpcError) {
+                    console.error(`[QUOTA ERROR] User: ${job.user_id} | Error: ${rpcError.message}`);
+                } else {
+                    console.log(`[QUOTA SUCCESS] Incremented usage for ${job.user_id}`);
+                }
                 
             }
         }
@@ -995,7 +1003,7 @@ app.get("/api/jobs/history", async (req, res) => {
 
         const { data, error } = await supabase
             .from('jobs')
-            .select('id, created_at, parameters, status, results')
+            .select('id, created_at, parameters, status')
             .eq('user_id', user.id)
             .order('created_at', { ascending: false })
             .limit(50);
