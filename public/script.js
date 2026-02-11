@@ -9,7 +9,7 @@ document.addEventListener("DOMContentLoaded", () => {
   let currentUserSession = null;
   let currentJobId = null;
 
-  // App state
+  // Initialize State Object
   window.rtrlApp = {
     ...window.rtrlApp,
     state: {
@@ -73,6 +73,7 @@ document.addEventListener("DOMContentLoaded", () => {
     toSigninBtn: document.getElementById("to-signin-btn"),
   };
 
+  // SOCKET SETUP
   const socket = io(BACKEND_URL, {
     transports: ["websocket", "polling"],
     timeout: 240000,
@@ -111,10 +112,27 @@ document.addEventListener("DOMContentLoaded", () => {
     updateDashboardUi(job.status);
   });
 
-  socket.on("progress_update", (data) => {
-    // Handle progress logic here or in ui-helpers
-  });
+  // Shared global callback for Google Maps API
+  window.initMap = () => {
+    window.rtrlApp.searchManager.initMap();
+    if (window.google) {
+      window.rtrlApp.state.googleMapsService =
+        new google.maps.places.AutocompleteService();
+      window.rtrlApp.state.googleMapsGeocoder = new google.maps.Geocoder();
+    }
+  };
 
+  window.rtrlApp.startResearch = () => {
+    if (!currentUserSession) return;
+    const payload = window.rtrlApp.searchManager.assemblePayload(elements);
+    socket.emit("start_scrape_job", {
+      authToken: currentUserSession.access_token,
+      ...payload,
+    });
+    setUiState(true, elements);
+  };
+
+  // AUTH SETUP
   supabaseClient.auth.onAuthStateChange(async (event, session) => {
     currentUserSession = session;
     if (session) {
@@ -144,23 +162,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  window.initMap = () => {
-    window.rtrlApp.searchManager.initMap();
-    window.rtrlApp.state.googleMapsService =
-      new google.maps.places.AutocompleteService();
-    window.rtrlApp.state.googleMapsGeocoder = new google.maps.Geocoder();
-  };
-
-  window.rtrlApp.startResearch = () => {
-    if (!currentUserSession) return;
-    const payload = window.rtrlApp.searchManager.assemblePayload(elements);
-    socket.emit("start_scrape_job", {
-      authToken: currentUserSession.access_token,
-      ...payload,
-    });
-    setUiState(true, elements);
-  };
-
+  // Populate Categories from SearchManager
   const searchMgr = window.rtrlApp.searchManager;
   populatePrimaryCategories(
     elements.primaryCategorySelect,
@@ -168,6 +170,7 @@ document.addEventListener("DOMContentLoaded", () => {
     "",
   );
 
+  // Attach event listeners (linked via event-handlers.js)
   setupEventListeners(
     elements,
     socket,
@@ -179,6 +182,7 @@ document.addEventListener("DOMContentLoaded", () => {
     window.rtrlApp.searchCircle,
   );
 
+  // Final Initialization
   fetch(`${BACKEND_URL}/api/config`)
     .then((r) => r.json())
     .then((config) => {
@@ -189,6 +193,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
   async function fetchPostcodeLists() {
+    if (!currentUserSession) return;
     const res = await fetch(`${BACKEND_URL}/api/postcode-lists`, {
       headers: { Authorization: `Bearer ${currentUserSession.access_token}` },
     });

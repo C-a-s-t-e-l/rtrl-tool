@@ -177,87 +177,96 @@ window.rtrlApp.searchManager = (function () {
     "Travel agents": [],
   };
 
-  // EXPOSE TO GLOBAL APP (Required for event-handlers.js)
-  window.rtrlApp.setLocationInputsState = (d) => {
-    const loc = document.getElementById("locationInput");
-    const pc = document.getElementById("postalCodeInput");
-    if (loc) loc.disabled = d;
-    if (pc) pc.disabled = d;
-    if (d) {
-      if (loc) loc.value = "";
-      window.rtrlApp.postalCodes.length = 0;
-      document
-        .querySelectorAll("#postalCodeContainer .tag")
-        .forEach((t) => t.remove());
-    }
-  };
+  async function getPlaceDetails(placeId) {
+    return new Promise((resolve, reject) => {
+      if (!window.rtrlApp.state.googleMapsGeocoder) return reject();
+      window.rtrlApp.state.googleMapsGeocoder.geocode(
+        { placeId },
+        (results, status) => {
+          if (status === "OK" && results[0]) resolve(results[0]);
+          else reject();
+        },
+      );
+    });
+  }
 
-  window.rtrlApp.setRadiusInputsState = (d) => {
-    const anchor = document.getElementById("anchorPointInput");
-    const slider = document.getElementById("radiusSlider");
-    if (anchor) anchor.disabled = d;
-    if (slider) slider.disabled = d;
-    if (d) {
-      if (anchor) anchor.value = "";
-      window.rtrlApp.state.selectedAnchorPoint = null;
-      if (window.rtrlApp.searchCircle) {
-        window.rtrlApp.map.removeLayer(window.rtrlApp.searchCircle);
-        window.rtrlApp.searchCircle = null;
-      }
-    }
-  };
-
-  window.rtrlApp.drawSearchCircle = (c) => {
-    const r =
-      parseInt(document.getElementById("radiusSlider").value, 10) * 1000;
-    if (window.rtrlApp.searchCircle) {
-      window.rtrlApp.searchCircle.setLatLng(c);
-      window.rtrlApp.searchCircle.setRadius(r);
-    } else {
-      window.rtrlApp.searchCircle = L.circle(c, {
-        radius: r,
-        color: "#20c997",
-        fillColor: "#20c997",
-        fillOpacity: 0.2,
-      }).addTo(window.rtrlApp.map);
-    }
-    window.rtrlApp.map.fitBounds(window.rtrlApp.searchCircle.getBounds());
-  };
-
-  window.rtrlApp.validateAndAddTag = async (postcode) => {
-    const v = postcode.trim();
+  // --- Autocomplete & Maps Logic ---
+  function fetchPlaceSuggestions(el, sel, t, onSelect) {
+    if (!window.rtrlApp.state.googleMapsService || el.value.trim().length < 2)
+      return (sel.style.display = "none");
     const iso = countries.find(
       (c) =>
         c.text.toLowerCase() ===
         document.getElementById("countryInput").value.toLowerCase(),
     )?.value;
-    if (!v || isNaN(v) || window.rtrlApp.postalCodes.includes(v) || !iso)
-      return;
-
-    window.rtrlApp.state.googleMapsGeocoder.geocode(
-      { componentRestrictions: { country: iso, postalCode: v } },
-      (res, status) => {
-        if (status === "OK" && res[0]) {
-          const pcComp = res[0].address_components.find((c) =>
-            c.types.includes("postal_code"),
+    const req = { input: el.value, types: t };
+    if (iso) req.componentRestrictions = { country: iso };
+    window.rtrlApp.state.googleMapsService.getPlacePredictions(
+      req,
+      (p, status) => {
+        if (status === "OK" && p) {
+          // Uses helper in ui-helpers.js
+          renderSuggestions(
+            el,
+            sel,
+            p.map((x) => ({
+              description: x.description,
+              place_id: x.place_id,
+            })),
+            "description",
+            "place_id",
+            onSelect,
           );
-          if (pcComp && pcComp.long_name === v) {
-            const sub = res[0].address_components.find((c) =>
-              c.types.includes("locality"),
-            );
-            window.rtrlApp.postalCodes.push(v);
-            const tagEl = document.createElement("span");
-            tagEl.className = "tag";
-            tagEl.innerHTML = `<span>${sub ? sub.long_name + " " : ""}${v}</span> <span class="tag-close-btn" data-value="${v}">&times;</span>`;
-            document
-              .getElementById("postalCodeContainer")
-              .insertBefore(tagEl, document.getElementById("postalCodeInput"));
-            document.getElementById("postalCodeInput").value = "";
-          }
-        }
+        } else sel.style.display = "none";
       },
     );
-  };
+  }
+
+  async function handleLocationSelection(item) {
+    try {
+      const details = await getPlaceDetails(item.place_id);
+      const countryName =
+        (
+          details.address_components.find((c) => c.types.includes("country")) ||
+          {}
+        ).long_name || "";
+      if (countryName)
+        document.getElementById("countryInput").value = countryName;
+      document.getElementById("locationInput").value = item.description;
+    } catch (e) {
+      document.getElementById("locationInput").value =
+        item.description.split(",")[0];
+    }
+  }
+
+  async function handleAnchorPointSelection(item) {
+    try {
+      const details = await getPlaceDetails(item.place_id);
+      const { lat, lng } = details.geometry.location;
+      const newCenter = L.latLng(lat(), lng());
+      window.rtrlApp.state.selectedAnchorPoint = {
+        center: newCenter,
+        name: item.description,
+      };
+      document.getElementById("anchorPointInput").value = item.description;
+      document.getElementById("anchorPointSuggestions").style.display = "none";
+      window.rtrlApp.map.setView(newCenter, 11);
+      window.rtrlApp.drawSearchCircle(newCenter);
+    } catch (e) {}
+  }
+
+  async function handlePostalCodeSelection(item) {
+    try {
+      const details = await getPlaceDetails(item.place_id);
+      const pc = details.address_components.find((c) =>
+        c.types.includes("postal_code"),
+      );
+      if (pc) {
+        await window.rtrlApp.validateAndAddTag(pc.long_name);
+        document.getElementById("postalCodeInput").value = "";
+      }
+    } catch (e) {}
+  }
 
   function initMap() {
     if (window.rtrlApp.map) return;
@@ -267,6 +276,33 @@ window.rtrlApp.searchManager = (function () {
     }).addTo(window.rtrlApp.map);
   }
 
+  // --- UI State Toggles ---
+  function setLocationInputsState(d) {
+    document.getElementById("locationInput").disabled = d;
+    document.getElementById("postalCodeInput").disabled = d;
+    if (d) {
+      document.getElementById("locationInput").value = "";
+      window.rtrlApp.postalCodes.length = 0;
+      document
+        .querySelectorAll("#postalCodeContainer .tag")
+        .forEach((t) => t.remove());
+    }
+  }
+
+  function setRadiusInputsState(d) {
+    document.getElementById("anchorPointInput").disabled = d;
+    document.getElementById("radiusSlider").disabled = d;
+    if (d) {
+      document.getElementById("anchorPointInput").value = "";
+      window.rtrlApp.state.selectedAnchorPoint = null;
+      if (window.rtrlApp.searchCircle) {
+        window.rtrlApp.map.removeLayer(window.rtrlApp.searchCircle);
+        window.rtrlApp.searchCircle = null;
+      }
+    }
+  }
+
+  // --- Payload Assembly ---
   function assemblePayload(elements) {
     const ns = elements.businessNamesInput.value
       .trim()
@@ -287,7 +323,8 @@ window.rtrlApp.searchManager = (function () {
     };
 
     if (window.rtrlApp.state.selectedAnchorPoint) {
-      p.anchorPoint = `${window.rtrlApp.state.selectedAnchorPoint.center.lat},${window.rtrlApp.state.selectedAnchorPoint.center.lng}`;
+      const { lat, lng } = window.rtrlApp.state.selectedAnchorPoint.center;
+      p.anchorPoint = `${lat},${lng}`;
       p.radiusKm = parseInt(elements.radiusSlider.value, 10);
     } else {
       p.location = elements.locationInput.value.trim();
@@ -332,9 +369,29 @@ window.rtrlApp.searchManager = (function () {
     return p;
   }
 
-  return { countries, categories, initMap, assemblePayload };
+  return {
+    countries,
+    categories,
+    initMap,
+    assemblePayload,
+    fetchPlaceSuggestions,
+    handleLocationSelection,
+    handleAnchorPointSelection,
+    handlePostalCodeSelection,
+    setLocationInputsState,
+    setRadiusInputsState,
+  };
 })();
 
-// Link these globally for job-history clone feature
-window.rtrlApp.cloneJobIntoForm = (p) =>
-  window.rtrlApp.searchManager.cloneJobIntoForm?.(p);
+window.rtrlApp.fetchPlaceSuggestions =
+  window.rtrlApp.searchManager.fetchPlaceSuggestions;
+window.rtrlApp.handleLocationSelection =
+  window.rtrlApp.searchManager.handleLocationSelection;
+window.rtrlApp.handleAnchorPointSelection =
+  window.rtrlApp.searchManager.handleAnchorPointSelection;
+window.rtrlApp.handlePostalCodeSelection =
+  window.rtrlApp.searchManager.handlePostalCodeSelection;
+window.rtrlApp.setLocationInputsState =
+  window.rtrlApp.searchManager.setLocationInputsState;
+window.rtrlApp.setRadiusInputsState =
+  window.rtrlApp.searchManager.setRadiusInputsState;
