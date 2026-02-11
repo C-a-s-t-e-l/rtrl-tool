@@ -1,15 +1,14 @@
 document.addEventListener("DOMContentLoaded", () => {
   const BACKEND_URL = "https://backend.rtrlprospector.space";
-  const SUPABASE_URL = window.CONFIG.SUPABASE_URL;
-  const SUPABASE_ANON_KEY = window.CONFIG.SUPABASE_ANON_KEY;
-
   const { createClient } = supabase;
-  const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  const supabaseClient = createClient(
+    window.CONFIG.SUPABASE_URL,
+    window.CONFIG.SUPABASE_ANON_KEY,
+  );
 
   let currentUserSession = null;
-  let currentJobId = null;
 
-  // Initialize State Object
+  // Initialize State Object (Crucial: Keep placeholders for external scripts)
   window.rtrlApp = {
     ...window.rtrlApp,
     state: {
@@ -34,27 +33,19 @@ document.addEventListener("DOMContentLoaded", () => {
     customCategoryInput: document.getElementById("customCategoryInput"),
     customKeywordContainer: document.getElementById("customKeywordContainer"),
     locationInput: document.getElementById("locationInput"),
-    locationSuggestionsEl: document.getElementById("locationSuggestions"),
     postalCodeInput: document.getElementById("postalCodeInput"),
-    postalCodeContainer: document.getElementById("postalCodeContainer"),
-    postalCodeSuggestionsEl: document.getElementById("postalCodeSuggestions"),
     countryInput: document.getElementById("countryInput"),
-    countrySuggestionsEl: document.getElementById("countrySuggestions"),
     countInput: document.getElementById("count"),
     findAllBusinessesCheckbox: document.getElementById("findAllBusinesses"),
     businessNamesInput: document.getElementById("businessNamesInput"),
     userEmailInput: document.getElementById("userEmailInput"),
     anchorPointInput: document.getElementById("anchorPointInput"),
-    anchorPointSuggestionsEl: document.getElementById("anchorPointSuggestions"),
     radiusSlider: document.getElementById("radiusSlider"),
-    radiusValue: document.getElementById("radiusValue"),
-    logEl: document.getElementById("status-text"),
     postcodeListSelect: document.getElementById("postcodeListSelect"),
     savePostcodeListButton: document.getElementById("savePostcodeListButton"),
     deletePostcodeListButton: document.getElementById(
       "deletePostcodeListButton",
     ),
-    categoryModifierGroup: document.getElementById("categoryModifierGroup"),
     categoryModifierInput: document.getElementById("categoryModifierInput"),
     loginOverlay: document.getElementById("login-overlay"),
     appContent: document.getElementById("app-content"),
@@ -73,7 +64,6 @@ document.addEventListener("DOMContentLoaded", () => {
     toSigninBtn: document.getElementById("to-signin-btn"),
   };
 
-  // SOCKET SETUP
   const socket = io(BACKEND_URL, {
     transports: ["websocket", "polling"],
     timeout: 240000,
@@ -91,48 +81,20 @@ document.addEventListener("DOMContentLoaded", () => {
 
   socket.on("business_found", () => window.rtrlApp.usage.incrementLocal());
   socket.on("job_created", ({ jobId }) => {
-    currentJobId = jobId;
     localStorage.setItem("rtrl_active_job_id", jobId);
     updateDashboardUi("queued", { position: "..." });
     socket.emit("subscribe_to_job", {
       jobId,
       authToken: currentUserSession.access_token,
     });
-    if (window.rtrlApp.jobHistory)
-      window.rtrlApp.jobHistory.fetchAndRenderJobs();
+    window.rtrlApp.jobHistory.fetchAndRenderJobs();
   });
 
   socket.on("job_state", (job) => {
-    if (job.status === "completed" || job.status === "failed") {
-      localStorage.removeItem("rtrl_active_job_id");
-      setUiState(false, elements);
-    } else {
-      setUiState(true, elements);
-    }
+    setUiState(job.status === "running" || job.status === "queued", elements);
     updateDashboardUi(job.status);
   });
 
-  // Shared global callback for Google Maps API
-  window.initMap = () => {
-    window.rtrlApp.searchManager.initMap();
-    if (window.google) {
-      window.rtrlApp.state.googleMapsService =
-        new google.maps.places.AutocompleteService();
-      window.rtrlApp.state.googleMapsGeocoder = new google.maps.Geocoder();
-    }
-  };
-
-  window.rtrlApp.startResearch = () => {
-    if (!currentUserSession) return;
-    const payload = window.rtrlApp.searchManager.assemblePayload(elements);
-    socket.emit("start_scrape_job", {
-      authToken: currentUserSession.access_token,
-      ...payload,
-    });
-    setUiState(true, elements);
-  };
-
-  // AUTH SETUP
   supabaseClient.auth.onAuthStateChange(async (event, session) => {
     currentUserSession = session;
     if (session) {
@@ -162,15 +124,29 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  // Populate Categories from SearchManager
+  window.initMap = () => {
+    window.rtrlApp.searchManager.initMap();
+    window.rtrlApp.state.googleMapsService =
+      new google.maps.places.AutocompleteService();
+    window.rtrlApp.state.googleMapsGeocoder = new google.maps.Geocoder();
+  };
+
+  window.rtrlApp.startResearch = () => {
+    if (!currentUserSession) return;
+    const payload = window.rtrlApp.searchManager.assemblePayload(elements);
+    socket.emit("start_scrape_job", {
+      authToken: currentUserSession.access_token,
+      ...payload,
+    });
+    setUiState(true, elements);
+  };
+
   const searchMgr = window.rtrlApp.searchManager;
   populatePrimaryCategories(
     elements.primaryCategorySelect,
     searchMgr.categories,
     "",
   );
-
-  // Attach event listeners (linked via event-handlers.js)
   setupEventListeners(
     elements,
     socket,
@@ -182,7 +158,6 @@ document.addEventListener("DOMContentLoaded", () => {
     window.rtrlApp.searchCircle,
   );
 
-  // Final Initialization
   fetch(`${BACKEND_URL}/api/config`)
     .then((r) => r.json())
     .then((config) => {

@@ -177,6 +177,14 @@ window.rtrlApp.searchManager = (function () {
     "Travel agents": [],
   };
 
+  function initMap() {
+    if (window.rtrlApp.map) return;
+    window.rtrlApp.map = L.map("map").setView([-33.8688, 151.2093], 10);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: "&copy; OpenStreetMap",
+    }).addTo(window.rtrlApp.map);
+  }
+
   async function getPlaceDetails(placeId) {
     return new Promise((resolve, reject) => {
       if (!window.rtrlApp.state.googleMapsGeocoder) return reject();
@@ -190,8 +198,9 @@ window.rtrlApp.searchManager = (function () {
     });
   }
 
-  // --- Autocomplete & Maps Logic ---
-  function fetchPlaceSuggestions(el, sel, t, onSelect) {
+  // --- Core Functions Shared with Event-Handlers ---
+
+  window.rtrlApp.fetchPlaceSuggestions = (el, sel, t, onSelect) => {
     if (!window.rtrlApp.state.googleMapsService || el.value.trim().length < 2)
       return (sel.style.display = "none");
     const iso = countries.find(
@@ -204,8 +213,7 @@ window.rtrlApp.searchManager = (function () {
     window.rtrlApp.state.googleMapsService.getPlacePredictions(
       req,
       (p, status) => {
-        if (status === "OK" && p) {
-          // Uses helper in ui-helpers.js
+        if (status === "OK" && p)
           renderSuggestions(
             el,
             sel,
@@ -217,12 +225,12 @@ window.rtrlApp.searchManager = (function () {
             "place_id",
             onSelect,
           );
-        } else sel.style.display = "none";
+        else sel.style.display = "none";
       },
     );
-  }
+  };
 
-  async function handleLocationSelection(item) {
+  window.rtrlApp.handleLocationSelection = async (item) => {
     try {
       const details = await getPlaceDetails(item.place_id);
       const countryName =
@@ -237,9 +245,9 @@ window.rtrlApp.searchManager = (function () {
       document.getElementById("locationInput").value =
         item.description.split(",")[0];
     }
-  }
+  };
 
-  async function handleAnchorPointSelection(item) {
+  window.rtrlApp.handleAnchorPointSelection = async (item) => {
     try {
       const details = await getPlaceDetails(item.place_id);
       const { lat, lng } = details.geometry.location;
@@ -253,9 +261,9 @@ window.rtrlApp.searchManager = (function () {
       window.rtrlApp.map.setView(newCenter, 11);
       window.rtrlApp.drawSearchCircle(newCenter);
     } catch (e) {}
-  }
+  };
 
-  async function handlePostalCodeSelection(item) {
+  window.rtrlApp.handlePostalCodeSelection = async (item) => {
     try {
       const details = await getPlaceDetails(item.place_id);
       const pc = details.address_components.find((c) =>
@@ -266,18 +274,43 @@ window.rtrlApp.searchManager = (function () {
         document.getElementById("postalCodeInput").value = "";
       }
     } catch (e) {}
-  }
+  };
 
-  function initMap() {
-    if (window.rtrlApp.map) return;
-    window.rtrlApp.map = L.map("map").setView([-33.8688, 151.2093], 10);
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      attribution: "&copy; OpenStreetMap",
-    }).addTo(window.rtrlApp.map);
-  }
+  window.rtrlApp.validateAndAddTag = async (postcode) => {
+    const v = postcode.trim();
+    if (!v || isNaN(v) || window.rtrlApp.postalCodes.includes(v)) return;
+    const iso = countries.find(
+      (c) =>
+        c.text.toLowerCase() ===
+        document.getElementById("countryInput").value.toLowerCase(),
+    )?.value;
+    if (!iso || !window.rtrlApp.state.googleMapsGeocoder) return;
+    window.rtrlApp.state.googleMapsGeocoder.geocode(
+      { componentRestrictions: { country: iso, postalCode: v } },
+      (res, status) => {
+        if (status === "OK" && res[0]) {
+          const pcComp = res[0].address_components.find((c) =>
+            c.types.includes("postal_code"),
+          );
+          if (pcComp && pcComp.long_name === v) {
+            const sub = res[0].address_components.find((c) =>
+              c.types.includes("locality"),
+            );
+            window.rtrlApp.postalCodes.push(v);
+            const tagEl = document.createElement("span");
+            tagEl.className = "tag";
+            tagEl.innerHTML = `<span>${sub ? sub.long_name + " " : ""}${v}</span> <span class="tag-close-btn" data-value="${v}">&times;</span>`;
+            document
+              .getElementById("postalCodeContainer")
+              .insertBefore(tagEl, document.getElementById("postalCodeInput"));
+            document.getElementById("postalCodeInput").value = "";
+          }
+        }
+      },
+    );
+  };
 
-  // --- UI State Toggles ---
-  function setLocationInputsState(d) {
+  window.rtrlApp.setLocationInputsState = (d) => {
     document.getElementById("locationInput").disabled = d;
     document.getElementById("postalCodeInput").disabled = d;
     if (d) {
@@ -287,9 +320,9 @@ window.rtrlApp.searchManager = (function () {
         .querySelectorAll("#postalCodeContainer .tag")
         .forEach((t) => t.remove());
     }
-  }
+  };
 
-  function setRadiusInputsState(d) {
+  window.rtrlApp.setRadiusInputsState = (d) => {
     document.getElementById("anchorPointInput").disabled = d;
     document.getElementById("radiusSlider").disabled = d;
     if (d) {
@@ -300,9 +333,25 @@ window.rtrlApp.searchManager = (function () {
         window.rtrlApp.searchCircle = null;
       }
     }
-  }
+  };
 
-  // --- Payload Assembly ---
+  window.rtrlApp.drawSearchCircle = (c) => {
+    const r =
+      parseInt(document.getElementById("radiusSlider").value, 10) * 1000;
+    if (window.rtrlApp.searchCircle) {
+      window.rtrlApp.searchCircle.setLatLng(c);
+      window.rtrlApp.searchCircle.setRadius(r);
+    } else {
+      window.rtrlApp.searchCircle = L.circle(c, {
+        radius: r,
+        color: "#20c997",
+        fillColor: "#20c997",
+        fillOpacity: 0.2,
+      }).addTo(window.rtrlApp.map);
+    }
+    window.rtrlApp.map.fitBounds(window.rtrlApp.searchCircle.getBounds());
+  };
+
   function assemblePayload(elements) {
     const ns = elements.businessNamesInput.value
       .trim()
@@ -369,29 +418,5 @@ window.rtrlApp.searchManager = (function () {
     return p;
   }
 
-  return {
-    countries,
-    categories,
-    initMap,
-    assemblePayload,
-    fetchPlaceSuggestions,
-    handleLocationSelection,
-    handleAnchorPointSelection,
-    handlePostalCodeSelection,
-    setLocationInputsState,
-    setRadiusInputsState,
-  };
+  return { countries, categories, initMap, assemblePayload };
 })();
-
-window.rtrlApp.fetchPlaceSuggestions =
-  window.rtrlApp.searchManager.fetchPlaceSuggestions;
-window.rtrlApp.handleLocationSelection =
-  window.rtrlApp.searchManager.handleLocationSelection;
-window.rtrlApp.handleAnchorPointSelection =
-  window.rtrlApp.searchManager.handleAnchorPointSelection;
-window.rtrlApp.handlePostalCodeSelection =
-  window.rtrlApp.searchManager.handlePostalCodeSelection;
-window.rtrlApp.setLocationInputsState =
-  window.rtrlApp.searchManager.setLocationInputsState;
-window.rtrlApp.setRadiusInputsState =
-  window.rtrlApp.searchManager.setRadiusInputsState;
