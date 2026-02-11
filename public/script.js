@@ -1,5 +1,5 @@
 document.addEventListener("DOMContentLoaded", () => {
-  const BACKEND_URL = window.location.origin;
+  const BACKEND_URL = "https://backend.rtrlprospector.space";
   const SUPABASE_URL = window.CONFIG.SUPABASE_URL;
   const SUPABASE_ANON_KEY = window.CONFIG.SUPABASE_ANON_KEY;
 
