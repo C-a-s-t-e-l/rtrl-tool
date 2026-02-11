@@ -1,7 +1,6 @@
 window.rtrlApp = window.rtrlApp || {};
 
 window.rtrlApp.searchManager = (function () {
-  // 1. CONSTANTS
   const countries = [
     { value: "AU", text: "Australia" },
     { value: "NZ", text: "New Zealand" },
@@ -178,7 +177,88 @@ window.rtrlApp.searchManager = (function () {
     "Travel agents": [],
   };
 
-  // 2. MAP & GEOCODING
+  // EXPOSE TO GLOBAL APP (Required for event-handlers.js)
+  window.rtrlApp.setLocationInputsState = (d) => {
+    const loc = document.getElementById("locationInput");
+    const pc = document.getElementById("postalCodeInput");
+    if (loc) loc.disabled = d;
+    if (pc) pc.disabled = d;
+    if (d) {
+      if (loc) loc.value = "";
+      window.rtrlApp.postalCodes.length = 0;
+      document
+        .querySelectorAll("#postalCodeContainer .tag")
+        .forEach((t) => t.remove());
+    }
+  };
+
+  window.rtrlApp.setRadiusInputsState = (d) => {
+    const anchor = document.getElementById("anchorPointInput");
+    const slider = document.getElementById("radiusSlider");
+    if (anchor) anchor.disabled = d;
+    if (slider) slider.disabled = d;
+    if (d) {
+      if (anchor) anchor.value = "";
+      window.rtrlApp.state.selectedAnchorPoint = null;
+      if (window.rtrlApp.searchCircle) {
+        window.rtrlApp.map.removeLayer(window.rtrlApp.searchCircle);
+        window.rtrlApp.searchCircle = null;
+      }
+    }
+  };
+
+  window.rtrlApp.drawSearchCircle = (c) => {
+    const r =
+      parseInt(document.getElementById("radiusSlider").value, 10) * 1000;
+    if (window.rtrlApp.searchCircle) {
+      window.rtrlApp.searchCircle.setLatLng(c);
+      window.rtrlApp.searchCircle.setRadius(r);
+    } else {
+      window.rtrlApp.searchCircle = L.circle(c, {
+        radius: r,
+        color: "#20c997",
+        fillColor: "#20c997",
+        fillOpacity: 0.2,
+      }).addTo(window.rtrlApp.map);
+    }
+    window.rtrlApp.map.fitBounds(window.rtrlApp.searchCircle.getBounds());
+  };
+
+  window.rtrlApp.validateAndAddTag = async (postcode) => {
+    const v = postcode.trim();
+    const iso = countries.find(
+      (c) =>
+        c.text.toLowerCase() ===
+        document.getElementById("countryInput").value.toLowerCase(),
+    )?.value;
+    if (!v || isNaN(v) || window.rtrlApp.postalCodes.includes(v) || !iso)
+      return;
+
+    window.rtrlApp.state.googleMapsGeocoder.geocode(
+      { componentRestrictions: { country: iso, postalCode: v } },
+      (res, status) => {
+        if (status === "OK" && res[0]) {
+          const pcComp = res[0].address_components.find((c) =>
+            c.types.includes("postal_code"),
+          );
+          if (pcComp && pcComp.long_name === v) {
+            const sub = res[0].address_components.find((c) =>
+              c.types.includes("locality"),
+            );
+            window.rtrlApp.postalCodes.push(v);
+            const tagEl = document.createElement("span");
+            tagEl.className = "tag";
+            tagEl.innerHTML = `<span>${sub ? sub.long_name + " " : ""}${v}</span> <span class="tag-close-btn" data-value="${v}">&times;</span>`;
+            document
+              .getElementById("postalCodeContainer")
+              .insertBefore(tagEl, document.getElementById("postalCodeInput"));
+            document.getElementById("postalCodeInput").value = "";
+          }
+        }
+      },
+    );
+  };
+
   function initMap() {
     if (window.rtrlApp.map) return;
     window.rtrlApp.map = L.map("map").setView([-33.8688, 151.2093], 10);
@@ -187,113 +267,6 @@ window.rtrlApp.searchManager = (function () {
     }).addTo(window.rtrlApp.map);
   }
 
-  async function getPlaceDetails(placeId) {
-    return new Promise((resolve, reject) => {
-      if (!window.rtrlApp.state.googleMapsGeocoder) return reject();
-      window.rtrlApp.state.googleMapsGeocoder.geocode(
-        { placeId },
-        (results, status) => {
-          if (status === "OK" && results[0]) resolve(results[0]);
-          else reject();
-        },
-      );
-    });
-  }
-
-  // 3. REPEAT SEARCH LOGIC (The logic that fills the form from history)
-  function cloneJobIntoForm(p) {
-    const el = {
-      primaryCat: document.getElementById("primaryCategorySelect"),
-      customCat: document.getElementById("customCategoryInput"),
-      location: document.getElementById("locationInput"),
-      country: document.getElementById("countryInput"),
-      count: document.getElementById("count"),
-      findAll: document.getElementById("findAllBusinesses"),
-      names: document.getElementById("businessNamesInput"),
-      anchor: document.getElementById("anchorPointInput"),
-      radius: document.getElementById("radiusSlider"),
-      aiToggle: document.getElementById("useAiToggle"),
-      modifier: document.getElementById("categoryModifierInput"),
-    };
-
-    // Reset UI
-    el.location.value = "";
-    el.anchor.value = "";
-    el.names.value = "";
-    window.rtrlApp.postalCodes.length = 0;
-    window.rtrlApp.customKeywords.length = 0;
-    window.rtrlApp.state.selectedAnchorPoint = null;
-    document.querySelectorAll(".tag").forEach((t) => t.remove());
-
-    if (window.rtrlApp.searchCircle) {
-      window.rtrlApp.map.removeLayer(window.rtrlApp.searchCircle);
-      window.rtrlApp.searchCircle = null;
-    }
-
-    // Apply parameters
-    if (el.aiToggle) el.aiToggle.checked = p.useAiEnrichment !== false;
-    el.country.value = p.country || "Australia";
-
-    if (p.count === -1) {
-      el.findAll.checked = true;
-      el.count.value = "";
-      el.count.disabled = true;
-    } else {
-      el.findAll.checked = false;
-      el.count.value = p.count || "";
-      el.count.disabled = false;
-    }
-
-    if (p.businessNames && p.businessNames.length > 0) {
-      el.names.value = p.businessNames.join("\n");
-      document
-        .getElementById("individualSearchContainer")
-        .classList.remove("collapsed");
-    } else if (p.categoriesToLoop) {
-      p.categoriesToLoop.forEach((kw) => {
-        window.rtrlApp.customKeywords.push(kw);
-        const t = document.createElement("span");
-        t.className = "tag";
-        t.innerHTML = `<span>${kw}</span> <span class="tag-close-btn" data-value="${kw}">&times;</span>`;
-        document
-          .getElementById("customKeywordContainer")
-          .insertBefore(t, el.customCat);
-      });
-    }
-
-    if (p.radiusKm && p.anchorPoint) {
-      el.radius.value = p.radiusKm;
-      document.getElementById("radiusValue").textContent = `${p.radiusKm} km`;
-      el.anchor.value = p.searchParamsForEmail?.area || "Selected Area";
-      const co = p.anchorPoint.split(",");
-      if (co.length === 2) {
-        const nc = L.latLng(parseFloat(co[0]), parseFloat(co[1]));
-        window.rtrlApp.state.selectedAnchorPoint = {
-          center: nc,
-          name: el.anchor.value,
-        };
-        document
-          .getElementById("radiusSearchContainer")
-          .classList.remove("collapsed");
-        setTimeout(() => {
-          window.rtrlApp.map.invalidateSize();
-          window.rtrlApp.map.setView(nc, 11);
-          window.rtrlApp.drawSearchCircle(nc);
-        }, 150);
-      }
-    } else {
-      el.location.value = p.location || "";
-      if (p.postalCode)
-        p.postalCode.forEach((pc) => window.rtrlApp.validateAndAddTag(pc));
-      document
-        .getElementById("locationSearchContainer")
-        .classList.remove("collapsed");
-    }
-
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  }
-
-  // 4. PAYLOAD ASSEMBLY
   function assemblePayload(elements) {
     const ns = elements.businessNamesInput.value
       .trim()
@@ -305,7 +278,6 @@ window.rtrlApp.searchManager = (function () {
     )
       .map((c) => c.value)
       .filter((v) => v !== "select_all");
-
     const p = {
       country: elements.countryInput.value,
       businessNames: ns,
@@ -315,8 +287,7 @@ window.rtrlApp.searchManager = (function () {
     };
 
     if (window.rtrlApp.state.selectedAnchorPoint) {
-      const { lat, lng } = window.rtrlApp.state.selectedAnchorPoint.center;
-      p.anchorPoint = `${lat},${lng}`;
+      p.anchorPoint = `${window.rtrlApp.state.selectedAnchorPoint.center.lat},${window.rtrlApp.state.selectedAnchorPoint.center.lng}`;
       p.radiusKm = parseInt(elements.radiusSlider.value, 10);
     } else {
       p.location = elements.locationInput.value.trim();
@@ -358,16 +329,12 @@ window.rtrlApp.searchManager = (function () {
       postcodes: window.rtrlApp.postalCodes,
       country: elements.countryInput.value,
     };
-
     return p;
   }
 
-  return {
-    countries,
-    categories,
-    initMap,
-    getPlaceDetails,
-    assemblePayload,
-    cloneJobIntoForm,
-  };
+  return { countries, categories, initMap, assemblePayload };
 })();
+
+// Link these globally for job-history clone feature
+window.rtrlApp.cloneJobIntoForm = (p) =>
+  window.rtrlApp.searchManager.cloneJobIntoForm?.(p);

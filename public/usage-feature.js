@@ -6,21 +6,17 @@ window.rtrlApp.usage = (function () {
         const limit = profile.daily_limit || 500;
         const pct = Math.min((current / limit) * 100, 100);
 
-        // Update Numbers
         const curEl = document.getElementById('dash-usage-current');
         const limEl = document.getElementById('dash-usage-limit');
         if (curEl) curEl.textContent = current;
         if (limEl) limEl.textContent = limit;
         
-        // Update Progress Bar
         const fill = document.getElementById('dash-usage-fill');
         if (fill) fill.style.width = `${pct}%`;
         
-        // Update Labels
         const pctLabel = document.getElementById('usage-percentage-label');
         if (pctLabel) pctLabel.textContent = `${Math.round(pct)}% consumed`;
         
-        // Plan Badge & Styles
         const badge = document.getElementById('dash-plan-badge');
         const card = document.getElementById('usage-dashboard-card');
         const statusText = document.getElementById('usage-status-text');
@@ -52,7 +48,6 @@ window.rtrlApp.usage = (function () {
         const currentEl = document.getElementById('dash-usage-current');
         const limitEl = document.getElementById('dash-usage-limit');
         if (!currentEl || !limitEl) return;
-
         let current = parseInt(currentEl.textContent) + 1;
         let limit = parseInt(limitEl.textContent);
         update({ usage_today: current, daily_limit: limit });

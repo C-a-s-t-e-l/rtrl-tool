@@ -9,7 +9,7 @@ document.addEventListener("DOMContentLoaded", () => {
   let currentUserSession = null;
   let currentJobId = null;
 
-  // Initialize Global State
+  // App state
   window.rtrlApp = {
     ...window.rtrlApp,
     state: {
@@ -73,7 +73,6 @@ document.addEventListener("DOMContentLoaded", () => {
     toSigninBtn: document.getElementById("to-signin-btn"),
   };
 
-  // SOCKET SETUP
   const socket = io(BACKEND_URL, {
     transports: ["websocket", "polling"],
     timeout: 240000,
@@ -102,7 +101,6 @@ document.addEventListener("DOMContentLoaded", () => {
       window.rtrlApp.jobHistory.fetchAndRenderJobs();
   });
 
-  socket.on("queue_position", (data) => updateDashboardUi("queued", data));
   socket.on("job_state", (job) => {
     if (job.status === "completed" || job.status === "failed") {
       localStorage.removeItem("rtrl_active_job_id");
@@ -114,13 +112,9 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   socket.on("progress_update", (data) => {
-    // Shared global function in ui-helpers.js or event-handlers
-    if (typeof window.updateStatusCardPhase === "function")
-      window.updateStatusCardPhase(data.phase);
-    // ... (Update stat counters in UI)
+    // Handle progress logic here or in ui-helpers
   });
 
-  // AUTH SETUP
   supabaseClient.auth.onAuthStateChange(async (event, session) => {
     currentUserSession = session;
     if (session) {
@@ -142,12 +136,6 @@ document.addEventListener("DOMContentLoaded", () => {
         if (profile.role === "admin")
           document.getElementById("admin-control-link").style.display = "flex";
       }
-
-      if (elements.userEmailInput) {
-        elements.userEmailInput.value =
-          localStorage.getItem("rtrl_last_used_email") || session.user.email;
-      }
-
       fetchPostcodeLists();
       window.rtrlApp.jobHistory.fetchAndRenderJobs();
     } else {
@@ -156,7 +144,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  // MAPS CALLBACK
   window.initMap = () => {
     window.rtrlApp.searchManager.initMap();
     window.rtrlApp.state.googleMapsService =
@@ -164,7 +151,6 @@ document.addEventListener("DOMContentLoaded", () => {
     window.rtrlApp.state.googleMapsGeocoder = new google.maps.Geocoder();
   };
 
-  // RESEARCH START
   window.rtrlApp.startResearch = () => {
     if (!currentUserSession) return;
     const payload = window.rtrlApp.searchManager.assemblePayload(elements);
@@ -175,7 +161,6 @@ document.addEventListener("DOMContentLoaded", () => {
     setUiState(true, elements);
   };
 
-  // INITIALIZE UI
   const searchMgr = window.rtrlApp.searchManager;
   populatePrimaryCategories(
     elements.primaryCategorySelect,
@@ -183,7 +168,6 @@ document.addEventListener("DOMContentLoaded", () => {
     "",
   );
 
-  // Attach event listeners (logic from event-handlers.js)
   setupEventListeners(
     elements,
     socket,
@@ -195,7 +179,6 @@ document.addEventListener("DOMContentLoaded", () => {
     window.rtrlApp.searchCircle,
   );
 
-  // Fetch config and load Google script
   fetch(`${BACKEND_URL}/api/config`)
     .then((r) => r.json())
     .then((config) => {
@@ -206,7 +189,6 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
   async function fetchPostcodeLists() {
-    if (!currentUserSession) return;
     const res = await fetch(`${BACKEND_URL}/api/postcode-lists`, {
       headers: { Authorization: `Bearer ${currentUserSession.access_token}` },
     });
@@ -224,15 +206,9 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  // Auth Form Interactions
-  elements.toSignupBtn?.addEventListener("click", (e) => {
-    e.preventDefault();
-    elements.flipCardContainer.classList.add("flipped");
-  });
-  elements.toSigninBtn?.addEventListener("click", (e) => {
-    e.preventDefault();
-    elements.flipCardContainer.classList.remove("flipped");
-  });
+  elements.logoutButton?.addEventListener("click", () =>
+    supabaseClient.auth.signOut().then(() => location.reload()),
+  );
   elements.loginEmailBtn?.addEventListener("click", () => {
     supabaseClient.auth
       .signInWithPassword({
@@ -243,23 +219,4 @@ document.addEventListener("DOMContentLoaded", () => {
         if (error) alert(error.message);
       });
   });
-  elements.signupEmailBtn?.addEventListener("click", () => {
-    supabaseClient.auth
-      .signUp({
-        email: elements.signupEmailInput.value,
-        password: elements.signupPasswordInput.value,
-      })
-      .then(({ error }) => {
-        if (error) alert(error.message);
-        else alert("Check your email!");
-      });
-  });
-  elements.logoutButton?.addEventListener("click", (e) => {
-    e.preventDefault();
-    supabaseClient.auth.signOut().then(() => location.reload());
-  });
 });
-
-// Helper for CloneJobIntoForm (linked to history items)
-window.rtrlApp.cloneJobIntoForm = (p) =>
-  window.rtrlApp.searchManager.cloneJobIntoForm(p);
