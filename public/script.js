@@ -41,7 +41,7 @@ async function refreshUsageTracker() {
 
     const { data: profile, error } = await supabaseClient
         .from('profiles')
-        .select('usage_today, daily_limit, last_reset_date') 
+        .select('usage_today, daily_limit, last_reset_date')
         .eq('id', currentUserSession.user.id)
         .single();
 
@@ -52,16 +52,18 @@ async function refreshUsageTracker() {
 
     const current = profile.usage_today || 0;
     const limit = profile.daily_limit || 500;
-    const lastResetDateStr = profile.last_reset_date; 
+    const lastResetDateStr = profile.last_reset_date;
 
     const today = new Date();
-    const todayStr = today.toISOString().split('T')[0]; 
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    const todayStr = `${year}-${month}-${day}`;
 
     let displayCurrentUsage = current;
 
-
     if (lastResetDateStr && lastResetDateStr < todayStr) {
-        displayCurrentUsage = 0; 
+        displayCurrentUsage = 0;
     }
 
     const percentage = Math.min(Math.round((displayCurrentUsage / limit) * 100), 100);
@@ -77,12 +79,12 @@ async function refreshUsageTracker() {
 
     let planName = "Standard Plan";
     if (limit <= 100) planName = "Starter Plan";
-    if (limit >= 1000 && limit < 5000) planName = "Power Plan"; 
-    if (limit >= 5000) planName = "Executive Plan";
+    if (limit >= 1000 && limit < 5000) planName = "Power Plan";
+    if (limit >= 5000) planName = "5000 Daily Limit";
     if (elements.dashPlanBadge) elements.dashPlanBadge.textContent = planName;
 
     if (elements.dashUsageStatus) {
-        if (displayCurrentUsage >= limit) { 
+        if (displayCurrentUsage >= limit) {
             elements.dashUsageStatus.textContent = "Daily limit reached. Resets at midnight.";
             elements.dashUsageStatus.style.color = "#ef4444";
         } else {
@@ -93,7 +95,7 @@ async function refreshUsageTracker() {
 
     const now = new Date();
     const midnight = new Date();
-    midnight.setHours(24, 0, 0, 0); 
+    midnight.setHours(24, 0, 0, 0);
     const diffMs = midnight.getTime() - now.getTime();
     const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
     const diffMinutes = Math.round((diffMs % (1000 * 60 * 60)) / (1000 * 60));
@@ -105,11 +107,10 @@ async function refreshUsageTracker() {
     } else if (diffMinutes > 0) {
         resetTimerText = `Resets in ${diffMinutes}m`;
     } else {
-        resetTimerText = "Resetting soon..."; 
+        resetTimerText = "Resetting soon...";
     }
 
     if (elements.dashResetTimer) elements.dashResetTimer.textContent = resetTimerText;
-
 }
 
 
