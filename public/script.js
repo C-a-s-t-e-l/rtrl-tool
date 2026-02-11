@@ -35,6 +35,55 @@ document.addEventListener("DOMContentLoaded", () => {
   };
 
   function initializeMainApp() {
+
+    async function refreshUsageTracker() {
+    if (!currentUserSession) return;
+
+    const { data: profile, error } = await supabaseClient
+        .from('profiles')
+        .select('usage_today, daily_limit')
+        .eq('id', currentUserSession.user.id)
+        .single();
+
+    if (error || !profile) return;
+
+    const current = profile.usage_today || 0;
+    const limit = profile.daily_limit || 500;
+    const percentage = Math.min(Math.round((current / limit) * 100), 100);
+
+    if (elements.usageCurrent) elements.usageCurrent.textContent = current.toLocaleString();
+    if (elements.usageLimit) elements.usageLimit.textContent = limit.toLocaleString();
+    if (elements.dashUsagePercent) elements.dashUsagePercent.textContent = `${percentage}% consumed`;
+
+    if (elements.dashUsageFill) {
+        elements.dashUsageFill.style.width = `${percentage}%`;
+        elements.dashUsageFill.style.backgroundColor = percentage > 90 ? "#ef4444" : "#8b5cf6";
+    }
+
+    let planName = "Standard Plan";
+    if (limit <= 100) planName = "Starter Plan";
+    if (limit >= 1000) planName = "Power Plan";
+    if (limit >= 5000) planName = "Unlimited Plan";
+    if (elements.dashPlanBadge) elements.dashPlanBadge.textContent = planName;
+
+    if (elements.dashUsageStatus) {
+        if (percentage >= 100) {
+            elements.dashUsageStatus.textContent = "Daily limit reached. Resets at midnight.";
+            elements.dashUsageStatus.style.color = "#ef4444";
+        } else {
+            elements.dashUsageStatus.textContent = "Account in good standing";
+            elements.dashUsageStatus.style.color = "#64748b";
+        }
+    }
+
+    const now = new Date();
+    const midnight = new Date();
+    midnight.setHours(24, 0, 0, 0);
+    const diffHours = Math.floor((midnight - now) / (1000 * 60 * 60));
+    if (elements.dashResetTimer) elements.dashResetTimer.textContent = `Resets in ${diffHours}h`;
+}
+
+
     async function loadGoogleMaps() {
       try {
         const response = await fetch(`${BACKEND_URL}/api/config`, {
@@ -114,6 +163,13 @@ document.addEventListener("DOMContentLoaded", () => {
       signupEmailBtn: document.getElementById("signup-email-btn"),
       progressBar: document.getElementById("progressBar"),
       progressPercentage: document.getElementById("progressPercentage"),
+      dashUsageCurrent: document.getElementById("dash-usage-current"),
+      dashUsageLimit: document.getElementById("dash-usage-limit"),
+      dashUsageFill: document.getElementById("dash-usage-fill"),
+      dashPlanBadge: document.getElementById("dash-plan-badge"),
+      dashResetTimer: document.getElementById("reset-timer"),
+      dashUsagePercent: document.getElementById("usage-percentage-label"),
+      dashUsageStatus: document.getElementById("usage-status-text"),
     };
 
     if (elements.useAiToggle) {
@@ -220,45 +276,60 @@ document.addEventListener("DOMContentLoaded", () => {
       handleScrapeError({ error });
     });
 
-socket.on("job_update", (update) => {
-        if (update.status) {
-          if (elements.logEl) {
-            logMessage(elements.logEl, `Job status: ${update.status}`, "info");
-          }
+        socket.on("business_found", (data) => {
+        refreshUsageTracker();
+    });
 
-          if (window.rtrlApp.jobHistory) {
-            window.rtrlApp.jobHistory.fetchAndRenderJobs();
-          }
+    socket.on("job_update", (update) => {
+      if (update.status) {
+        if (elements.logEl) {
+          logMessage(elements.logEl, `Job status: ${update.status}`, "info");
+        }
 
-          const targetId = update.id || currentJobId;
-          if (targetId) {
-            const historyBadge = document.getElementById(`job-status-${targetId}`);
-            if (historyBadge) {
-              if (update.status === "completed") {
-                historyBadge.className = "job-status status-completed";
-                historyBadge.innerHTML = '<i class="fas fa-check-circle"></i> <span>Completed</span>';
-              } else if (update.status === "failed") {
-                historyBadge.className = "job-status status-failed";
-                historyBadge.innerHTML = '<i class="fas fa-exclamation-triangle"></i> <span>Failed</span>';
-              } else if (update.status === "running") {
-                historyBadge.className = "job-status status-running";
-                historyBadge.innerHTML = '<i class="fas fa-spinner fa-spin"></i> <span>Running</span>';
-              }
-            }
-          }
+        if (window.rtrlApp.jobHistory) {
+          window.rtrlApp.jobHistory.fetchAndRenderJobs();
+        }
 
-          if (update.id === currentJobId || (update.status === "completed" && currentJobId)) {
-            if (update.status === "running") {
-              updateDashboardUi("running");
-            } else if (update.status === "completed" || update.status === "failed") {
-              localStorage.removeItem("rtrl_active_job_id");
-              currentJobId = null;
-              setUiState(false, getUiElementsForStateChange());
-              updateDashboardUi(update.status);
+        const targetId = update.id || currentJobId;
+        if (targetId) {
+          const historyBadge = document.getElementById(
+            `job-status-${targetId}`,
+          );
+          if (historyBadge) {
+            if (update.status === "completed") {
+              historyBadge.className = "job-status status-completed";
+              historyBadge.innerHTML =
+                '<i class="fas fa-check-circle"></i> <span>Completed</span>';
+            } else if (update.status === "failed") {
+              historyBadge.className = "job-status status-failed";
+              historyBadge.innerHTML =
+                '<i class="fas fa-exclamation-triangle"></i> <span>Failed</span>';
+            } else if (update.status === "running") {
+              historyBadge.className = "job-status status-running";
+              historyBadge.innerHTML =
+                '<i class="fas fa-spinner fa-spin"></i> <span>Running</span>';
             }
           }
         }
-      });
+
+        if (
+          update.id === currentJobId ||
+          (update.status === "completed" && currentJobId)
+        ) {
+          if (update.status === "running") {
+            updateDashboardUi("running");
+          } else if (
+            update.status === "completed" ||
+            update.status === "failed"
+          ) {
+            localStorage.removeItem("rtrl_active_job_id");
+            currentJobId = null;
+            setUiState(false, getUiElementsForStateChange());
+            updateDashboardUi(update.status);
+          }
+        }
+      }
+    });
 
     socket.on("progress_update", (data) => {
       const {
@@ -312,46 +383,45 @@ socket.on("job_update", (update) => {
         document.getElementById("stat-enriched").textContent = enriched || 0;
     });
 
-function updateDashboardUi(status, data = {}) {
-        const headline = document.getElementById("status-headline");
-        const subtext = document.getElementById("status-subtext");
-        const icon = document.getElementById("status-icon");
-        const card = document.getElementById("status-card");
-        
-        if (!headline || !card) return;
+    function updateDashboardUi(status, data = {}) {
+      const headline = document.getElementById("status-headline");
+      const subtext = document.getElementById("status-subtext");
+      const icon = document.getElementById("status-icon");
+      const card = document.getElementById("status-card");
 
-        card.className = "status-card";
+      if (!headline || !card) return;
 
-        if (status === "running") {
-          card.classList.add("state-working", "phase-scraping");
-          headline.textContent = "Job Active";
-          subtext.textContent = "Processing data...";
-          if (icon) icon.className = "fas fa-circle-notch fa-spin";
-        } else if (status === "queued") {
-          headline.textContent = "Job Queued";
-          subtext.textContent = `Server is busy. You are #${data.position || "?"} in the waiting list.`;
-          if (icon) icon.className = "fas fa-clock";
-        } else if (status === "completed") {
-          card.classList.add("phase-complete");
-          headline.textContent = "Job Completed";
-          subtext.textContent = "Check your email for results.";
-          if (icon) icon.className = "fas fa-check-circle";
-          
-          const fill = document.getElementById("progress-fill");
-          const pct = document.getElementById("pct-label");
-          const phase = document.getElementById("phase-label");
-          
-          if (fill) fill.style.width = "100%";
-          if (pct) pct.textContent = "100%";
-          if (phase) phase.textContent = "Phase 3/3: Complete";
-          
-        } else if (status === "failed") {
-          card.classList.add("phase-error");
-          headline.textContent = "Job Failed";
-          subtext.textContent = "Please check job history or try again.";
-          if (icon) icon.className = "fas fa-times-circle";
-        }
+      card.className = "status-card";
+
+      if (status === "running") {
+        card.classList.add("state-working", "phase-scraping");
+        headline.textContent = "Job Active";
+        subtext.textContent = "Processing data...";
+        if (icon) icon.className = "fas fa-circle-notch fa-spin";
+      } else if (status === "queued") {
+        headline.textContent = "Job Queued";
+        subtext.textContent = `Server is busy. You are #${data.position || "?"} in the waiting list.`;
+        if (icon) icon.className = "fas fa-clock";
+      } else if (status === "completed") {
+        card.classList.add("phase-complete");
+        headline.textContent = "Job Completed";
+        subtext.textContent = "Check your email for results.";
+        if (icon) icon.className = "fas fa-check-circle";
+
+        const fill = document.getElementById("progress-fill");
+        const pct = document.getElementById("pct-label");
+        const phase = document.getElementById("phase-label");
+
+        if (fill) fill.style.width = "100%";
+        if (pct) pct.textContent = "100%";
+        if (phase) phase.textContent = "Phase 3/3: Complete";
+      } else if (status === "failed") {
+        card.classList.add("phase-error");
+        headline.textContent = "Job Failed";
+        subtext.textContent = "Please check job history or try again.";
+        if (icon) icon.className = "fas fa-times-circle";
       }
+    }
 
     function updateStatusCardPhase(phase) {
       const card = document.getElementById("status-card");
@@ -469,55 +539,61 @@ function updateDashboardUi(status, data = {}) {
       window.location.reload();
     });
 
-supabaseClient.auth.onAuthStateChange(async (event, session) => {
-  currentUserSession = session;
-  if (session) {
-    if (socket.connected)
-      socket.emit("authenticate_socket", session.access_token);
-    
-    elements.loginOverlay.style.display = "none";
-    elements.appContent.style.display = "block";
-    elements.userMenu.style.display = "block";
-    elements.userInfoSpan.textContent = session.user.user_metadata.full_name || "User";
-    elements.userEmailDisplay.textContent = session.user.email;
-    elements.startButton.disabled = false;
+    supabaseClient.auth.onAuthStateChange(async (event, session) => {
+      currentUserSession = session;
+      if (session) {
+        if (socket.connected)
+          socket.emit("authenticate_socket", session.access_token);
 
-    supabaseClient
-      .from('profiles')
-      .select('role')
-      .eq('id', session.user.id)
-      .single()
-      .then(({ data: profile }) => {
-        if (profile && profile.role === 'admin') {
-          const adminLink = document.getElementById('admin-control-link');
-          if (adminLink) adminLink.style.display = 'flex';
+        elements.loginOverlay.style.display = "none";
+        elements.appContent.style.display = "block";
+        elements.userMenu.style.display = "block";
+        elements.userInfoSpan.textContent =
+          session.user.user_metadata.full_name || "User";
+        elements.userEmailDisplay.textContent = session.user.email;
+        elements.startButton.disabled = false;
+
+        refreshUsageTracker();
+
+        supabaseClient
+          .from("profiles")
+          .select("role")
+          .eq("id", session.user.id)
+          .single()
+          .then(({ data: profile }) => {
+            if (profile && profile.role === "admin") {
+              const adminLink = document.getElementById("admin-control-link");
+              if (adminLink) adminLink.style.display = "flex";
+            }
+          })
+          .catch((err) =>
+            console.error("Admin check failed, but continuing..."),
+          );
+
+        if (elements.userEmailInput.value.trim() === "")
+          elements.userEmailInput.value = session.user.email;
+
+        fetchPostcodeLists();
+
+        if (window.rtrlApp.jobHistory) {
+          window.rtrlApp.jobHistory.fetchAndRenderJobs();
         }
-      })
-      .catch(err => console.error("Admin check failed, but continuing..."));
 
-    if (elements.userEmailInput.value.trim() === "")
-      elements.userEmailInput.value = session.user.email;
-      
-    fetchPostcodeLists(); 
-
-    if (window.rtrlApp.jobHistory) {
-      window.rtrlApp.jobHistory.fetchAndRenderJobs();
-    }
-
-    fetch(`${BACKEND_URL}/api/exclusions`, {
-      headers: { Authorization: `Bearer ${session.access_token}` },
-    }).then(res => res.ok ? res.json() : null)
-      .then(data => {
-        if (data) window.rtrlApp.exclusionFeature.populateTags(data.exclusionList);
-      });
-
-  } else {
-    elements.loginOverlay.style.display = "flex";
-    elements.appContent.style.display = "none";
-    elements.userMenu.style.display = "none";
-    elements.startButton.disabled = true;
-  }
-});
+        fetch(`${BACKEND_URL}/api/exclusions`, {
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        })
+          .then((res) => (res.ok ? res.json() : null))
+          .then((data) => {
+            if (data)
+              window.rtrlApp.exclusionFeature.populateTags(data.exclusionList);
+          });
+      } else {
+        elements.loginOverlay.style.display = "flex";
+        elements.appContent.style.display = "none";
+        elements.userMenu.style.display = "none";
+        elements.startButton.disabled = true;
+      }
+    });
 
     let savedPostcodeLists = [];
     async function fetchPostcodeLists() {
@@ -1087,110 +1163,125 @@ supabaseClient.auth.onAuthStateChange(async (event, session) => {
 
   initializeMainApp();
 
-window.rtrlApp.cloneJobIntoForm = (p) => {
-        const el = { 
-            primaryCat: document.getElementById("primaryCategorySelect"), 
-            customCat: document.getElementById("customCategoryInput"), 
-            location: document.getElementById("locationInput"), 
-            country: document.getElementById("countryInput"), 
-            count: document.getElementById("count"), 
-            findAll: document.getElementById("findAllBusinesses"), 
-            names: document.getElementById("businessNamesInput"), 
-            anchor: document.getElementById("anchorPointInput"), 
-            radius: document.getElementById("radiusSlider"), 
-            aiToggle: document.getElementById("useAiToggle") 
-        };
-
-        const ui = { 
-            h: document.getElementById("status-headline"), 
-            s: document.getElementById("status-subtext"), 
-            i: document.getElementById("status-icon"), 
-            c: document.getElementById("status-card"), 
-            f: document.getElementById("progress-fill"), 
-            p: document.getElementById("pct-label"), 
-            ph: document.getElementById("phase-label"), 
-            fnd: document.getElementById("stat-found"), 
-            prc: document.getElementById("stat-processed"), 
-            enr: document.getElementById("stat-enriched") 
-        };
-
-        el.location.value = "";
-        el.anchor.value = "";
-        el.names.value = "";
-        window.rtrlApp.postalCodes.length = 0;
-        window.rtrlApp.customKeywords.length = 0;
-        window.rtrlApp.state.selectedAnchorPoint = null;
-        document.querySelectorAll(".tag").forEach(t => t.remove());
-
-        if (window.rtrlApp.searchCircle) {
-            window.rtrlApp.map.removeLayer(window.rtrlApp.searchCircle);
-            window.rtrlApp.searchCircle = null;
-        }
-
-        if (ui.c) ui.c.className = "status-card";
-        if (ui.h) ui.h.textContent = "Search Parameters Loaded";
-        if (ui.s) ui.s.textContent = "Sidebar updated from history. Check your parameters then click Start.";
-        if (ui.i) ui.i.className = "fas fa-file-import";
-        if (ui.f) ui.f.style.width = "0%";
-        if (ui.p) ui.p.textContent = "0%";
-        if (ui.ph) ui.ph.textContent = "Phase 0/3: Ready";
-        if (ui.fnd) ui.fnd.textContent = "0";
-        if (ui.prc) ui.prc.textContent = "0";
-        if (ui.enr) ui.enr.textContent = "0";
-
-        if (el.aiToggle) el.aiToggle.checked = p.useAiEnrichment !== false;
-        el.country.value = p.country || "Australia";
-        
-        if (p.count === -1) { 
-            el.findAll.checked = true; el.count.value = ""; el.count.disabled = true; 
-        } else { 
-            el.findAll.checked = false; el.count.value = p.count || ""; el.count.disabled = false; 
-        }
-
-        if (p.businessNames && p.businessNames.length > 0) {
-            el.names.value = p.businessNames.join("\n");
-            document.getElementById("individualSearchContainer").classList.remove("collapsed");
-        } else {
-            el.names.value = "";
-            if (p.categoriesToLoop) {
-                p.categoriesToLoop.forEach(kw => {
-                    window.rtrlApp.customKeywords.push(kw);
-                    const t = document.createElement("span"); t.className = "tag";
-                    t.innerHTML = `<span>${kw}</span> <span class="tag-close-btn" data-value="${kw}">&times;</span>`;
-                    document.getElementById("customKeywordContainer").insertBefore(t, el.customCat);
-                });
-            }
-        }
-
-        if (p.radiusKm && p.anchorPoint) {
-            el.radius.value = p.radiusKm;
-            document.getElementById("radiusValue").textContent = `${p.radiusKm} km`;
-            el.anchor.value = p.searchParamsForEmail?.area || "Selected Area";
-
-            const co = p.anchorPoint.split(',');
-            if (co.length === 2) {
-                const nc = L.latLng(parseFloat(co[0]), parseFloat(co[1]));
-                window.rtrlApp.state.selectedAnchorPoint = { 
-                    center: nc, 
-                    name: el.anchor.value 
-                };
-                
-                document.getElementById("radiusSearchContainer").classList.remove("collapsed");
-                
-                setTimeout(() => {
-                    window.rtrlApp.map.invalidateSize();
-                    window.rtrlApp.map.setView(nc, 11);
-                    window.rtrlApp.drawSearchCircle(nc);
-                }, 150);
-            }
-        } else {
-            el.location.value = p.location || "";
-            if (p.postalCode) {
-                p.postalCode.forEach(pc => window.rtrlApp.validateAndAddTag(pc));
-            }
-            document.getElementById("locationSearchContainer").classList.remove("collapsed");
-        }
-
-        window.scrollTo({ top: 0, behavior: 'smooth' });
+  window.rtrlApp.cloneJobIntoForm = (p) => {
+    const el = {
+      primaryCat: document.getElementById("primaryCategorySelect"),
+      customCat: document.getElementById("customCategoryInput"),
+      location: document.getElementById("locationInput"),
+      country: document.getElementById("countryInput"),
+      count: document.getElementById("count"),
+      findAll: document.getElementById("findAllBusinesses"),
+      names: document.getElementById("businessNamesInput"),
+      anchor: document.getElementById("anchorPointInput"),
+      radius: document.getElementById("radiusSlider"),
+      aiToggle: document.getElementById("useAiToggle"),
     };
+
+    const ui = {
+      h: document.getElementById("status-headline"),
+      s: document.getElementById("status-subtext"),
+      i: document.getElementById("status-icon"),
+      c: document.getElementById("status-card"),
+      f: document.getElementById("progress-fill"),
+      p: document.getElementById("pct-label"),
+      ph: document.getElementById("phase-label"),
+      fnd: document.getElementById("stat-found"),
+      prc: document.getElementById("stat-processed"),
+      enr: document.getElementById("stat-enriched"),
+    };
+
+    el.location.value = "";
+    el.anchor.value = "";
+    el.names.value = "";
+    window.rtrlApp.postalCodes.length = 0;
+    window.rtrlApp.customKeywords.length = 0;
+    window.rtrlApp.state.selectedAnchorPoint = null;
+    document.querySelectorAll(".tag").forEach((t) => t.remove());
+
+    if (window.rtrlApp.searchCircle) {
+      window.rtrlApp.map.removeLayer(window.rtrlApp.searchCircle);
+      window.rtrlApp.searchCircle = null;
+    }
+
+    if (ui.c) ui.c.className = "status-card";
+    if (ui.h) ui.h.textContent = "Search Parameters Loaded";
+    if (ui.s)
+      ui.s.textContent =
+        "Sidebar updated from history. Check your parameters then click Start.";
+    if (ui.i) ui.i.className = "fas fa-file-import";
+    if (ui.f) ui.f.style.width = "0%";
+    if (ui.p) ui.p.textContent = "0%";
+    if (ui.ph) ui.ph.textContent = "Phase 0/3: Ready";
+    if (ui.fnd) ui.fnd.textContent = "0";
+    if (ui.prc) ui.prc.textContent = "0";
+    if (ui.enr) ui.enr.textContent = "0";
+
+    if (el.aiToggle) el.aiToggle.checked = p.useAiEnrichment !== false;
+    el.country.value = p.country || "Australia";
+
+    if (p.count === -1) {
+      el.findAll.checked = true;
+      el.count.value = "";
+      el.count.disabled = true;
+    } else {
+      el.findAll.checked = false;
+      el.count.value = p.count || "";
+      el.count.disabled = false;
+    }
+
+    if (p.businessNames && p.businessNames.length > 0) {
+      el.names.value = p.businessNames.join("\n");
+      document
+        .getElementById("individualSearchContainer")
+        .classList.remove("collapsed");
+    } else {
+      el.names.value = "";
+      if (p.categoriesToLoop) {
+        p.categoriesToLoop.forEach((kw) => {
+          window.rtrlApp.customKeywords.push(kw);
+          const t = document.createElement("span");
+          t.className = "tag";
+          t.innerHTML = `<span>${kw}</span> <span class="tag-close-btn" data-value="${kw}">&times;</span>`;
+          document
+            .getElementById("customKeywordContainer")
+            .insertBefore(t, el.customCat);
+        });
+      }
+    }
+
+    if (p.radiusKm && p.anchorPoint) {
+      el.radius.value = p.radiusKm;
+      document.getElementById("radiusValue").textContent = `${p.radiusKm} km`;
+      el.anchor.value = p.searchParamsForEmail?.area || "Selected Area";
+
+      const co = p.anchorPoint.split(",");
+      if (co.length === 2) {
+        const nc = L.latLng(parseFloat(co[0]), parseFloat(co[1]));
+        window.rtrlApp.state.selectedAnchorPoint = {
+          center: nc,
+          name: el.anchor.value,
+        };
+
+        document
+          .getElementById("radiusSearchContainer")
+          .classList.remove("collapsed");
+
+        setTimeout(() => {
+          window.rtrlApp.map.invalidateSize();
+          window.rtrlApp.map.setView(nc, 11);
+          window.rtrlApp.drawSearchCircle(nc);
+        }, 150);
+      }
+    } else {
+      el.location.value = p.location || "";
+      if (p.postalCode) {
+        p.postalCode.forEach((pc) => window.rtrlApp.validateAndAddTag(pc));
+      }
+      document
+        .getElementById("locationSearchContainer")
+        .classList.remove("collapsed");
+    }
+
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
 });
