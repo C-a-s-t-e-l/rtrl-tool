@@ -51,8 +51,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const limit = profile.daily_limit || 500;
     const percentage = Math.min(Math.round((current / limit) * 100), 100);
 
-    if (elements.usageCurrent) elements.usageCurrent.textContent = current.toLocaleString();
-    if (elements.usageLimit) elements.usageLimit.textContent = limit.toLocaleString();
+    if (elements.dashUsageCurrent) elements.dashUsageCurrent.textContent = current.toLocaleString();
+    if (elements.dashUsageLimit) elements.dashUsageLimit.textContent = limit.toLocaleString();
     if (elements.dashUsagePercent) elements.dashUsagePercent.textContent = `${percentage}% consumed`;
 
     if (elements.dashUsageFill) {
@@ -278,6 +278,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
         socket.on("business_found", (data) => {
         refreshUsageTracker();
+    });
+
+        socket.on("user_profile_updated", () => {
+        console.log('[Socket] User profile updated event received. Refreshing usage tracker.');
+        refreshUsageTracker(); 
     });
 
     socket.on("job_update", (update) => {

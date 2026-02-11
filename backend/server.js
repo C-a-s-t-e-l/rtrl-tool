@@ -487,6 +487,7 @@ io.on("connection", (socket) => {
       const { data: { user }, error } = await supabase.auth.getUser(authToken);
       if (user && !error) {
         socket.user = user; 
+        socket.join(user.id);
         console.log(`[${new Date().toLocaleString()}] [Auth] Client authenticated: ${user.email} (ID: ${socket.id})`);
       }
     } catch (e) {
@@ -1061,9 +1062,23 @@ const cleanupTempDirs = () => {
     }
 };
 
+const initSupabaseRealtime = () => {
+    supabase.channel('profiles_changes')
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles' }, payload => {
+            const updatedProfile = payload.new;
+            console.log('[Realtime] Profile updated:', updatedProfile.id);
+
+            io.to(updatedProfile.id).emit('user_profile_updated'); 
+        })
+        .subscribe();
+
+    console.log('[Supabase Realtime] Subscribed to profiles table changes.');
+};
+
 server.listen(PORT, () => {
   console.log(`Scraping server running on http://localhost:${PORT}`);
   recoverStuckJobs();
+  initSupabaseRealtime();
 });
 
 const countryBoundingBoxes = {
