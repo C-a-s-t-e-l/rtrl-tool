@@ -75,7 +75,7 @@ function renderUserRows(users) {
                 <option value="100" ${limit == 100 ? 'selected' : ''}>100 (Starter)</option>
                 <option value="500" ${limit == 500 ? 'selected' : ''}>500 (Standard)</option>
                 <option value="1000" ${limit == 1000 ? 'selected' : ''}>1000 (Power)</option>
-                <option value="5000" ${limit == 5000 ? 'selected' : ''}>Unlimited</option>
+                <option value="5000" ${limit == 5000 ? 'selected' : ''}>5000 (Executive)</option
             </select></td>
             <td><div style="display:flex;gap:4px"><button onclick="promoteUser('${u.id}','${u.role}')" class="btn-ghost"><i class="fas fa-user-tag"></i></button><button onclick="deleteUser('${u.id}')" class="btn-ghost" style="color:#ef4444"><i class="fas fa-trash"></i></button></div></td>`;
         tbody.appendChild(row);

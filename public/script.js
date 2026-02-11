@@ -36,22 +36,37 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function initializeMainApp() {
 
-    async function refreshUsageTracker() {
+async function refreshUsageTracker() {
     if (!currentUserSession) return;
 
     const { data: profile, error } = await supabaseClient
         .from('profiles')
-        .select('usage_today, daily_limit')
+        .select('usage_today, daily_limit, last_reset_date') 
         .eq('id', currentUserSession.user.id)
         .single();
 
-    if (error || !profile) return;
+    if (error || !profile) {
+        console.error("Error fetching user profile for usage tracker:", error);
+        return;
+    }
 
     const current = profile.usage_today || 0;
     const limit = profile.daily_limit || 500;
-    const percentage = Math.min(Math.round((current / limit) * 100), 100);
+    const lastResetDateStr = profile.last_reset_date; 
 
-    if (elements.dashUsageCurrent) elements.dashUsageCurrent.textContent = current.toLocaleString();
+    const today = new Date();
+    const todayStr = today.toISOString().split('T')[0]; 
+
+    let displayCurrentUsage = current;
+
+
+    if (lastResetDateStr && lastResetDateStr < todayStr) {
+        displayCurrentUsage = 0; 
+    }
+
+    const percentage = Math.min(Math.round((displayCurrentUsage / limit) * 100), 100);
+
+    if (elements.dashUsageCurrent) elements.dashUsageCurrent.textContent = displayCurrentUsage.toLocaleString();
     if (elements.dashUsageLimit) elements.dashUsageLimit.textContent = limit.toLocaleString();
     if (elements.dashUsagePercent) elements.dashUsagePercent.textContent = `${percentage}% consumed`;
 
@@ -62,12 +77,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
     let planName = "Standard Plan";
     if (limit <= 100) planName = "Starter Plan";
-    if (limit >= 1000) planName = "Power Plan";
-    if (limit >= 5000) planName = "Unlimited Plan";
+    if (limit >= 1000 && limit < 5000) planName = "Power Plan"; 
+    if (limit >= 5000) planName = "Executive Plan";
     if (elements.dashPlanBadge) elements.dashPlanBadge.textContent = planName;
 
     if (elements.dashUsageStatus) {
-        if (percentage >= 100) {
+        if (displayCurrentUsage >= limit) { 
             elements.dashUsageStatus.textContent = "Daily limit reached. Resets at midnight.";
             elements.dashUsageStatus.style.color = "#ef4444";
         } else {
@@ -78,9 +93,23 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const now = new Date();
     const midnight = new Date();
-    midnight.setHours(24, 0, 0, 0);
-    const diffHours = Math.floor((midnight - now) / (1000 * 60 * 60));
-    if (elements.dashResetTimer) elements.dashResetTimer.textContent = `Resets in ${diffHours}h`;
+    midnight.setHours(24, 0, 0, 0); 
+    const diffMs = midnight.getTime() - now.getTime();
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const diffMinutes = Math.round((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+
+    let resetTimerText = "";
+    if (diffHours > 0) {
+        resetTimerText = `Resets in ${diffHours}h`;
+        if (diffMinutes > 0) resetTimerText += ` ${diffMinutes}m`;
+    } else if (diffMinutes > 0) {
+        resetTimerText = `Resets in ${diffMinutes}m`;
+    } else {
+        resetTimerText = "Resetting soon..."; 
+    }
+
+    if (elements.dashResetTimer) elements.dashResetTimer.textContent = resetTimerText;
+
 }
 
 
