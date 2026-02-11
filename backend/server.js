@@ -174,6 +174,18 @@ const runScrapeJob = async (jobId) => {
     return;
   }
 
+    const { data: userProfile } = await supabase
+    .from('profiles')
+    .select('usage_today, daily_limit')
+    .eq('id', job.user_id)
+    .single();
+
+  if (userProfile && userProfile.usage_today >= userProfile.daily_limit) {
+    await addLog(jobId, `[QUOTA ERROR] Daily limit reached (${userProfile.usage_today}/${userProfile.daily_limit}). Contact Admin to increase credits.`);
+    await updateJobStatus(jobId, "failed");
+    return;
+  }
+
   const { parameters } = job;
   const {
     categoriesToLoop, location, postalCode, country, count, businessNames, anchorPoint, radiusKm, userEmail, searchParamsForEmail, exclusionList, useAiEnrichment 
@@ -372,6 +384,7 @@ const task = async () => {
 
                 allProcessedBusinesses.push(businessData);
                 await appendJobResult(jobId, businessData);
+                await supabase.rpc('increment_usage', { user_id_param: job.user_id });
                 
             }
         }
@@ -399,7 +412,6 @@ const task = async () => {
 
     if (browser) await browser.close();
 
-    // --- FINALIZE ---
     await addLog(jobId, `[System] Finalizing and sending emails...`);
     const { uniqueBusinesses, duplicates } = deduplicateBusinesses(allProcessedBusinesses);
 
@@ -556,6 +568,26 @@ app.get("/api/exclusions", async (req, res) => {
     } catch (dbError) {
         console.error("Error fetching exclusion list:", dbError);
         res.status(500).json({ error: 'Failed to fetch exclusion list.' });
+    }
+});
+
+app.post("/api/admin/invite", async (req, res) => {
+    try {
+        const authHeader = req.headers.authorization;
+        const token = authHeader.split(' ')[1];
+        
+        const { data: { user } } = await supabase.auth.getUser(token);
+        const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+        
+        if (profile.role !== 'admin') return res.status(403).json({ error: "Unauthorized" });
+
+        const { email } = req.body;
+        const { error } = await supabase.auth.admin.inviteUserByEmail(email);
+        
+        if (error) throw error;
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
     }
 });
 

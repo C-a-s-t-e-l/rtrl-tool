@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RTRL | Admin Control Center</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <link rel="stylesheet" href="style.css"> <!-- Reusing some base styles -->
+    <link rel="stylesheet" href="admin.css">
+</head>
+<body>
+    <div class="admin-layout">
+        <aside class="admin-sidebar">
+            <div class="logo"><i class="fas fa-user-shield"></i></div>
+            <nav>
+                <a href="index.html" class="nav-item"><i class="fas fa-arrow-left"></i> Back to Tool</a>
+                <div class="nav-spacer"></div>
+                <div class="nav-label">System</div>
+                <button id="global-kill-switch" class="btn-kill"><i class="fas fa-power-off"></i> Emergency Stop</button>
+            </nav>
+        </aside>
+
+        <main class="admin-main">
+            <header class="admin-header">
+                <h1>Control Center</h1>
+                <div id="gemini-usage-card" class="usage-summary">
+                    <span>Gemini Health:</span>
+                    <div class="health-bar-container">
+                        <div id="gemini-bar" class="health-bar" style="width: 0%;"></div>
+                    </div>
+                    <span id="gemini-text">0 / 1500 free credits</span>
+                </div>
+            </header>
+
+            <section class="admin-grid">
+                <!-- User Management -->
+                <div class="admin-card user-list-card">
+                    <div class="card-header">
+                        <h2>Team Management</h2>
+                        <button id="open-invite-modal" class="btn-primary-small"><i class="fas fa-plus"></i> Invite User</button>
+                    </div>
+                    <table class="user-table">
+                        <thead>
+                            <tr>
+                                <th>Email</th>
+                                <th>Role</th>
+                                <th>Today's Usage</th>
+                                <th>Daily Limit</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="user-table-body">
+                            <!-- JS will populate this -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Invite Modal (Hidden by default) -->
+                <div id="invite-modal" class="modal">
+                    <div class="modal-content">
+                        <h3>Invite New Member</h3>
+                        <p>Send an invitation email. They will be added as a 'User' with a default limit of 500.</p>
+                        <input type="email" id="invite-email" placeholder="email@rtrlproperty.com.au">
+                        <div class="modal-actions">
+                            <button id="close-modal" class="btn-secondary">Cancel</button>
+                            <button id="send-invite-btn" class="btn-primary">Send Invite</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="admin.js"></script>
+</body>
+</html>

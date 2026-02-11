@@ -482,6 +482,20 @@ function updateDashboardUi(status, data = {}) {
           session.user.user_metadata.full_name || "User";
         elements.userEmailDisplay.textContent = session.user.email;
         elements.startButton.disabled = false;
+            try {
+      const { data: profile, error } = await supabaseClient
+        .from('profiles')
+        .select('role')
+        .eq('id', session.user.id)
+        .single();
+
+      if (profile && profile.role === 'admin') {
+        const adminLink = document.getElementById('admin-control-link');
+        if (adminLink) adminLink.style.display = 'flex';
+      }
+    } catch (err) {
+      console.error("Error fetching user role:", err);
+    }
         if (elements.userEmailInput.value.trim() === "")
           elements.userEmailInput.value = session.user.email;
         await fetchPostcodeLists();

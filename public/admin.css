@@ -1,0 +1,34 @@
+:root {
+    --admin-bg: #f1f5f9;
+    --admin-sidebar: #1e293b;
+    --purple-ai: #8b5cf6;
+}
+
+.admin-layout { display: flex; min-height: 100vh; background: var(--admin-bg); }
+
+.admin-sidebar {
+    width: 260px; background: var(--admin-sidebar); color: white;
+    padding: 2rem 1.5rem; display: flex; flex-direction: column;
+}
+
+.admin-main { flex-grow: 1; padding: 2rem 3rem; }
+
+.admin-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; }
+
+.usage-summary { background: white; padding: 1rem; border-radius: 12px; display: flex; align-items: center; gap: 1rem; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+
+.health-bar-container { width: 150px; height: 8px; background: #e2e8f0; border-radius: 4px; overflow: hidden; }
+.health-bar { height: 100%; background: var(--purple-ai); transition: width 0.5s; }
+
+.admin-card { background: white; border-radius: 16px; padding: 1.5rem; box-shadow: var(--shadow); }
+
+.user-table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+.user-table th { text-align: left; color: #64748b; font-size: 0.75rem; text-transform: uppercase; padding: 1rem; border-bottom: 2px solid #f1f5f9; }
+.user-table td { padding: 1rem; border-bottom: 1px solid #f1f5f9; font-size: 0.9rem; }
+
+.usage-pill { background: #eff6ff; color: #2563eb; padding: 4px 8px; border-radius: 6px; font-weight: 600; font-size: 0.8rem; }
+
+.btn-primary-small { background: var(--accent-color); color: white; border: none; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; font-size: 0.85rem; }
+
+.modal { display: none; position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.5); z-index: 10000; align-items: center; justify-content: center; }
+.modal-content { background: white; padding: 2rem; border-radius: 16px; width: 400px; }
