@@ -8,50 +8,43 @@
 }
 
 body { background: var(--admin-bg); font-family: 'Inter', sans-serif; margin: 0; }
-
 .admin-layout { display: flex; min-height: 100vh; }
 
 /* Sidebar */
-.admin-sidebar {
-    width: 280px; background: var(--sidebar-bg); color: white;
-    padding: 2rem; display: flex; flex-direction: column;
-}
-.admin-sidebar h2 { font-size: 1.2rem; margin-bottom: 2rem; color: #94a3b8; }
-.nav-item { 
-    color: #cbd5e1; text-decoration: none; padding: 12px; 
-    border-radius: 8px; margin-bottom: 8px; display: flex; align-items: center; gap: 10px;
-}
+.admin-sidebar { width: 280px; background: var(--sidebar-bg); color: white; padding: 2rem; display: flex; flex-direction: column; }
+.sidebar-header { display: flex; align-items: center; gap: 10px; font-size: 1.2rem; font-weight: 700; margin-bottom: 2rem; }
+.nav-item { color: #cbd5e1; text-decoration: none; padding: 12px; border-radius: 8px; margin-bottom: 8px; display: flex; align-items: center; gap: 10px; }
 .nav-item:hover { background: rgba(255,255,255,0.1); color: white; }
 
 /* Main Content */
-.admin-main { flex: 1; padding: 3rem; overflow-y: auto; }
-.header-row { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 3rem; }
+.admin-main { flex: 1; padding: 3rem; }
+.admin-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; }
 
-/* Usage Card */
-.usage-summary-card {
-    background: white; padding: 1.5rem; border-radius: 12px;
-    box-shadow: var(--card-shadow); min-width: 350px;
-}
-.health-bar-bg { height: 10px; background: #e2e8f0; border-radius: 5px; margin: 15px 0; overflow: hidden; }
-.health-bar-fill { height: 100%; background: linear-gradient(90deg, #8b5cf6, #3b82f6); transition: width 0.8s ease; }
+/* Global Usage Card */
+.usage-summary-card { background: white; padding: 1.2rem; border-radius: 12px; box-shadow: var(--card-shadow); min-width: 300px; }
+.health-bar-bg { height: 8px; background: #f1f5f9; border-radius: 4px; margin-top: 10px; overflow: hidden; }
+.health-bar-fill { height: 100%; background: var(--accent); transition: width 0.5s; }
 
 /* User Table */
-.user-card { background: white; border-radius: 16px; box-shadow: var(--card-shadow); padding: 2rem; }
-.user-table { width: 100%; border-collapse: collapse; text-align: left; }
-.user-table th { padding: 1rem; color: #64748b; font-size: 0.8rem; text-transform: uppercase; border-bottom: 1px solid #f1f5f9; }
-.user-table td { padding: 1.2rem 1rem; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+.user-card { background: white; border-radius: 12px; box-shadow: var(--card-shadow); padding: 1.5rem; }
+.user-table { width: 100%; border-collapse: collapse; }
+.user-table th { text-align: left; padding: 1rem; color: #64748b; font-size: 0.75rem; text-transform: uppercase; border-bottom: 2px solid #f1f5f9; }
+.user-table td { padding: 1rem; border-bottom: 1px solid #f1f5f9; font-size: 0.9rem; }
 
-/* Badges & Progress */
-.role-badge { 
-    padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 700; 
-    text-transform: uppercase;
-}
+/* Mini Progress Bar for Users */
+.usage-mini-bar { width: 100%; height: 6px; background: #f1f5f9; border-radius: 3px; overflow: hidden; margin-top: 5px; }
+.usage-mini-fill { height: 100%; background: var(--accent); }
+
+/* Status Badges */
+.role-badge { padding: 4px 10px; border-radius: 20px; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; }
 .role-admin { background: #fee2e2; color: #dc2626; }
 .role-user { background: #f1f5f9; color: #475569; }
 
-.usage-mini-bar { width: 100px; height: 6px; background: #f1f5f9; border-radius: 3px; overflow: hidden; margin-top: 5px; }
-.usage-mini-fill { height: 100%; background: var(--accent); }
+/* Modal Logic */
+.modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.7); z-index: 1000; align-items: center; justify-content: center; }
+.modal-content { background: white; padding: 2rem; border-radius: 12px; width: 400px; box-shadow: var(--card-shadow); }
 
 /* Buttons */
-.btn-invite { background: var(--success); color: white; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 600; cursor: pointer; }
-.btn-kill { background: var(--danger); color: white; border: none; padding: 12px; border-radius: 8px; cursor: pointer; width: 100%; margin-top: auto; }
+.btn-invite { background: var(--accent); color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-weight: 600; }
+.btn-kill { background: var(--danger); color: white; border: none; padding: 12px; border-radius: 8px; cursor: pointer; margin-top: auto; font-weight: 600; }
+.btn-secondary-small { background: #f8fafc; border: 1px solid #e2e8f0; padding: 6px 10px; border-radius: 6px; cursor: pointer; }

@@ -5,80 +5,79 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>RTRL | Admin Control Center</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script>
-  window.CONFIG = {
-    SUPABASE_URL: "https://qbktnernawpprarckvzx.supabase.co",
-    SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFia3RuZXJuYXdwcHJhcmNrdnp4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTc1OTQ3NTgsImV4cCI6MjA3MzE3MDc1OH0.9asOynIZEOqc8f_mNTjWTNXIPK1ph6IQF6ADbYdFclM"
-  };
-</script>
+    <script>
+        window.CONFIG = {
+            SUPABASE_URL: "https://qbktnernawpprarckvzx.supabase.co",
+            SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFia3RuZXJuYXdwcHJhcmNrdnp4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTc1OTQ3NTgsImV4cCI6MjA3MzE3MDc1OH0.9asOynIZEOqc8f_mNTjWTNXIPK1ph6IQF6ADbYdFclM"
+        };
+    </script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
-    <link rel="stylesheet" href="style.css">
-    <link rel="stylesheet" href="admin.css">
+    <link rel="stylesheet" href="admin.css"> <!-- Load admin.css LAST to ensure it overrides style.css -->
 </head>
 <body>
     <div class="admin-layout">
         <aside class="admin-sidebar">
-            <div class="logo"><i class="fas fa-user-shield"></i></div>
+            <div class="sidebar-header">
+                <i class="fas fa-user-shield"></i>
+                <span>Admin Portal</span>
+            </div>
             <nav>
                 <a href="index.html" class="nav-item"><i class="fas fa-arrow-left"></i> Back to Tool</a>
-                <div class="nav-spacer"></div>
-                <div class="nav-label">System</div>
-                <button id="global-kill-switch" class="btn-kill"><i class="fas fa-power-off"></i> Emergency Stop</button>
+                <div style="margin-top: 2rem; color: #64748b; font-size: 0.7rem; text-transform: uppercase; font-weight: 700;">System</div>
+                <button id="global-kill-switch" class="btn-kill">
+                    <i class="fas fa-power-off"></i> Emergency Stop
+                </button>
             </nav>
         </aside>
 
         <main class="admin-main">
             <header class="admin-header">
                 <h1>Control Center</h1>
-                <div id="gemini-usage-card" class="usage-summary">
-                    <span>Gemini Health:</span>
-                    <div class="health-bar-container">
-                        <div id="gemini-bar" class="health-bar" style="width: 0%;"></div>
+                <div class="usage-summary-card">
+                    <span id="gemini-text">Calculating usage...</span>
+                    <div class="health-bar-bg">
+                        <div id="gemini-bar" class="health-bar-fill" style="width: 0%;"></div>
                     </div>
-                    <span id="gemini-text">0 / 1500 free credits</span>
                 </div>
             </header>
 
-            <section class="admin-grid">
-                <!-- User Management -->
-                <div class="admin-card user-list-card">
-                    <div class="card-header">
-                        <h2>Team Management</h2>
-                        <button id="open-invite-modal" class="btn-primary-small"><i class="fas fa-plus"></i> Invite User</button>
-                    </div>
-                    <table class="user-table">
-                        <thead>
-                            <tr>
-                                <th>Email</th>
-                                <th>Role</th>
-                                <th>Today's Usage</th>
-                                <th>Daily Limit</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody id="user-table-body">
-                            <!-- JS will populate this -->
-                        </tbody>
-                    </table>
+            <div class="user-card">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+                    <h2>Team Management</h2>
+                    <button id="open-invite-modal" class="btn-invite">+ Invite User</button>
                 </div>
-
-                <!-- Invite Modal (Hidden by default) -->
-                <div id="invite-modal" class="modal">
-                    <div class="modal-content">
-                        <h3>Invite New Member</h3>
-                        <p>Send an invitation email. They will be added as a 'User' with a default limit of 500.</p>
-                        <input type="email" id="invite-email" placeholder="email@rtrlproperty.com.au">
-                        <div class="modal-actions">
-                            <button id="close-modal" class="btn-secondary">Cancel</button>
-                            <button id="send-invite-btn" class="btn-primary">Send Invite</button>
-                        </div>
-                    </div>
-                </div>
-            </section>
+                
+                <table class="user-table">
+                    <thead>
+                        <tr>
+                            <th>Email & ID</th>
+                            <th>Role</th>
+                            <th>Today's Usage</th>
+                            <th>Daily Limit</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="user-table-body">
+                        <!-- JS renders rows here -->
+                    </tbody>
+                </table>
+            </div>
         </main>
     </div>
 
-    <script src="admin.js"></script>
+    <!-- Modal Overlay -->
+    <div id="invite-modal" class="modal">
+        <div class="modal-content">
+            <h3>Invite New Member</h3>
+            <p>Send a Supabase invitation. They will be added as a 'User' with a default limit of 500.</p>
+            <input type="email" id="invite-email" placeholder="email@rtrlproperty.com.au">
+            <div style="margin-top: 1.5rem; display: flex; gap: 10px;">
+                <button id="send-invite-btn" class="btn-invite">Send Invite</button>
+                <button id="close-modal" style="background: #e2e8f0; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer;">Cancel</button>
+            </div>
+        </div>
+    </div>
 
+    <script src="admin.js"></script>
 </body>
 </html>
