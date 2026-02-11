@@ -174,6 +174,18 @@ const runScrapeJob = async (jobId) => {
     return;
   }
 
+    const { data: settings } = await supabase
+    .from('system_settings')
+    .select('is_paused')
+    .eq('id', 1)
+    .single();
+
+  if (settings && settings.is_paused) {
+    await addLog(jobId, "[SYSTEM] Research is currently PAUSED by Admin. Job cancelled.");
+    await updateJobStatus(jobId, "failed");
+    return;
+  }
+
     const { data: userProfile } = await supabase
     .from('profiles')
     .select('usage_today, daily_limit')

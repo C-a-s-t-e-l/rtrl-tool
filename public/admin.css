@@ -1,34 +1,57 @@
 :root {
-    --admin-bg: #f1f5f9;
-    --admin-sidebar: #1e293b;
-    --purple-ai: #8b5cf6;
+    --admin-bg: #f8fafc;
+    --sidebar-bg: #0f172a;
+    --card-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+    --accent: #3b82f6;
+    --danger: #ef4444;
+    --success: #10b981;
 }
 
-.admin-layout { display: flex; min-height: 100vh; background: var(--admin-bg); }
+body { background: var(--admin-bg); font-family: 'Inter', sans-serif; margin: 0; }
 
+.admin-layout { display: flex; min-height: 100vh; }
+
+/* Sidebar */
 .admin-sidebar {
-    width: 260px; background: var(--admin-sidebar); color: white;
-    padding: 2rem 1.5rem; display: flex; flex-direction: column;
+    width: 280px; background: var(--sidebar-bg); color: white;
+    padding: 2rem; display: flex; flex-direction: column;
 }
+.admin-sidebar h2 { font-size: 1.2rem; margin-bottom: 2rem; color: #94a3b8; }
+.nav-item { 
+    color: #cbd5e1; text-decoration: none; padding: 12px; 
+    border-radius: 8px; margin-bottom: 8px; display: flex; align-items: center; gap: 10px;
+}
+.nav-item:hover { background: rgba(255,255,255,0.1); color: white; }
 
-.admin-main { flex-grow: 1; padding: 2rem 3rem; }
+/* Main Content */
+.admin-main { flex: 1; padding: 3rem; overflow-y: auto; }
+.header-row { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 3rem; }
 
-.admin-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; }
+/* Usage Card */
+.usage-summary-card {
+    background: white; padding: 1.5rem; border-radius: 12px;
+    box-shadow: var(--card-shadow); min-width: 350px;
+}
+.health-bar-bg { height: 10px; background: #e2e8f0; border-radius: 5px; margin: 15px 0; overflow: hidden; }
+.health-bar-fill { height: 100%; background: linear-gradient(90deg, #8b5cf6, #3b82f6); transition: width 0.8s ease; }
 
-.usage-summary { background: white; padding: 1rem; border-radius: 12px; display: flex; align-items: center; gap: 1rem; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+/* User Table */
+.user-card { background: white; border-radius: 16px; box-shadow: var(--card-shadow); padding: 2rem; }
+.user-table { width: 100%; border-collapse: collapse; text-align: left; }
+.user-table th { padding: 1rem; color: #64748b; font-size: 0.8rem; text-transform: uppercase; border-bottom: 1px solid #f1f5f9; }
+.user-table td { padding: 1.2rem 1rem; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
 
-.health-bar-container { width: 150px; height: 8px; background: #e2e8f0; border-radius: 4px; overflow: hidden; }
-.health-bar { height: 100%; background: var(--purple-ai); transition: width 0.5s; }
+/* Badges & Progress */
+.role-badge { 
+    padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 700; 
+    text-transform: uppercase;
+}
+.role-admin { background: #fee2e2; color: #dc2626; }
+.role-user { background: #f1f5f9; color: #475569; }
 
-.admin-card { background: white; border-radius: 16px; padding: 1.5rem; box-shadow: var(--shadow); }
+.usage-mini-bar { width: 100px; height: 6px; background: #f1f5f9; border-radius: 3px; overflow: hidden; margin-top: 5px; }
+.usage-mini-fill { height: 100%; background: var(--accent); }
 
-.user-table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
-.user-table th { text-align: left; color: #64748b; font-size: 0.75rem; text-transform: uppercase; padding: 1rem; border-bottom: 2px solid #f1f5f9; }
-.user-table td { padding: 1rem; border-bottom: 1px solid #f1f5f9; font-size: 0.9rem; }
-
-.usage-pill { background: #eff6ff; color: #2563eb; padding: 4px 8px; border-radius: 6px; font-weight: 600; font-size: 0.8rem; }
-
-.btn-primary-small { background: var(--accent-color); color: white; border: none; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; font-size: 0.85rem; }
-
-.modal { display: none; position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.5); z-index: 10000; align-items: center; justify-content: center; }
-.modal-content { background: white; padding: 2rem; border-radius: 16px; width: 400px; }
+/* Buttons */
+.btn-invite { background: var(--success); color: white; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 600; cursor: pointer; }
+.btn-kill { background: var(--danger); color: white; border: none; padding: 12px; border-radius: 8px; cursor: pointer; width: 100%; margin-top: auto; }

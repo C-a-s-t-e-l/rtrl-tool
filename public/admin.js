@@ -1,3 +1,4 @@
+// 1. CONFIGURATION
 const SUPABASE_URL = window.CONFIG.SUPABASE_URL;
 const SUPABASE_ANON_KEY = window.CONFIG.SUPABASE_ANON_KEY;
 const BACKEND_URL = "https://backend.rtrlprospector.space";
@@ -5,9 +6,9 @@ const BACKEND_URL = "https://backend.rtrlprospector.space";
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 document.addEventListener("DOMContentLoaded", async () => {
+    // 2. AUTHENTICATION BOUNCER
     const { data: { session } } = await supabase.auth.getSession();
     
-    // 1. BOUNCER: Redirect if not logged in or not Admin
     if (!session) return window.location.href = "index.html";
     
     const { data: profile } = await supabase
@@ -17,21 +18,25 @@ document.addEventListener("DOMContentLoaded", async () => {
         .single();
 
     if (!profile || profile.role !== 'admin') {
-        alert("Access Denied");
+        alert("Access Denied: Admins Only");
         window.location.href = "index.html";
+        return;
     }
 
-    // 2. Fetch and Render Users
+    // 3. INITIALIZE DASHBOARD
     fetchAndRenderUsers();
+    initKillSwitch();
 
-    // 3. Modal Controls
-    document.getElementById('open-invite-modal').onclick = () => document.getElementById('invite-modal').style.display = 'flex';
-    document.getElementById('close-modal').onclick = () => document.getElementById('invite-modal').style.display = 'none';
+    // 4. MODAL & INVITE HANDLERS
+    const inviteModal = document.getElementById('invite-modal');
+    document.getElementById('open-invite-modal').onclick = () => inviteModal.style.display = 'flex';
+    document.getElementById('close-modal').onclick = () => inviteModal.style.display = 'none';
 
-    // 4. Send Invite Logic
     document.getElementById('send-invite-btn').onclick = async () => {
         const email = document.getElementById('invite-email').value;
         const btn = document.getElementById('send-invite-btn');
+        if (!email) return alert("Please enter an email");
+
         btn.disabled = true;
         btn.textContent = "Sending...";
 
@@ -45,11 +50,12 @@ document.addEventListener("DOMContentLoaded", async () => {
                 body: JSON.stringify({ email })
             });
             if(response.ok) {
-                alert("Invite sent successfully!");
+                alert("Invitation sent to " + email);
+                inviteModal.style.display = 'none';
                 location.reload();
             } else {
                 const err = await response.json();
-                alert("Error: " + err.error);
+                alert("Invite failed: " + err.error);
             }
         } finally {
             btn.disabled = false;
@@ -58,43 +64,66 @@ document.addEventListener("DOMContentLoaded", async () => {
     };
 });
 
+// 5. USER MANAGEMENT LOGIC
 async function fetchAndRenderUsers() {
     const { data: users, error } = await supabase
         .from('profiles')
         .select('*')
-        .order('email');
+        .order('role', { ascending: true });
+
+    if (error) return console.error("Fetch error:", error);
 
     const tbody = document.getElementById('user-table-body');
     tbody.innerHTML = "";
-
     let totalUsage = 0;
 
     users.forEach(u => {
-        totalUsage += u.usage_today;
+        const usage = u.usage_today || 0;
+        const limit = u.daily_limit || 500;
+        totalUsage += usage;
+        
+        const usagePct = Math.min((usage / limit) * 100, 100);
+
         const row = `
             <tr>
-                <td>${u.email}</td>
-                <td><span class="badge ${u.role}">${u.role}</span></td>
-                <td><span class="usage-pill">${u.usage_today}</span></td>
                 <td>
-                    <select onchange="updateUserLimit('${u.id}', this.value)">
-                        <option value="250" ${u.daily_limit == 250 ? 'selected' : ''}>250</option>
-                        <option value="500" ${u.daily_limit == 500 ? 'selected' : ''}>500</option>
-                        <option value="1000" ${u.daily_limit == 1000 ? 'selected' : ''}>1000</option>
-                        <option value="5000" ${u.daily_limit == 5000 ? 'selected' : ''}>Unlimited</option>
+                    <div style="font-weight: 600; color: #1e293b;">${u.email}</div>
+                    <div style="font-size: 0.7rem; color: #94a3b8;">${u.id}</div>
+                </td>
+                <td><span class="role-badge role-${u.role}">${u.role}</span></td>
+                <td>
+                    <div style="font-weight: 700; margin-bottom: 4px;">${usage} / ${limit}</div>
+                    <div class="usage-mini-bar">
+                        <div class="usage-mini-fill" style="width: ${usagePct}%"></div>
+                    </div>
+                </td>
+                <td>
+                    <select class="limit-select" onchange="updateUserLimit('${u.id}', this.value)">
+                        <option value="100" ${limit == 100 ? 'selected' : ''}>100 (Starter)</option>
+                        <option value="250" ${limit == 250 ? 'selected' : ''}>250 (Basic)</option>
+                        <option value="500" ${limit == 500 ? 'selected' : ''}>500 (Standard)</option>
+                        <option value="1000" ${limit == 1000 ? 'selected' : ''}>1000 (Power)</option>
+                        <option value="5000" ${limit == 5000 ? 'selected' : ''}>Unlimited</option>
                     </select>
                 </td>
                 <td>
-                    <button onclick="deleteUser('${u.id}')" class="btn-icon text-red"><i class="fas fa-trash"></i></button>
+                    <div style="display: flex; gap: 8px;">
+                        <button onclick="promoteUser('${u.id}', '${u.role}')" class="btn-secondary-small" title="Toggle Admin/User">
+                            <i class="fas fa-user-shield"></i>
+                        </button>
+                        <button onclick="deleteUser('${u.id}')" class="btn-secondary-small" style="color: #ef4444;" title="Delete User">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
                 </td>
             </tr>
         `;
         tbody.innerHTML += row;
     });
 
-    // Update Gemini health bar
-    const geminiPct = (totalUsage / 1500) * 100;
-    document.getElementById('gemini-bar').style.width = geminiPct + "%";
+    // Update Global Gemini Health Bar (1500 is the daily free limit)
+    const totalPct = Math.min((totalUsage / 1500) * 100, 100);
+    document.getElementById('gemini-bar').style.width = totalPct + "%";
     document.getElementById('gemini-text').textContent = `${totalUsage} / 1500 daily credits used`;
 }
 
@@ -104,5 +133,64 @@ async function updateUserLimit(userId, newLimit) {
         .update({ daily_limit: parseInt(newLimit) })
         .eq('id', userId);
     
-    if (error) alert("Failed to update: " + error.message);
+    if (error) alert("Update failed: " + error.message);
+    else fetchAndRenderUsers();
+}
+
+async function promoteUser(userId, currentRole) {
+    const newRole = currentRole === 'admin' ? 'user' : 'admin';
+    if (!confirm(`Change this user to ${newRole.toUpperCase()}?`)) return;
+
+    const { error } = await supabase
+        .from('profiles')
+        .update({ role: newRole })
+        .eq('id', userId);
+    
+    if (error) alert(error.message);
+    else fetchAndRenderUsers();
+}
+
+async function deleteUser(userId) {
+    if (!confirm("Are you sure? This will remove their access to the tool.")) return;
+    
+    // Note: This only deletes from 'profiles'. 
+    // To fully delete, you'd need a backend route for auth.admin.deleteUser
+    const { error } = await supabase.from('profiles').delete().eq('id', userId);
+    if (error) alert(error.message);
+    else fetchAndRenderUsers();
+}
+
+// 6. KILL SWITCH LOGIC
+async function initKillSwitch() {
+    const killBtn = document.getElementById('global-kill-switch');
+    
+    // Get initial state
+    let { data: settings } = await supabase.from('system_settings').select('is_paused').single();
+    
+    const updateUI = (paused) => {
+        if (paused) {
+            killBtn.innerHTML = '<i class="fas fa-play"></i> Resume Systems';
+            killBtn.style.background = "#10b981"; // Success Green
+        } else {
+            killBtn.innerHTML = '<i class="fas fa-power-off"></i> Emergency Stop';
+            killBtn.style.background = "#ef4444"; // Danger Red
+        }
+    };
+
+    updateUI(settings.is_paused);
+
+    killBtn.onclick = async () => {
+        const { data: current } = await supabase.from('system_settings').select('is_paused').single();
+        const newState = !current.is_paused;
+
+        const { error } = await supabase
+            .from('system_settings')
+            .update({ is_paused: newState })
+            .eq('id', 1);
+
+        if (!error) {
+            updateUI(newState);
+            alert(newState ? "All searching PAUSED." : "Systems RESUMED.");
+        }
+    };
 }
