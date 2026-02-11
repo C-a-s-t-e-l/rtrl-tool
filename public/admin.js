@@ -1,17 +1,18 @@
-// 1. CONFIGURATION
-const SUPABASE_URL = window.CONFIG.SUPABASE_URL;
-const SUPABASE_ANON_KEY = window.CONFIG.SUPABASE_ANON_KEY;
-const BACKEND_URL = "https://backend.rtrlprospector.space";
+// 1. CONFIGURATION - Using different names to avoid browser collision
+const SB_URL = window.CONFIG.SUPABASE_URL;
+const SB_KEY = window.CONFIG.SUPABASE_ANON_KEY;
+const API_URL = "https://backend.rtrlprospector.space";
 
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// Create the client with a unique name
+const supabaseClient = supabase.createClient(SB_URL, SB_KEY);
 
 document.addEventListener("DOMContentLoaded", async () => {
     // 2. AUTHENTICATION BOUNCER
-    const { data: { session } } = await supabase.auth.getSession();
+    const { data: { session } } = await supabaseClient.auth.getSession();
     
     if (!session) return window.location.href = "index.html";
     
-    const { data: profile } = await supabase
+    const { data: profile } = await supabaseClient
         .from('profiles')
         .select('role')
         .eq('id', session.user.id)
@@ -41,7 +42,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         btn.textContent = "Sending...";
 
         try {
-            const response = await fetch(`${BACKEND_URL}/api/admin/invite`, {
+            const response = await fetch(`${API_URL}/api/admin/invite`, {
                 method: 'POST',
                 headers: { 
                     'Content-Type': 'application/json',
@@ -66,12 +67,17 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 // 5. USER MANAGEMENT LOGIC
 async function fetchAndRenderUsers() {
-    const { data: users, error } = await supabase
+    const { data: users, error } = await supabaseClient
         .from('profiles')
         .select('*')
         .order('role', { ascending: true });
 
-    if (error) return console.error("Fetch error:", error);
+    if (error) {
+        console.error("Fetch error:", error);
+        const tbody = document.getElementById('user-table-body');
+        tbody.innerHTML = `<tr><td colspan="5" style="color:red; text-align:center;">Error: ${error.message}. Check SQL RLS Policies.</td></tr>`;
+        return;
+    }
 
     const tbody = document.getElementById('user-table-body');
     tbody.innerHTML = "";
@@ -121,14 +127,15 @@ async function fetchAndRenderUsers() {
         tbody.innerHTML += row;
     });
 
-    // Update Global Gemini Health Bar (1500 is the daily free limit)
     const totalPct = Math.min((totalUsage / 1500) * 100, 100);
-    document.getElementById('gemini-bar').style.width = totalPct + "%";
-    document.getElementById('gemini-text').textContent = `${totalUsage} / 1500 daily credits used`;
+    const bar = document.getElementById('gemini-bar');
+    const text = document.getElementById('gemini-text');
+    if (bar) bar.style.width = totalPct + "%";
+    if (text) text.textContent = `${totalUsage} / 1500 daily credits used`;
 }
 
 async function updateUserLimit(userId, newLimit) {
-    const { error } = await supabase
+    const { error } = await supabaseClient
         .from('profiles')
         .update({ daily_limit: parseInt(newLimit) })
         .eq('id', userId);
@@ -141,7 +148,7 @@ async function promoteUser(userId, currentRole) {
     const newRole = currentRole === 'admin' ? 'user' : 'admin';
     if (!confirm(`Change this user to ${newRole.toUpperCase()}?`)) return;
 
-    const { error } = await supabase
+    const { error } = await supabaseClient
         .from('profiles')
         .update({ role: newRole })
         .eq('id', userId);
@@ -152,42 +159,31 @@ async function promoteUser(userId, currentRole) {
 
 async function deleteUser(userId) {
     if (!confirm("Are you sure? This will remove their access to the tool.")) return;
-    
-    // Note: This only deletes from 'profiles'. 
-    // To fully delete, you'd need a backend route for auth.admin.deleteUser
-    const { error } = await supabase.from('profiles').delete().eq('id', userId);
+    const { error } = await supabaseClient.from('profiles').delete().eq('id', userId);
     if (error) alert(error.message);
     else fetchAndRenderUsers();
 }
 
-// 6. KILL SWITCH LOGIC
 async function initKillSwitch() {
     const killBtn = document.getElementById('global-kill-switch');
-    
-    // Get initial state
-    let { data: settings } = await supabase.from('system_settings').select('is_paused').single();
+    let { data: settings } = await supabaseClient.from('system_settings').select('is_paused').single();
     
     const updateUI = (paused) => {
         if (paused) {
             killBtn.innerHTML = '<i class="fas fa-play"></i> Resume Systems';
-            killBtn.style.background = "#10b981"; // Success Green
+            killBtn.style.background = "#10b981"; 
         } else {
             killBtn.innerHTML = '<i class="fas fa-power-off"></i> Emergency Stop';
-            killBtn.style.background = "#ef4444"; // Danger Red
+            killBtn.style.background = "#ef4444"; 
         }
     };
 
-    updateUI(settings.is_paused);
+    if(settings) updateUI(settings.is_paused);
 
     killBtn.onclick = async () => {
-        const { data: current } = await supabase.from('system_settings').select('is_paused').single();
+        const { data: current } = await supabaseClient.from('system_settings').select('is_paused').single();
         const newState = !current.is_paused;
-
-        const { error } = await supabase
-            .from('system_settings')
-            .update({ is_paused: newState })
-            .eq('id', 1);
-
+        const { error } = await supabaseClient.from('system_settings').update({ is_paused: newState }).eq('id', 1);
         if (!error) {
             updateUI(newState);
             alert(newState ? "All searching PAUSED." : "Systems RESUMED.");
