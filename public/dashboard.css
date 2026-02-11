@@ -141,5 +141,118 @@
     margin-top: 0.25rem;
 }
 
+/* Dashboard Usage Card Styling */
+.usage-dashboard-card {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+.usage-dash-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 1.25rem;
+}
+
+.usage-label {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    display: block;
+    margin-bottom: 0.5rem;
+}
+
+.usage-main-numbers {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+}
+
+.usage-main-numbers h2 {
+    font-size: 2.25rem;
+    font-weight: 800;
+    color: #1e293b;
+    margin: 0;
+}
+
+.usage-divider {
+    font-size: 1.25rem;
+    color: #cbd5e1;
+    font-weight: 500;
+}
+
+.usage-main-numbers h3 {
+    font-size: 1.25rem;
+    color: #64748b;
+    font-weight: 600;
+    margin: 0;
+}
+
+.plan-status-area {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.5rem;
+}
+
+.plan-badge-large {
+    background: #eff6ff;
+    color: #2563eb;
+    padding: 6px 12px;
+    border-radius: 999px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    border: 1px solid #dbeafe;
+}
+
+/* Plan Variants */
+.plan-unlimited { background: #f5f3ff; color: #7c3aed; border-color: #ddd6fe; }
+.plan-power { background: #fff7ed; color: #ea580c; border-color: #ffedd5; }
+
+.reset-timer {
+    font-size: 0.7rem;
+    color: #94a3b8;
+    font-weight: 500;
+}
+
+.usage-progress-container {
+    width: 100%;
+}
+
+.usage-progress-bar {
+    height: 10px;
+    background: #f1f5f9;
+    border-radius: 5px;
+    overflow: hidden;
+    margin-bottom: 0.5rem;
+}
+
+.usage-progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #3b82f6, #2563eb);
+    transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.usage-footer-labels {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+#usage-percentage-label { color: #1e293b; }
+#usage-status-text { color: #10b981; }
+
+/* Danger states */
+.usage-warning .usage-progress-fill { background: #f59e0b; }
+.usage-danger .usage-progress-fill { background: #ef4444; }
+.usage-danger #usage-status-text { color: #ef4444; }
+
 .spin-slow { animation: spin 3s linear infinite; }
 @keyframes spin { 100% { transform: rotate(360deg); } }

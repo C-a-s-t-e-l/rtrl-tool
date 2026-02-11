@@ -575,6 +575,31 @@
           </aside>
 
           <div class="results-display">
+                <div id="usage-dashboard-card" class="usage-dashboard-card">
+        <div class="usage-dash-header">
+            <div class="usage-title-area">
+                <span class="usage-label">Daily Prospecting Quota</span>
+                <div class="usage-main-numbers">
+                    <h2 id="dash-usage-current">0</h2>
+                    <span class="usage-divider">/</span>
+                    <h3 id="dash-usage-limit">500</h3>
+                </div>
+            </div>
+            <div class="plan-status-area">
+                <span id="dash-plan-badge" class="plan-badge-large">Standard Plan</span>
+                <span id="reset-timer" class="reset-timer">Resets in 12h</span>
+            </div>
+        </div>
+        <div class="usage-progress-container">
+            <div class="usage-progress-bar">
+                <div id="dash-usage-fill" class="usage-progress-fill" style="width: 0%"></div>
+            </div>
+            <div class="usage-footer-labels">
+                <span id="usage-percentage-label">0% consumed</span>
+                <span id="usage-status-text">Account in good standing</span>
+            </div>
+        </div>
+    </div>
             <div id="status-card" class="status-card">
               <div class="status-content">
                 <div class="status-icon-box">
@@ -631,10 +656,12 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
 
 
-    <script src="ui-helpers.js"></script>
-    <script src="exclusion-feature.js"></script>
-    <script src="job-history.js"></script>
-    <script src="event-handlers.js"></script>
+<script src="ui-helpers.js"></script>
+<script src="usage-feature.js"></script> <!-- New -->
+<script src="exclusion-feature.js"></script>
+<script src="job-history.js"></script>
+<script src="search-manager.js"></script> <!-- New -->
+<script src="event-handlers.js"></script>
 
     <script src="script.js?v=2"></script>
   </body>
