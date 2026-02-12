@@ -207,7 +207,7 @@ async function generateFileData(rawData, searchParams, duplicatesData = [], crea
     return {
         full: {
             data: fullData,
-            filename: generateFilename(searchParams, 'Full_No_Duplicates', 'xlsx', creationDate),
+            filename: generateFilename(searchParams, 'Full_DuplicatesRemoved', 'xlsx', creationDate),
             headers: ["BusinessName", "Category", "Suburb/Area", "StreetAddress", "Website", "OwnerName", "Email 1", "Email 2", "Email 3", "Phone", "InstagramURL", "FacebookURL", "GoogleMapsURL", "StarRating", "ReviewCount"]
         },
         sms: {
@@ -217,7 +217,7 @@ async function generateFileData(rawData, searchParams, duplicatesData = [], crea
         },
         contacts: {
             data: contactsData,
-            filename: generateFilename(searchParams, 'Full_No_Duplicates_Emails', 'csv', creationDate),
+            filename: generateFilename(searchParams, 'Full_DuplicatesRemoved_Emails', 'csv', creationDate),
             headers: ["Company", "Address_Suburb", "Address_State", "Notes", "Category", "facebook", "instagram", "linkedin", "email_1", "email_2", "email_3"]
         },
         contactsSplits: {
