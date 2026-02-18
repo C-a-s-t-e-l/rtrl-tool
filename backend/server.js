@@ -322,60 +322,79 @@ for (const item of searchItems) {
             let detailPage = null;
             try {
 const task = async () => {
-                    detailPage = await browser.newPage();
-                    await detailPage.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36");
+    detailPage = await browser.newPage();
+    await detailPage.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36");
 
-                    let googleData = await scrapeGoogleMapsDetails(detailPage, processItem.url, jobId, country);
-                    if (!googleData || !googleData.BusinessName) return null;
+    // 1. Get Google Maps Baseline
+    let googleData = await scrapeGoogleMapsDetails(detailPage, processItem.url, jobId, country);
+    if (!googleData || !googleData.BusinessName) return null;
 
-                    let aiResult = {
-                        ownerName: "",
-                        aiEmail: "",
-                        aiPhone: "",
-                        resolvedName: googleData.BusinessName,
-                        source: "Skipped"
-                    };
+    // 2. Get Website Data (Bucket mode)
+    let websiteData = { foundEmails: [], foundPhones: [], OwnerName: "", InstagramURL: "", FacebookURL: "", rawText: "" };
+    if (googleData.Website) {
+        websiteData = await scrapeWebsiteForGoldData(detailPage, googleData.Website);
+    }
 
-                    if (useAiEnrichment !== false) {
-                        aiResult = await findBusinessOwnerWithAI(
-                            googleData.BusinessName,
-                            googleData.Suburb || country,
-                            googleData.Website,
-                            jobId,
-                            null 
-                        );
-                    }
+    // 3. Get AI Data
+    let aiResult = { ownerName: "", aiEmail: "", aiPhone: "" };
+    if (useAiEnrichment !== false) {
+        aiResult = await findBusinessOwnerWithAI(googleData.BusinessName, googleData.Suburb || country, googleData.Website, jobId);
+    }
 
-                    let websiteData = { OwnerName: "", Email1: "", Phone: "" };
-                    if (googleData.Website) {
-                        websiteData = await scrapeWebsiteForGoldData(detailPage, googleData.Website, jobId);
-                    }
+    // --- DATA RANKING ENGINE ---
+    
+    // RANK EMAILS: Merge Website and AI, filter junk, deduplicate
+    const emailBucket = [...websiteData.foundEmails, aiResult.aiEmail]
+        .filter(e => e && e.includes('@') && !e.includes('wix') && !e.includes('example') && !e.includes('sentry'))
+        .map(e => e.toLowerCase().trim());
+    const uniqueEmails = Array.from(new Set(emailBucket));
 
-                    if (websiteData.Email1) {
-                     const isDeliverable = await verifyEmail(websiteData.Email1);
-                     if (!isDeliverable) {
-                        await addLog(jobId, `[Verifier] Cleaning undeliverable email: ${websiteData.Email1}`);
-                         websiteData.Email1 = ""; 
-                    }
-}
+    // RANK PHONES: Merge AI, Website, and Google Maps (The Safety Net)
+    const phoneBucket = [
+        aiResult.aiPhone,           // Priority 1: AI often finds specific person's mobile
+        ...websiteData.foundPhones, // Priority 2: Website contact numbers
+        googleData.Phone            // Priority 3: Google Maps baseline
+    ].map(normalizePhoneTo61).filter(Boolean);
 
-                    if (aiResult.ownerName) websiteData.OwnerName = aiResult.ownerName;
-                    
-                    if (aiResult.aiEmail && isValidEmail(aiResult.aiEmail)) {
-                        websiteData.Email1 = aiResult.aiEmail;
-                    }
+    const uniquePhones = Array.from(new Set(phoneBucket));
+    
+    // Pick the winner: Look for any number starting with 614 (Mobile). 
+    // If no mobile, take the very first valid number found in the bucket.
+    const finalPhone = uniquePhones.find(p => p.startsWith('614')) || uniquePhones[0] || "";
 
-                    if (aiResult.aiPhone && (!googleData.Phone || googleData.Phone.length < 5)) {
-                        googleData.Phone = aiResult.aiPhone;
-                    }
+    // RANK OWNER: Prioritize AI's findings, then Website, then fallback
+    let finalOwner = "Private Owner";
+    if (aiResult.ownerName && aiResult.ownerName !== "Private Owner") {
+        finalOwner = aiResult.ownerName;
+    } else if (websiteData.OwnerName) {
+        finalOwner = websiteData.OwnerName;
+    }
 
-                    if (aiResult.resolvedName && aiResult.resolvedName.length > googleData.BusinessName.length) {
-                    }
+    // 4. Construct Final Object
+    const res = { 
+        ...googleData, 
+        OwnerName: finalOwner,
+        Email1: uniqueEmails[0] || "",
+        Email2: uniqueEmails[1] || "",
+        Email3: uniqueEmails[2] || "",
+        Phone: finalPhone,
+        InstagramURL: websiteData.InstagramURL || googleData.InstagramURL || "",
+        FacebookURL: websiteData.FacebookURL || googleData.FacebookURL || "",
+        rawText: websiteData.rawText || googleData.BusinessName
+    };
 
-                    const fullData = { ...googleData, ...websiteData };
-                    fullData.Category = (processItem.category || "N/A").replace(/"/g, "");
-                    return fullData;
-                };
+    // Verifier check for the primary email
+    if (res.Email1) {
+        const isDeliverable = await verifyEmail(res.Email1);
+        if (!isDeliverable) {
+            await addLog(jobId, `[Verifier] Removing: ${res.Email1}`);
+            res.Email1 = res.Email2; res.Email2 = res.Email3; res.Email3 = "";
+        }
+    }
+
+    res.Category = (processItem.category || "N/A").replace(/"/g, "");
+    return res;
+};
 
                 return await promiseWithRetry(task, 2, 5000, jobId, processItem.url);
 
@@ -1096,6 +1115,17 @@ const countryBoundingBoxes = {
   "united kingdom": { minLat: 49.9, maxLat: 58.7, minLng: -7.5, maxLng: 1.8 },
   canada: { minLat: 41.6, maxLat: 83.1, minLng: -141.0, maxLng: -52.6 },
 };
+
+function normalizePhoneTo61(num) {
+    if (!num) return null;
+    let digits = String(num).replace(/\D/g, ''); 
+    if (digits.startsWith('0')) {
+        digits = '61' + digits.substring(1);
+    } else if (!digits.startsWith('61') && digits.length >= 8) {
+        digits = '61' + digits;
+    }
+    return (digits.length >= 10 && digits.length <= 13) ? digits : null;
+}
 function isUrlInBoundingBox(url, box) {
   const match = url.match(
     /!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)|@(-?\d+\.\d+),(-?\d+\.\d+)/
@@ -1199,21 +1229,21 @@ function deduplicateBusinesses(businesses) {
             const entryWithValidEmail = group.find(b => isValidEmail(b.Email1) || isValidEmail(b.Email2) || isValidEmail(b.Email3));
             
             // 2. Second choice: Entry with a Mobile Number (starts with 614)
-            const entryWithMobile = group.find(b => isMobilePhone(b.Phone));
+const entryWithMobile = group.find(b => b.Phone && String(b.Phone).startsWith('614'));
 
-            // 3. Third choice: Entry with any phone number (landline)
-            const entryWithAnyPhone = group.find(b => b.Phone && b.Phone.trim() !== '');
+// 3. Third choice: Entry with any phone number (landline)
+const entryWithAnyPhone = group.find(b => b.Phone && String(b.Phone).length > 5);
 
-            let bestEntry;
-            if (entryWithValidEmail) {
-                bestEntry = entryWithValidEmail;
-            } else if (entryWithMobile) {
-                bestEntry = entryWithMobile;
-            } else if (entryWithAnyPhone) {
-                bestEntry = entryWithAnyPhone;
-            } else {
-                bestEntry = group[0];
-            }
+let bestEntry;
+if (entryWithValidEmail) {
+    bestEntry = entryWithValidEmail;
+} else if (entryWithMobile) {
+    bestEntry = entryWithMobile;
+} else if (entryWithAnyPhone) {
+    bestEntry = entryWithAnyPhone;
+} else {
+    bestEntry = group[0];
+}
 
             const bestEntryIndex = group.indexOf(bestEntry);
             uniqueBusinesses.push(bestEntry);
@@ -1603,68 +1633,78 @@ async function scrapeGoogleMapsDetails(page, url, jobId, country) {
   }, country);
 }
 async function scrapePageContent(page) {
-  const ownerTitleKeywords = [
-    "owner",
-    "founder",
-    "director",
-    "principal",
-    "proprietor",
-    "ceo",
-    "manager",
-  ];
+  const ownerTitleKeywords = ["owner", "founder", "director", "principal", "proprietor", "ceo", "manager"];
   const pageText = await page.evaluate(() => document.body.innerText);
   const links = await page.$$eval("a", (as) => as.map((a) => a.href));
+  
+  // 1. Broad Email Regex
   const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
-  const mailtoEmails = links
-    .filter((href) => href.startsWith("mailto:"))
-    .map((href) => href.replace("mailto:", "").split("?")[0]);
-  const textEmails = pageText.match(emailRegex) || [];
-  const emails = [...new Set([...mailtoEmails, ...textEmails])];
+  const emails = [...new Set([
+    ...links.filter(h => h.startsWith("mailto:")).map(h => h.replace("mailto:", "").split("?")[0]),
+    ...(pageText.match(emailRegex) || [])
+  ])];
+
+  // 2. Messy Phone Regex (Grabs anything that looks like a number to be cleaned later)
+  const phoneRegex = /(?:\+61|61|0)[2-478](?:[ -]?[0-9]){8,11}/g;
+  const rawPhones = pageText.match(phoneRegex) || [];
+
+  // 3. Owner Name Extraction
   let ownerName = "";
   const textLines = pageText.split(/[\n\r]+/).map((line) => line.trim());
   for (const line of textLines) {
     for (const title of ownerTitleKeywords) {
       if (line.toLowerCase().includes(title)) {
-        let pName = line
-          .split(new RegExp(title, "i"))[0]
-          .trim()
-          .replace(/,$/, "");
+        let pName = line.split(new RegExp(title, "i"))[0].trim().replace(/,$/, "");
         const words = pName.split(" ").filter(Boolean);
         if (words.length >= 2 && words.length <= 4) {
-          ownerName = words
-            .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-            .join(" ");
+          ownerName = words.map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
           break;
         }
       }
     }
     if (ownerName) break;
   }
-  return { emails, ownerName };
+  return { emails, ownerName, rawPhones, pageText };
 }
-async function scrapeWebsiteForGoldData(page, websiteUrl, jobId) {
-  const data = { OwnerName: "", InstagramURL: "", FacebookURL: "", Email1: "", Email2: "", Email3: "", rawText: "" };
-  try {
-    await page.goto(websiteUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
-    
-    // Capture the text for the AI
-    data.rawText = await page.evaluate(() => document.body.innerText);
 
+async function scrapeWebsiteForGoldData(page, websiteUrl) {
+  const data = { foundEmails: [], foundPhones: [], OwnerName: "", InstagramURL: "", FacebookURL: "", rawText: "" };
+  try {
+    await page.goto(websiteUrl, { waitUntil: "domcontentloaded", timeout: 25000 });
+    
+    // Capture details from Landing Page
     const initialLinks = await page.$$eval("a", (as) => as.map((a) => ({ href: a.href, text: a.innerText })));
     data.InstagramURL = initialLinks.find((l) => l.href.includes("instagram.com"))?.href || "";
     data.FacebookURL = initialLinks.find((l) => l.href.includes("facebook.com"))?.href || "";
     
-    const landingPageData = await scrapePageContent(page);
-    const allFoundEmails = new Set(landingPageData.emails.map(e => e.toLowerCase()));
-    
-    // Set emails logic...
-    const emailsArray = Array.from(allFoundEmails);
-    data.Email1 = emailsArray[0] || "";
-    data.Email2 = emailsArray[1] || "";
-    data.Email3 = emailsArray[2] || "";
+    const landing = await scrapePageContent(page);
+    data.foundEmails.push(...landing.emails);
+    data.foundPhones.push(...landing.rawPhones);
+    data.OwnerName = landing.ownerName;
+    data.rawText = landing.pageText;
+
+    // Find 2 Sub-pages (Contact/About)
+    const subPageLinks = await page.evaluate(() => {
+        const keywords = /contact|about|team|staff|meet|connect|info/i;
+        return Array.from(document.querySelectorAll('a'))
+            .filter(link => link.href.startsWith('http') && (keywords.test(link.innerText) || keywords.test(link.href)))
+            .map(link => link.href);
+    });
+
+    for (const link of [...new Set(subPageLinks)].slice(0, 2)) {
+        try {
+            await page.goto(link, { waitUntil: "domcontentloaded", timeout: 12000 });
+            const subData = await scrapePageContent(page);
+            data.foundEmails.push(...subData.emails);
+            data.foundPhones.push(...subData.rawPhones);
+            if (!data.OwnerName) data.OwnerName = subData.ownerName;
+            data.rawText += `\n\n--- Subpage: ${link} ---\n` + subData.pageText;
+        } catch (e) { continue; }
+    }
   } catch (error) { }
   return data;
 }
+
 
 // New helper to scrape the Australian Business Register for free legal data
 async function getABRContext(page, query) {
@@ -1705,6 +1745,8 @@ function normalizeForExclusionCheck(str = "") {
     .replace(/['’`.,()&]/g, "") 
     .replace(/\s+/g, "");      
 }
+
+
 
 function extractCoordinatesFromUrl(url) {
   if (!url) return null;

@@ -28,6 +28,10 @@ function generateFilename(searchParams, fileSuffix, fileExtension, creationDate 
 
 const createLinkObject = (url) => {
     if (!url || typeof url !== 'string' || !url.trim()) return '';
+
+    if (url.length > 250) {
+        return url; 
+    }
     const formula = `HYPERLINK("${url}", "${url}")`;
     return { f: formula, v: url, t: 's' };
 };
