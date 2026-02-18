@@ -44,3 +44,68 @@ async function initKillSwitch() {
         up(!c.is_paused);
     };
 }
+
+function showModal(type, title, message, onConfirm = null) {
+    const modal = document.getElementById('generic-modal');
+    const iconEl = document.getElementById('modal-icon');
+    const titleEl = document.getElementById('modal-title');
+    const msgEl = document.getElementById('modal-message');
+    const actionsEl = document.getElementById('modal-actions');
+
+    if(!modal) return;
+
+    titleEl.textContent = title;
+    msgEl.textContent = message;
+
+    let iconClass = 'fa-info-circle';
+    let iconBg = '#eff6ff'; 
+    let iconColor = '#3b82f6'; 
+
+    if (type === 'success') {
+        iconClass = 'fa-check';
+        iconBg = '#f0fdf4'; 
+        iconColor = '#22c55e'; 
+    } else if (type === 'danger') {
+        iconClass = 'fa-exclamation-triangle';
+        iconBg = '#fef2f2'; 
+        iconColor = '#ef4444'; 
+    }
+
+    iconEl.style.background = iconBg;
+    iconEl.style.color = iconColor;
+    iconEl.innerHTML = `<i class="fas ${iconClass}"></i>`;
+
+    actionsEl.innerHTML = ''; 
+
+    if (onConfirm) {
+        const cancelBtn = document.createElement('button');
+        cancelBtn.className = 'btn-ghost';
+        cancelBtn.textContent = 'Cancel';
+        cancelBtn.style.border = '1px solid #e2e8f0';
+        cancelBtn.style.padding = '8px 16px';
+        cancelBtn.onclick = () => modal.style.display = 'none';
+
+        const confirmBtn = document.createElement('button');
+        confirmBtn.className = 'btn-primary-blue';
+        confirmBtn.textContent = type === 'danger' ? 'Yes, Proceed' : 'Confirm';
+        if (type === 'danger') confirmBtn.style.backgroundColor = '#ef4444';
+        confirmBtn.onclick = () => {
+            modal.style.display = 'none';
+            onConfirm();
+        };
+
+        actionsEl.appendChild(cancelBtn);
+        actionsEl.appendChild(confirmBtn);
+    } else {
+        const okBtn = document.createElement('button');
+        okBtn.className = 'btn-primary-blue';
+        okBtn.textContent = 'Okay';
+        okBtn.onclick = () => modal.style.display = 'none';
+        actionsEl.appendChild(okBtn);
+    }
+
+    modal.style.display = 'flex';
+}
+
+window.adminAlert = (title, message, type = 'info') => showModal(type, title, message);
+window.adminConfirm = (title, message, onConfirm, type = 'info') => showModal(type, title, message, onConfirm);

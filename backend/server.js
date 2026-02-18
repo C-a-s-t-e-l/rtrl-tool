@@ -646,6 +646,36 @@ app.post("/api/admin/invite", async (req, res) => {
     }
 });
 
+app.delete("/api/admin/users/:id", async (req, res) => {
+    try {
+        const authHeader = req.headers.authorization;
+        const token = authHeader.split(' ')[1];
+        const targetUserId = req.params.id;
+
+        const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+        if (authError || !user) return res.status(401).json({ error: "Unauthorized" });
+
+        const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+        if (profile.role !== 'admin') return res.status(403).json({ error: "Forbidden" });
+
+        if (user.id === targetUserId) {
+            return res.status(400).json({ error: "You cannot delete your own account." });
+        }
+
+        const { error: deleteError } = await supabase.auth.admin.deleteUser(targetUserId);
+        
+        if (deleteError) {
+            const { error: profileError } = await supabase.from('profiles').delete().eq('id', targetUserId);
+            if (profileError) return res.status(400).json({ error: profileError.message });
+        }
+
+        res.json({ success: true });
+    } catch (err) {
+        console.error("Delete Error:", err);
+        res.status(500).json({ error: "Internal Server Error" });
+    }
+});
+
 
 app.post("/api/exclusions", async (req, res) => {
     try {
