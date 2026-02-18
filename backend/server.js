@@ -618,20 +618,34 @@ app.post("/api/admin/invite", async (req, res) => {
         const authHeader = req.headers.authorization;
         const token = authHeader.split(' ')[1];
         
-        const { data: { user } } = await supabase.auth.getUser(token);
+        const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+        if (authError || !user) return res.status(401).json({ error: "Unauthorized" });
+
         const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
-        
-        if (profile.role !== 'admin') return res.status(403).json({ error: "Unauthorized" });
+        if (profile.role !== 'admin') return res.status(403).json({ error: "Forbidden: Admins only" });
 
         const { email } = req.body;
-        const { error } = await supabase.auth.admin.inviteUserByEmail(email);
+        if (!email) return res.status(400).json({ error: "Email is required" });
+
+        const { data: existingUser } = await supabase.from('profiles').select('id').eq('email', email).single();
+        if (existingUser) {
+            return res.status(400).json({ error: "User already exists in the system." });
+        }
+
+        const { data, error } = await supabase.auth.admin.inviteUserByEmail(email);
         
-        if (error) throw error;
+        if (error) {
+            console.error("Invite Error:", error.message);
+            return res.status(400).json({ error: error.message });
+        }
+        
         res.json({ success: true });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        console.error("Server Error:", err);
+        res.status(500).json({ error: "Internal Server Error" });
     }
 });
+
 
 app.post("/api/exclusions", async (req, res) => {
     try {
