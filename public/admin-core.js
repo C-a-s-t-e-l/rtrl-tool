@@ -9,77 +9,62 @@ const API_URL = "https://backend.rtrlprospector.space";
 const supabaseClient = supabase.createClient(SB_URL, SB_KEY);
 
 async function initAdminCore() {
-    const { data: { session } } = await supabaseClient.auth.getSession();
-    if (!session) return window.location.href = "index.html";
-    
-    const { data: profile } = await supabaseClient.from('profiles').select('role').eq('id', session.user.id).single();
-    if (!profile || profile.role !== 'admin') { 
-        window.location.href = "index.html"; 
+    const layout = document.getElementById('admin-page-content');
+    const unauthorized = document.getElementById('unauthorized-msg');
+
+    try {
+        const { data: { session } } = await supabaseClient.auth.getSession();
+
+        if (!session) {
+            window.location.replace("index.html");
+            return null;
+        }
+
+        const { data: profile, error } = await supabaseClient
+            .from('profiles')
+            .select('role')
+            .eq('id', session.user.id)
+            .single();
+
+        if (error || !profile || profile.role !== 'admin') {
+            // User is not an admin: Show 404 look then redirect
+            if (layout) layout.style.display = 'none';
+            if (unauthorized) unauthorized.style.display = 'flex';
+            
+            setTimeout(() => {
+                window.location.replace("index.html");
+            }, 1000);
+            return null;
+        }
+
+        // USER IS ADMIN: Reveal the page
+        if (unauthorized) unauthorized.style.display = 'none';
+        if (layout) layout.style.display = 'flex';
+
+        // Setup Sidebar logic
+        const sidebar = document.getElementById('sidebar');
+        const toggleBtn = document.getElementById('sidebar-toggle');
+        if (toggleBtn && sidebar) {
+            toggleBtn.onclick = () => {
+                sidebar.classList.toggle('collapsed');
+                localStorage.setItem('sidebar-collapsed', sidebar.classList.contains('collapsed'));
+            };
+            if(localStorage.getItem('sidebar-collapsed') === 'true') sidebar.classList.add('collapsed');
+        }
+
+        initKillSwitch();
+        return session;
+
+    } catch (err) {
+        console.error("Auth System Error:", err);
+        window.location.replace("index.html");
         return null;
     }
-
-    const sidebar = document.getElementById('sidebar');
-    const toggleBtn = document.getElementById('sidebar-toggle');
-    if (toggleBtn) {
-        toggleBtn.onclick = () => {
-            sidebar.classList.toggle('collapsed');
-            localStorage.setItem('sidebar-collapsed', sidebar.classList.contains('collapsed'));
-        };
-        if(localStorage.getItem('sidebar-collapsed') === 'true') sidebar.classList.add('collapsed');
-    }
-
-    initKillSwitch();
-    return session;
 }
 
-async function initKillSwitch() {
-    const btn = document.getElementById('global-kill-switch');
-    if(!btn) return;
-
-    // 1. Initial State Load
-    let { data: s } = await supabaseClient.from('system_settings').select('is_paused').single();
-    
-    const updateBtnUI = (isPaused) => {
-        if (isPaused) {
-            btn.innerHTML = '<i class="fas fa-play"></i> <span class="nav-text">Resume Systems</span>';
-            btn.style.borderColor = '#22c55e'; // Green for resume
-        } else {
-            btn.innerHTML = '<i class="fas fa-power-off"></i> <span class="nav-text">Emergency Stop</span>';
-            btn.style.borderColor = 'rgba(255,255,255,0.2)'; // Default
-        }
-    };
-
-    if (s) updateBtnUI(s.is_paused);
-
-    // 2. Click Handler with Safety Modal
-    btn.onclick = async () => {
-        let { data: currentStatus } = await supabaseClient.from('system_settings').select('is_paused').single();
-        
-        if (!currentStatus.is_paused) {
-            window.adminConfirm(
-                'Emergency Shutdown',
-                'Are you sure you want to pause all scraping activity? Active searches will be cancelled and new ones blocked.',
-                async () => {
-                    await supabaseClient.from('system_settings').update({ is_paused: true }).eq('id', 1);
-                    updateBtnUI(true);
-                    window.adminAlert('Systems Paused', 'Platform activity has been suspended.', 'danger');
-                },
-                'danger'
-            );
-        } else {
-            window.adminConfirm(
-                'Resume Systems',
-                'Do you want to re-enable scraping activity across the platform?',
-                async () => {
-                    await supabaseClient.from('system_settings').update({ is_paused: false }).eq('id', 1);
-                    updateBtnUI(false);
-                    window.adminAlert('Systems Active', 'The platform is now accepting new research jobs.', 'success');
-                }
-            );
-        }
-    };
-}
-
+// Global Modal Helpers
+window.adminAlert = (title, message, type = 'info') => showModal(type, title, message);
+window.adminConfirm = (title, message, onConfirm, type = 'info') => showModal(type, title, message, onConfirm);
 
 function showModal(type, title, message, onConfirm = null) {
     const modal = document.getElementById('generic-modal');
@@ -92,46 +77,24 @@ function showModal(type, title, message, onConfirm = null) {
 
     titleEl.textContent = title;
     msgEl.textContent = message;
-
-    let iconClass = 'fa-info-circle';
-    let iconBg = '#eff6ff'; 
-    let iconColor = '#3b82f6'; 
-
-    if (type === 'success') {
-        iconClass = 'fa-check';
-        iconBg = '#f0fdf4'; 
-        iconColor = '#22c55e'; 
-    } else if (type === 'danger') {
-        iconClass = 'fa-exclamation-triangle';
-        iconBg = '#fef2f2'; 
-        iconColor = '#ef4444'; 
-    }
-
-    iconEl.style.background = iconBg;
-    iconEl.style.color = iconColor;
-    iconEl.innerHTML = `<i class="fas ${iconClass}"></i>`;
-
     actionsEl.innerHTML = ''; 
 
     if (onConfirm) {
-        const cancelBtn = document.createElement('button');
-        cancelBtn.className = 'btn-ghost';
-        cancelBtn.textContent = 'Cancel';
-        cancelBtn.style.border = '1px solid #e2e8f0';
-        cancelBtn.style.padding = '8px 16px';
-        cancelBtn.onclick = () => modal.style.display = 'none';
+        const cBtn = document.createElement('button');
+        cBtn.className = 'btn-ghost';
+        cBtn.textContent = 'Cancel';
+        cBtn.style.border = '1px solid #e2e8f0';
+        cBtn.style.padding = '8px 16px';
+        cBtn.onclick = () => modal.style.display = 'none';
 
-        const confirmBtn = document.createElement('button');
-        confirmBtn.className = 'btn-primary-blue';
-        confirmBtn.textContent = type === 'danger' ? 'Yes, Proceed' : 'Confirm';
-        if (type === 'danger') confirmBtn.style.backgroundColor = '#ef4444';
-        confirmBtn.onclick = () => {
-            modal.style.display = 'none';
-            onConfirm();
-        };
+        const okBtn = document.createElement('button');
+        okBtn.className = 'btn-primary-blue';
+        okBtn.textContent = type === 'danger' ? 'Yes, Proceed' : 'Confirm';
+        if (type === 'danger') okBtn.style.backgroundColor = '#ef4444';
+        okBtn.onclick = () => { modal.style.display = 'none'; onConfirm(); };
 
-        actionsEl.appendChild(cancelBtn);
-        actionsEl.appendChild(confirmBtn);
+        actionsEl.appendChild(cBtn);
+        actionsEl.appendChild(okBtn);
     } else {
         const okBtn = document.createElement('button');
         okBtn.className = 'btn-primary-blue';
@@ -143,5 +106,21 @@ function showModal(type, title, message, onConfirm = null) {
     modal.style.display = 'flex';
 }
 
-window.adminAlert = (title, message, type = 'info') => showModal(type, title, message);
-window.adminConfirm = (title, message, onConfirm, type = 'info') => showModal(type, title, message, onConfirm);
+async function initKillSwitch() {
+    const btn = document.getElementById('global-kill-switch');
+    if(!btn) return;
+    let { data: s } = await supabaseClient.from('system_settings').select('is_paused').single();
+    const up = (p) => { 
+        btn.innerHTML = p ? '<i class="fas fa-play"></i> <span class="nav-text">Resume Systems</span>' : '<i class="fas fa-power-off"></i> <span class="nav-text">Emergency Stop</span>'; 
+        btn.style.borderColor = p ? '#22c55e' : 'rgba(255,255,255,0.2)';
+    };
+    if (s) up(s.is_paused);
+    btn.onclick = async () => {
+        let { data: c } = await supabaseClient.from('system_settings').select('is_paused').single();
+        const action = c.is_paused ? 'Resume' : 'Stop';
+        window.adminConfirm(`${action} Systems?`, `Are you sure you want to ${action.toLowerCase()} all scraping?`, async () => {
+            await supabaseClient.from('system_settings').update({ is_paused: !c.is_paused }).eq('id', 1);
+            up(!c.is_paused);
+        });
+    };
+}
