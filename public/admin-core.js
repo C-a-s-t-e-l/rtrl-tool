@@ -35,15 +35,51 @@ async function initAdminCore() {
 async function initKillSwitch() {
     const btn = document.getElementById('global-kill-switch');
     if(!btn) return;
+
+    // 1. Initial State Load
     let { data: s } = await supabaseClient.from('system_settings').select('is_paused').single();
-    const up = (p) => { btn.innerHTML = p ? '<i class="fas fa-play"></i> <span class="nav-text">Resume Systems</span>' : '<i class="fas fa-power-off"></i> <span class="nav-text">Emergency Stop</span>'; };
-    if (s) up(s.is_paused);
+    
+    const updateBtnUI = (isPaused) => {
+        if (isPaused) {
+            btn.innerHTML = '<i class="fas fa-play"></i> <span class="nav-text">Resume Systems</span>';
+            btn.style.borderColor = '#22c55e'; // Green for resume
+        } else {
+            btn.innerHTML = '<i class="fas fa-power-off"></i> <span class="nav-text">Emergency Stop</span>';
+            btn.style.borderColor = 'rgba(255,255,255,0.2)'; // Default
+        }
+    };
+
+    if (s) updateBtnUI(s.is_paused);
+
+    // 2. Click Handler with Safety Modal
     btn.onclick = async () => {
-        let { data: c } = await supabaseClient.from('system_settings').select('is_paused').single();
-        await supabaseClient.from('system_settings').update({ is_paused: !c.is_paused }).eq('id', 1);
-        up(!c.is_paused);
+        let { data: currentStatus } = await supabaseClient.from('system_settings').select('is_paused').single();
+        
+        if (!currentStatus.is_paused) {
+            window.adminConfirm(
+                'Emergency Shutdown',
+                'Are you sure you want to pause all scraping activity? Active searches will be cancelled and new ones blocked.',
+                async () => {
+                    await supabaseClient.from('system_settings').update({ is_paused: true }).eq('id', 1);
+                    updateBtnUI(true);
+                    window.adminAlert('Systems Paused', 'Platform activity has been suspended.', 'danger');
+                },
+                'danger'
+            );
+        } else {
+            window.adminConfirm(
+                'Resume Systems',
+                'Do you want to re-enable scraping activity across the platform?',
+                async () => {
+                    await supabaseClient.from('system_settings').update({ is_paused: false }).eq('id', 1);
+                    updateBtnUI(false);
+                    window.adminAlert('Systems Active', 'The platform is now accepting new research jobs.', 'success');
+                }
+            );
+        }
     };
 }
+
 
 function showModal(type, title, message, onConfirm = null) {
     const modal = document.getElementById('generic-modal');

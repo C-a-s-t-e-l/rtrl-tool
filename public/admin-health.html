@@ -3,27 +3,29 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <link rel="icon" type="image/x-icon" href="https://cdn-icons-png.flaticon.com/512/2248/2248814.png"/>
+    <link rel="icon" type="image/x-icon" href="https://cdn-icons-png.flaticon.com/512/2248/2248814.png"/>
     <title>RTRL | System Health</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <link rel="stylesheet" href="admin.css">
 </head>
 <body>
-    <div class="admin-layout">
+    <div id="unauthorized-msg">
+        <h1 style="font-size: 5rem; margin: 0; color: #1e293b;">404</h1>
+        <p style="color: #64748b; font-size: 1.2rem;">Page not found.</p>
+    </div>
+
+    <div class="admin-layout" id="admin-page-content">
         <aside class="admin-sidebar" id="sidebar">
             <button id="sidebar-toggle" class="sidebar-toggle"><i class="fas fa-chevron-left"></i></button>
             <div class="sidebar-brand"><div class="brand-icon"><i class="fas fa-shield-alt"></i></div><span class="brand-text">Admin Portal</span></div>
             <nav class="sidebar-nav">
                 <a href="admin.html" class="nav-link"><i class="fas fa-users"></i> <span class="nav-text">User Management</span></a>
-            <a href="admin-activity.html" class="nav-link">
-                <i class="fas fa-globe"></i> <span class="nav-text">Global Activity</span>
-            </a>
+                <a href="admin-activity.html" class="nav-link"><i class="fas fa-globe"></i> <span class="nav-text">Global Activity</span></a>
                 <a href="admin-database.html" class="nav-link"><i class="fas fa-database"></i> <span class="nav-text">Master Database</span></a>
                 <a href="admin-settings.html" class="nav-link"><i class="fas fa-cogs"></i> <span class="nav-text">Settings & Rules</span></a>
                 <a href="admin-health.html" class="nav-link active"><i class="fas fa-server"></i> <span class="nav-text">System Health</span></a>
             </nav>
             <div class="sidebar-footer">
-                <a href="index.html" class="nav-link"><i class="fas fa-arrow-left"></i> <span class="nav-text">Back to Tool</span></a>
                 <button id="global-kill-switch" class="kill-switch-btn"><i class="fas fa-power-off"></i> <span class="nav-text">Emergency Stop</span></button>
             </div>
         </aside>
@@ -34,14 +36,16 @@
                     <h1>System Health</h1>
                     <p>Monitor API quotas, server status, and proxy health.</p>
                 </div>
+                <div class="header-actions">
+                    <a href="index.html" class="btn-ghost" style="border: 1px solid #e2e8f0; padding: 8px 16px; border-radius: 8px; text-decoration: none; display: flex; align-items: center; gap: 8px;">
+                        <i class="fas fa-arrow-left"></i> Back to Dashboard
+                    </a>
+                </div>
             </header>
 
             <div class="placeholder-banner">
                 <i class="fas fa-hard-hat fa-2x"></i>
-                <div>
-                    <strong>Work in Progress</strong>
-                    <p style="margin:0; font-size:0.9rem">Live server metrics coming soon.</p>
-                </div>
+                <div><strong>Work in Progress</strong><p style="margin:0; font-size:0.9rem">Live server metrics coming soon.</p></div>
             </div>
 
             <div class="mock-container">
@@ -50,18 +54,22 @@
                         <div class="stat-info"><span class="stat-label">Server CPU</span><h2>12%</h2></div>
                         <div class="stat-icon green"><i class="fas fa-microchip"></i></div>
                     </div>
-                    <div class="stat-card">
-                        <div class="stat-info"><span class="stat-label">Google Maps API</span><h2>Low</h2></div>
-                        <div class="stat-icon purple"><i class="fas fa-map"></i></div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-info"><span class="stat-label">Proxy Status</span><h2>Healthy</h2></div>
-                        <div class="stat-icon blue"><i class="fas fa-network-wired"></i></div>
-                    </div>
                 </div>
             </div>
         </main>
     </div>
+
+    <div id="generic-modal" class="modal-overlay" style="z-index: 3000;">
+        <div class="modal-window" style="max-width: 400px; text-align: center;">
+            <div style="margin-bottom: 1.5rem;">
+                <div id="modal-icon" class="stat-icon" style="margin: 0 auto 1rem auto; width: 60px; height: 60px; border-radius: 50%;"></div>
+                <h3 id="modal-title" style="margin: 0 0 8px 0;">Title</h3>
+                <p id="modal-message" style="color: #64748b; font-size: 0.9rem; margin: 0;"></p>
+            </div>
+            <div id="modal-actions" style="display: flex; justify-content: center; gap: 12px;"></div>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="admin-core.js"></script>
     <script>document.addEventListener("DOMContentLoaded", ()=> initAdminCore());</script>
