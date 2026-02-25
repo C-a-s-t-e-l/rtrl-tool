@@ -281,7 +281,7 @@ document.addEventListener("DOMContentLoaded", () => {
       subscribedJobId = jobId;
     });
 
-    socket.on("user_queue_update", (myJobs) => {
+socket.on("user_queue_update", (myJobs) => {
         const queueCard = document.getElementById("queue-card");
         const listContainer = document.getElementById("queue-list-container");
         const countBadge = document.getElementById("queue-count-badge");
@@ -298,10 +298,13 @@ document.addEventListener("DOMContentLoaded", () => {
             listContainer.innerHTML = myJobs.map(job => `
                 <div class="queue-item" style="display: flex; justify-content: space-between; align-items: center; background: #f8fafc; border: 1px solid #e2e8f0; padding: 10px 12px; border-radius: 8px; font-size: 0.85rem; color: #475569; margin-bottom: 8px;">
                     <div style="display:flex; align-items:center;">
-                        <span class="queue-pos-badge" style="background: #e2e8f0; color: #475569; font-weight: 700; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; margin-right: 8px;">#${job.globalPosition}</span>
-                        <span>Waiting for slot...</span> 
+                        <span class="queue-pos-badge" style="background: #e2e8f0; color: #475569; font-weight: 700; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; margin-right: 12px;">#${job.globalPosition}</span>
+                        <span style="font-weight: 600; color: #1e293b;">${job.title}</span> 
                     </div>
-                    <i class="fas fa-hourglass-half" style="color: #f59e0b; animation: spin 2s linear infinite;"></i>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span style="font-size: 0.75rem; color: #94a3b8; font-weight: 500;">Waiting...</span>
+                        <i class="fas fa-hourglass-half" style="color: #f59e0b; animation: spin 2s linear infinite;"></i>
+                    </div>
                 </div>
             `).join('');
         }

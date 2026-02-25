@@ -77,6 +77,7 @@ const broadcastQueuePositions = () => {
     const userJobs = jobQueue.map((job, index) => ({
       id: job.id,
       globalPosition: index + 1,
+      title: job.title || "Waiting for slot...",
       isMine: job.userId === userId
     })).filter(item => item.isMine);
 
@@ -479,7 +480,7 @@ const recoverStuckJobs = async () => {
 
   const { data: queueList, error } = await supabase
     .from("jobs")
-    .select("id, user_id")
+    .select("id, user_id, parameters")
     .eq("status", "queued")
     .order('created_at', { ascending: true });
 
@@ -492,7 +493,12 @@ const recoverStuckJobs = async () => {
     console.log(
       `[Recovery] Found ${queueList.length} stuck jobs. Re-queueing them.`
     );
-    jobQueue = queueList.map(j => ({ id: j.id, userId: j.user_id }));
+    jobQueue = queueList.map(j => {
+        const p = j.parameters?.searchParamsForEmail || {};
+        const category = p.customCategory || p.primaryCategory || "Search";
+        const area = p.area || "Unknown Area";
+        return { id: j.id, userId: j.user_id, title: `${category} in ${area}` };
+    });
     processQueue();
   } else {
     console.log("[Recovery] No stuck jobs found.");
@@ -517,7 +523,7 @@ io.on("connection", (socket) => {
     }
   });
 
-  socket.on("start_scrape_job", async (payload) => {
+socket.on("start_scrape_job", async (payload) => {
     const { authToken, clientLocalDate, ...scrapeParams } = payload;
     if (!authToken)
       return socket.emit("job_error", { error: "Authentication required." });
@@ -542,7 +548,11 @@ io.on("connection", (socket) => {
       
       socket.emit("job_created", { jobId: newJob.id });
       
-      jobQueue.push({ id: newJob.id, userId: user.id });
+      const p = scrapeParams.searchParamsForEmail || {};
+      const category = p.customCategory || p.primaryCategory || "Search";
+      const area = p.area || "Unknown Area";
+
+      jobQueue.push({ id: newJob.id, userId: user.id, title: `${category} in ${area}` });
       
       broadcastQueuePositions();
       processQueue();
@@ -1073,6 +1083,7 @@ app.get("/api/jobs/history", async (req, res) => {
             .from('jobs')
             .select('id, created_at, parameters, status, results')
             .eq('user_id', user.id)
+            .neq('status', 'queued')
             .order('created_at', { ascending: false })
             .limit(50);
 
