@@ -8,7 +8,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
   let currentUserSession = null;
   let currentJobId = null;
-  let subscribedJobId = null;
 
   window.rtrlApp = {
     ...window.rtrlApp,
@@ -136,11 +135,6 @@ document.addEventListener("DOMContentLoaded", () => {
       findAllBusinessesCheckbox: document.getElementById("findAllBusinesses"),
       businessNamesInput: document.getElementById("businessNamesInput"),
       userEmailInput: document.getElementById("userEmailInput"),
-      bulkSearchContainer: document.getElementById("bulkSearchContainer"),
-      locationSearchContainer: document.getElementById(
-        "locationSearchContainer",
-      ),
-      radiusSearchContainer: document.getElementById("radiusSearchContainer"),
       anchorPointInput: document.getElementById("anchorPointInput"),
       anchorPointSuggestionsEl: document.getElementById(
         "anchorPointSuggestions",
@@ -153,7 +147,6 @@ document.addEventListener("DOMContentLoaded", () => {
       deletePostcodeListButton: document.getElementById(
         "deletePostcodeListButton",
       ),
-      categoryModifierGroup: document.getElementById("categoryModifierGroup"),
       categoryModifierInput: document.getElementById("categoryModifierInput"),
       loginOverlay: document.getElementById("login-overlay"),
       appContent: document.getElementById("app-content"),
@@ -179,6 +172,7 @@ document.addEventListener("DOMContentLoaded", () => {
       dashUsageStatus: document.getElementById("usage-status-text"),
       queueCard: document.getElementById("queue-card"),
       queueListContainer: document.getElementById("queue-list-container"),
+      queueCountBadge: document.getElementById("queue-count-badge"),
     };
 
     if (elements.useAiToggle) {
@@ -197,6 +191,8 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     socket.on("connect", () => {
+      const now = new Date().toLocaleTimeString();
+      logMessage(elements.logEl, `[${now}] Connected to server.`, "success");
       const savedJobId = localStorage.getItem("rtrl_active_job_id");
       if (savedJobId && currentUserSession) {
         currentJobId = savedJobId;
@@ -207,14 +203,24 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     });
 
+    socket.on("disconnect", () => {
+      const now = new Date().toLocaleTimeString();
+      logMessage(elements.logEl, `[${now}] Connection lost.`, "error");
+    });
+
     socket.on("user_queue_update", (myJobs) => {
       if (!elements.queueCard || !elements.queueListContainer) return;
       if (!myJobs || myJobs.length === 0) {
         elements.queueCard.style.display = "none";
         elements.queueListContainer.innerHTML = "";
+        if (elements.queueCountBadge)
+          elements.queueCountBadge.textContent = "0 Jobs";
         return;
       }
       elements.queueCard.style.display = "block";
+      if (elements.queueCountBadge)
+        elements.queueCountBadge.textContent = `${myJobs.length} Job${myJobs.length !== 1 ? "s" : ""}`;
+
       elements.queueListContainer.innerHTML = myJobs
         .map(
           (job) => `
@@ -263,11 +269,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     socket.on("progress_update", (data) => {
       const card = document.getElementById("status-card");
-      if (
-        card &&
-        !card.classList.contains("phase-scraping") &&
-        !card.classList.contains("phase-ai")
-      ) {
+      if (card && !card.classList.contains("state-working")) {
         updateDashboardUi("running");
       }
       const {
@@ -324,6 +326,13 @@ document.addEventListener("DOMContentLoaded", () => {
       if (document.getElementById("stat-enriched"))
         document.getElementById("stat-enriched").textContent = enriched || 0;
     });
+
+    socket.on("job_log", (msg) => logMessage(elements.logEl, msg, "info"));
+    socket.on("job_error", ({ error }) =>
+      logMessage(elements.logEl, `Error: ${error}`, "error"),
+    );
+    socket.on("business_found", () => refreshUsageTracker());
+    socket.on("user_profile_updated", () => refreshUsageTracker());
 
     function resetStatusUI() {
       const fill = document.getElementById("progress-fill"),

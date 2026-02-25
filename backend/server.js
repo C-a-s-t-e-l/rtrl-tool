@@ -186,6 +186,8 @@ const runScrapeJob = async (jobId) => {
   // 1. Immediately move status to running and update queues
   await updateJobStatus(jobId, "running");
 
+   console.log(`[Worker] Job ${jobId} picked up.`); 
+
   // 2. CRITICAL: Tell the frontend to clear any "Completed" or "Finished" UI states from previous jobs
   io.to(jobId).emit("progress_update", { 
       phase: 'discovery', 
