@@ -71,18 +71,19 @@ let isWorkerRunning = false;
 let jobQueue = [];
 
 const broadcastQueuePositions = () => {
-  const usersInQueue = [...new Set(jobQueue.map(job => job.userId))];
-
-  usersInQueue.forEach(userId => {
-    const userJobs = jobQueue.map((job, index) => ({
-      id: job.id,
-      globalPosition: index + 1,
-      title: job.title || "Waiting for slot...",
-      isMine: job.userId === userId
-    })).filter(item => item.isMine);
-
-    if (userJobs.length > 0) {
-      io.to(userId).emit("user_queue_update", userJobs);
+  const connectedSockets = io.sockets.sockets;
+  connectedSockets.forEach(socket => {
+    if (socket.user) {
+      const userId = socket.user.id;
+      const userJobs = jobQueue
+        .filter(j => j.userId === userId)
+        .map((job) => ({
+          id: job.id,
+          globalPosition: jobQueue.findIndex(qj => qj.id === job.id) + 1,
+          title: job.title || "Waiting for slot..."
+        }));
+      // This MUST be sent even if userJobs is empty to hide the card
+      socket.emit("user_queue_update", userJobs);
     }
   });
 };
@@ -91,14 +92,11 @@ const processQueue = async () => {
   if (isWorkerRunning || jobQueue.length === 0) return;
   
   isWorkerRunning = true;
-  const nextJob = jobQueue[0]; // Look at the first item
+  const nextJob = jobQueue[0]; 
   const jobId = nextJob.id;
 
-  console.log(`[Worker] Starting job ${jobId}`);
-  
   try {
-    // Remove it from the queue array BEFORE starting the scrape 
-    // so the waiting list UI updates instantly
+    // Shift and update UI BEFORE starting the long scrape process
     jobQueue.shift(); 
     broadcastQueuePositions();
 
@@ -108,7 +106,6 @@ const processQueue = async () => {
     await updateJobStatus(jobId, "failed");
   } finally {
     isWorkerRunning = false;
-    // Always broadcast after a job cycle to keep UI in sync
     broadcastQueuePositions();
     process.nextTick(processQueue);
   }
@@ -117,14 +114,11 @@ const processQueue = async () => {
 const updateJobStatus = async (jobId, status) => {
   await supabase.from("jobs").update({ status }).eq("id", jobId);
   
-  // If a job is no longer queued, ensure it's removed from the memory queue
   if (status !== 'queued') {
       jobQueue = jobQueue.filter(j => j.id !== jobId);
   }
 
   io.to(jobId).emit("job_update", { id: jobId, status });
-  
-  // Immediately tell all users to refresh their waiting lists
   broadcastQueuePositions();
 };
 

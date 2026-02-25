@@ -319,22 +319,18 @@ function resetStatusUI() {
         if (pctLabel) pctLabel.textContent = `0%`;
         if (phaseLabel) phaseLabel.textContent = "Initializing...";
         
-        const stats = {
-            "stat-found": "0",
-            "stat-processed": "0",
-            "stat-enriched": "0"
-        };
-        
-        for (const [id, val] of Object.entries(stats)) {
-            const el = document.getElementById(id);
-            if (el) el.textContent = val;
-        }
+        if (document.getElementById("stat-found")) document.getElementById("stat-found").textContent = "0";
+        if (document.getElementById("stat-processed")) document.getElementById("stat-processed").textContent = "0";
+        if (document.getElementById("stat-enriched")) document.getElementById("stat-enriched").textContent = "0";
 
         const icon = document.getElementById("status-icon");
         if (icon) icon.className = "fas fa-satellite-dish spin-slow";
         
         const headline = document.getElementById("status-headline");
         if (headline) headline.textContent = "Extracting Data...";
+        
+        const subtext = document.getElementById("status-subtext");
+        if (subtext) subtext.textContent = "Moving job from queue to active thread...";
     }
 
     socket.on("job_state", (job) => {
@@ -379,7 +375,6 @@ socket.on("job_update", (update) => {
         if (targetId) {
           const historyBadge = document.getElementById(`job-status-${targetId}`);
           if (historyBadge) {
-            // Update the badge in the history list if it exists
             const statusIcons = {
                 completed: '<i class="fas fa-check-circle"></i> <span>Completed</span>',
                 failed: '<i class="fas fa-exclamation-triangle"></i> <span>Failed</span>',
@@ -393,12 +388,8 @@ socket.on("job_update", (update) => {
           if (update.status === "running") {
               currentJobId = targetId;
               localStorage.setItem("rtrl_active_job_id", targetId);
-              
               resetStatusUI(); 
-              
               updateDashboardUi("running");
-              
-              logMessage(elements.logEl, "Next job in queue started...", "info");
           } 
           else if (update.status === "completed" || update.status === "failed") {
               if (targetId === currentJobId) {
