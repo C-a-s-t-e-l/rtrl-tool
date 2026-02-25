@@ -44,7 +44,10 @@ document.addEventListener("DOMContentLoaded", () => {
         .eq("id", currentUserSession.user.id)
         .single();
 
-      if (error || !profile) return;
+      if (error || !profile) {
+        console.error("Error fetching user profile for usage tracker:", error);
+        return;
+      }
 
       const current = profile.usage_today || 0;
       const limit = profile.daily_limit || 500;
@@ -57,8 +60,10 @@ document.addEventListener("DOMContentLoaded", () => {
       const todayStr = `${year}-${month}-${day}`;
 
       let displayCurrentUsage = current;
-      if (lastResetDateStr && lastResetDateStr < todayStr)
+
+      if (lastResetDateStr && lastResetDateStr < todayStr) {
         displayCurrentUsage = 0;
+      }
 
       const percentage = Math.min(
         Math.round((displayCurrentUsage / limit) * 100),
@@ -131,7 +136,9 @@ document.addEventListener("DOMContentLoaded", () => {
           script.async = true;
           document.head.appendChild(script);
         }
-      } catch (error) {}
+      } catch (error) {
+        console.error("Failed to fetch config from server:", error);
+      }
     }
 
     const elements = {
@@ -208,12 +215,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (elements.useAiToggle) {
       const savedAiState = localStorage.getItem("rtrl_use_ai_enrichment");
-      if (savedAiState !== null)
+      if (savedAiState !== null) {
         elements.useAiToggle.checked = savedAiState === "true";
-      else elements.useAiToggle.checked = true;
-      elements.useAiToggle.addEventListener("change", (e) =>
-        localStorage.setItem("rtrl_use_ai_enrichment", e.target.checked),
-      );
+      } else {
+        elements.useAiToggle.checked = true;
+      }
+      elements.useAiToggle.addEventListener("change", (e) => {
+        localStorage.setItem("rtrl_use_ai_enrichment", e.target.checked);
+      });
     }
 
     const socket = io(BACKEND_URL, {
@@ -249,7 +258,7 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     });
 
-    socket.on("disconnect", () => {
+    socket.on("disconnect", (reason) => {
       disconnectTimeout = setTimeout(() => {
         logMessage(elements.logEl, "Connection lost. Reconnecting...", "error");
         hasLoggedDisconnect = true;
@@ -258,8 +267,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
     socket.on("job_created", ({ jobId }) => {
       logMessage(elements.logEl, "Job added to queue.", "info");
-      if (window.rtrlApp.jobHistory)
+
+      if (window.rtrlApp.jobHistory) {
         window.rtrlApp.jobHistory.fetchAndRenderJobs();
+      }
+
       socket.emit("subscribe_to_job", {
         jobId,
         authToken: currentUserSession.access_token,
@@ -270,38 +282,36 @@ document.addEventListener("DOMContentLoaded", () => {
     socket.on("user_queue_update", (myJobs) => {
       const queueCard = document.getElementById("queue-card");
       const listContainer = document.getElementById("queue-list-container");
-      const countBadge = document.getElementById("queue-count-badge");
 
       if (!queueCard || !listContainer) return;
 
+      // IF EMPTY: Hide and clear
       if (!myJobs || myJobs.length === 0) {
         queueCard.style.setProperty("display", "none", "important");
         listContainer.innerHTML = "";
         return;
       }
-
       queueCard.style.setProperty("display", "block", "important");
-      if (countBadge)
-        countBadge.textContent = `${myJobs.length} Job${myJobs.length > 1 ? "s" : ""}`;
 
       listContainer.innerHTML = myJobs
         .map(
           (job) => `
-          <div class="queue-item" style="display: flex; justify-content: space-between; align-items: center; background: #f8fafc; border: 1px solid #e2e8f0; padding: 12px; border-radius: 8px; margin-bottom: 8px; border-left: 4px solid #f59e0b;">
-              <div style="display:flex; align-items:center; gap: 12px;">
-                  <span class="queue-pos-badge" style="background: #fff7ed; color: #c2410c; border: 1px solid #ffedd5; font-weight: 800; padding: 4px 10px; border-radius: 6px; font-size: 0.75rem;">#${job.globalPosition}</span>
-                  <span style="font-weight: 600; color: #1e293b; font-size: 0.9rem;">${job.title}</span> 
-              </div>
-              <div style="display: flex; align-items: center; gap: 10px; background: white; padding: 4px 10px; border-radius: 20px; border: 1px solid #e2e8f0;">
-                  <span style="font-size: 0.7rem; color: #64748b; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;">Waiting</span>
-                  <i class="fas fa-hourglass-half" style="color: #f59e0b; font-size: 0.8rem; animation: spin 2s linear infinite;"></i>
-              </div>
-          </div>
-      `,
+        <div class="queue-item" style="display: flex; justify-content: space-between; align-items: center; background: #f8fafc; border: 1px solid #e2e8f0; padding: 12px; border-radius: 8px; margin-bottom: 8px; border-left: 4px solid #f59e0b;">
+            <div style="display:flex; align-items:center; gap: 12px;">
+                <span class="queue-pos-badge" style="background: #fff7ed; color: #c2410c; border: 1px solid #ffedd5; font-weight: 800; padding: 4px 10px; border-radius: 6px; font-size: 0.75rem;">#${job.globalPosition}</span>
+                <span style="font-weight: 600; color: #1e293b; font-size: 0.9rem;">${job.title}</span> 
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px; background: white; padding: 4px 10px; border-radius: 20px; border: 1px solid #e2e8f0;">
+                <span style="font-size: 0.7rem; color: #64748b; font-weight: 700; text-transform: uppercase;">Waiting</span>
+                <i class="fas fa-hourglass-half" style="color: #f59e0b; font-size: 0.8rem; animation: spin 2s linear infinite;"></i>
+            </div>
+        </div>
+    `,
         )
         .join("");
     });
 
+    // public/script.js (~line 330)
     function resetStatusUI() {
       const fill = document.getElementById("progress-fill");
       const pctLabel = document.getElementById("pct-label");
@@ -347,37 +357,17 @@ document.addEventListener("DOMContentLoaded", () => {
     socket.on("job_log", (message) =>
       logMessage(elements.logEl, message, "info"),
     );
-    socket.on("job_error", ({ error }) =>
-      logMessage(elements.logEl, `Error: ${error}`, "error"),
-    );
-    socket.on("business_found", () => refreshUsageTracker());
-    socket.on("user_profile_updated", () => refreshUsageTracker());
 
-    socket.on("job_update", (update) => {
-      if (update.status) {
-        if (window.rtrlApp.jobHistory)
-          window.rtrlApp.jobHistory.fetchAndRenderJobs();
+    socket.on("job_error", ({ error }) => {
+      logMessage(elements.logEl, `Error: ${error}`, "error");
+    });
 
-        const targetId = update.id;
-        if (update.status === "running") {
-          currentJobId = targetId;
-          localStorage.setItem("rtrl_active_job_id", targetId);
-          resetStatusUI();
-          updateDashboardUi("running");
-          socket.emit("subscribe_to_job", {
-            jobId: targetId,
-            authToken: currentUserSession.access_token,
-          });
-        } else if (
-          update.status === "completed" ||
-          update.status === "failed"
-        ) {
-          if (targetId === currentJobId) {
-            localStorage.removeItem("rtrl_active_job_id");
-            updateDashboardUi(update.status);
-          }
-        }
-      }
+    socket.on("business_found", (data) => {
+      refreshUsageTracker();
+    });
+
+    socket.on("user_profile_updated", () => {
+      refreshUsageTracker();
     });
 
     socket.on("progress_update", (data) => {
@@ -432,17 +422,18 @@ document.addEventListener("DOMContentLoaded", () => {
         document.getElementById("stat-enriched").textContent = enriched || 0;
     });
 
-    function updateDashboardUi(status) {
+    function updateDashboardUi(status, data = {}) {
       const headline = document.getElementById("status-headline");
       const subtext = document.getElementById("status-subtext");
       const icon = document.getElementById("status-icon");
       const card = document.getElementById("status-card");
 
       if (!headline || !card) return;
+
       card.className = "status-card";
 
       if (status === "running") {
-        card.classList.add("phase-scraping");
+        card.classList.add("state-working", "phase-scraping");
         headline.textContent = "Job Active";
         subtext.textContent = "Processing data...";
         if (icon) icon.className = "fas fa-circle-notch fa-spin";
@@ -451,9 +442,11 @@ document.addEventListener("DOMContentLoaded", () => {
         headline.textContent = "Job Completed";
         subtext.textContent = "Check your email for results.";
         if (icon) icon.className = "fas fa-check-circle";
+
         const fill = document.getElementById("progress-fill");
         const pct = document.getElementById("pct-label");
         const phase = document.getElementById("phase-label");
+
         if (fill) fill.style.width = "100%";
         if (pct) pct.textContent = "100%";
         if (phase) phase.textContent = "Phase 3/3: Complete";
@@ -463,6 +456,7 @@ document.addEventListener("DOMContentLoaded", () => {
         subtext.textContent = "Please check job history or try again.";
         if (icon) icon.className = "fas fa-times-circle";
       } else {
+        card.className = "status-card";
         headline.textContent = "Ready to Start";
         subtext.textContent = "Waiting for input...";
         if (icon) icon.className = "fas fa-play";
@@ -520,20 +514,20 @@ document.addEventListener("DOMContentLoaded", () => {
 
     document
       .getElementById("login-google")
-      ?.addEventListener("click", () =>
-        supabaseClient.auth.signInWithOAuth({
+      ?.addEventListener("click", async () => {
+        await supabaseClient.auth.signInWithOAuth({
           provider: "google",
           options: { redirectTo: window.location.origin },
-        }),
-      );
+        });
+      });
     document
       .getElementById("login-microsoft")
-      ?.addEventListener("click", () =>
-        supabaseClient.auth.signInWithOAuth({
+      ?.addEventListener("click", async () => {
+        await supabaseClient.auth.signInWithOAuth({
           provider: "azure",
           options: { scopes: "email", redirectTo: window.location.origin },
-        }),
-      );
+        });
+      });
     document.getElementById("to-signup-btn")?.addEventListener("click", (e) => {
       e.preventDefault();
       elements.flipCardContainer.classList.add("flipped");
@@ -590,13 +584,16 @@ document.addEventListener("DOMContentLoaded", () => {
       if (session) {
         if (socket.connected)
           socket.emit("authenticate_socket", session.access_token);
+
         elements.loginOverlay.style.display = "none";
         elements.appContent.style.display = "block";
         elements.userMenu.style.display = "block";
         elements.userInfoSpan.textContent =
           session.user.user_metadata.full_name || "User";
         elements.userEmailDisplay.textContent = session.user.email;
+
         refreshUsageTracker();
+
         supabaseClient
           .from("profiles")
           .select("role")
@@ -607,12 +604,20 @@ document.addEventListener("DOMContentLoaded", () => {
               const adminLink = document.getElementById("admin-control-link");
               if (adminLink) adminLink.style.display = "flex";
             }
-          });
+          })
+          .catch((err) =>
+            console.error("Admin check failed, but continuing..."),
+          );
+
         if (elements.userEmailInput.value.trim() === "")
           elements.userEmailInput.value = session.user.email;
+
         fetchPostcodeLists();
-        if (window.rtrlApp.jobHistory)
+
+        if (window.rtrlApp.jobHistory) {
           window.rtrlApp.jobHistory.fetchAndRenderJobs();
+        }
+
         fetch(`${BACKEND_URL}/api/exclusions`, {
           headers: { Authorization: `Bearer ${session.access_token}` },
         })
@@ -663,7 +668,9 @@ document.addEventListener("DOMContentLoaded", () => {
         if (sl) {
           sl.postcodes.forEach((pc) => window.rtrlApp.validateAndAddTag(pc));
           elements.deletePostcodeListButton.style.display = "inline-flex";
-        } else elements.deletePostcodeListButton.style.display = "none";
+        } else {
+          elements.deletePostcodeListButton.style.display = "none";
+        }
       });
       const observer = new MutationObserver(
         () =>
@@ -1067,6 +1074,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     window.rtrlApp.startResearch = () => {
       if (!currentUserSession) return;
+
       const ns = elements.businessNamesInput.value
         .trim()
         .split("\n")
@@ -1077,11 +1085,13 @@ document.addEventListener("DOMContentLoaded", () => {
       )
         .map((c) => c.value)
         .filter((v) => v !== "select_all");
+
       const localToday = new Date();
       const localYear = localToday.getFullYear();
       const localMonth = String(localToday.getMonth() + 1).padStart(2, "0");
       const localDay = String(localToday.getDate()).padStart(2, "0");
       const clientLocalDateParam = `${localYear}-${localMonth}-${localDay}`;
+
       const p = {
         country: elements.countryInput.value,
         businessNames: ns,
@@ -1131,11 +1141,14 @@ document.addEventListener("DOMContentLoaded", () => {
         postcodes: window.rtrlApp.postalCodes,
         country: elements.countryInput.value,
       };
+
       socket.emit("start_scrape_job", {
         authToken: currentUserSession.access_token,
         clientLocalDate: clientLocalDateParam,
         ...p,
       });
+
+      // UI Feedback to show it was added to queue, instead of locking the UI
       const originalText = elements.startButton.innerHTML;
       elements.startButton.innerHTML =
         '<i class="fas fa-check"></i> Added to Queue!';
@@ -1145,6 +1158,11 @@ document.addEventListener("DOMContentLoaded", () => {
         elements.startButton.style.backgroundColor = "";
       }, 2000);
     };
+
+    function handleScrapeError() {
+      document.getElementById("status-card").className =
+        "status-card state-error";
+    }
 
     function initializeApp() {
       window.rtrlApp.jobHistory.init(
@@ -1195,6 +1213,7 @@ document.addEventListener("DOMContentLoaded", () => {
       radius: document.getElementById("radiusSlider"),
       aiToggle: document.getElementById("useAiToggle"),
     };
+
     el.location.value = "";
     el.anchor.value = "";
     el.names.value = "";
@@ -1202,12 +1221,15 @@ document.addEventListener("DOMContentLoaded", () => {
     window.rtrlApp.customKeywords.length = 0;
     window.rtrlApp.state.selectedAnchorPoint = null;
     document.querySelectorAll(".tag").forEach((t) => t.remove());
+
     if (window.rtrlApp.searchCircle) {
       window.rtrlApp.map.removeLayer(window.rtrlApp.searchCircle);
       window.rtrlApp.searchCircle = null;
     }
+
     if (el.aiToggle) el.aiToggle.checked = p.useAiEnrichment !== false;
     el.country.value = p.country || "Australia";
+
     if (p.count === -1) {
       el.findAll.checked = true;
       el.count.value = "";
@@ -1217,6 +1239,7 @@ document.addEventListener("DOMContentLoaded", () => {
       el.count.value = p.count || "";
       el.count.disabled = false;
     }
+
     if (p.businessNames && p.businessNames.length > 0) {
       el.names.value = p.businessNames.join("\n");
       document
@@ -1236,10 +1259,12 @@ document.addEventListener("DOMContentLoaded", () => {
         });
       }
     }
+
     if (p.radiusKm && p.anchorPoint) {
       el.radius.value = p.radiusKm;
       document.getElementById("radiusValue").textContent = `${p.radiusKm} km`;
       el.anchor.value = p.searchParamsForEmail?.area || "Selected Area";
+
       const co = p.anchorPoint.split(",");
       if (co.length === 2) {
         const nc = L.latLng(parseFloat(co[0]), parseFloat(co[1]));
@@ -1247,9 +1272,11 @@ document.addEventListener("DOMContentLoaded", () => {
           center: nc,
           name: el.anchor.value,
         };
+
         document
           .getElementById("radiusSearchContainer")
           .classList.remove("collapsed");
+
         setTimeout(() => {
           window.rtrlApp.map.invalidateSize();
           window.rtrlApp.map.setView(nc, 11);
@@ -1258,12 +1285,14 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     } else {
       el.location.value = p.location || "";
-      if (p.postalCode)
+      if (p.postalCode) {
         p.postalCode.forEach((pc) => window.rtrlApp.validateAndAddTag(pc));
+      }
       document
         .getElementById("locationSearchContainer")
         .classList.remove("collapsed");
     }
+
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 });
