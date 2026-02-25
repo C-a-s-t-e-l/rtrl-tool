@@ -283,3 +283,7 @@
     color: #f59e0b;
     animation: spin 2s linear infinite;
 }
+
+.queue-visible {
+    display: block !important;
+}

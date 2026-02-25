@@ -71,26 +71,21 @@ let isWorkerRunning = false;
 let jobQueue = [];
 
 const broadcastQueuePositions = () => {
-  const connectedSockets = io.sockets.sockets;
+  // Get all unique users who have jobs in the queue
+  const userIdsInQueue = [...new Set(jobQueue.map(j => j.userId))];
 
-  connectedSockets.forEach(socket => {
-    // Only send to sockets that are authenticated
-    if (socket.user) {
-      const userId = socket.user.id;
-      
-      // Filter the global queue for this specific user
-      const userJobs = jobQueue
-        .filter(j => j.userId === userId)
-        .map((job) => ({
-          id: job.id,
-          // Position is the index in the global queue + 1
-          globalPosition: jobQueue.findIndex(qj => qj.id === job.id) + 1,
-          title: job.title || "Waiting for slot..."
-        }));
+  userIdsInQueue.forEach(userId => {
+    // Build the specific queue list for THIS user
+    const userJobs = jobQueue
+      .filter(j => j.userId === userId)
+      .map((job) => ({
+        id: job.id,
+        globalPosition: jobQueue.findIndex(qj => qj.id === job.id) + 1,
+        title: job.title || "Waiting for slot..."
+      }));
 
-      // Direct emit to the specific connection - no "Room" delay
-      socket.emit("user_queue_update", userJobs);
-    }
+    // Emit specifically to that user's room (instant dispatch)
+    io.to(userId).emit("user_queue_update", userJobs);
   });
 };
 
@@ -538,6 +533,10 @@ socket.on("start_scrape_job", async (payload) => {
     const { data: { user }, error } = await supabase.auth.getUser(authToken);
     if (error || !user) return socket.emit("job_error", { error: "Authentication failed." });
 
+    // CRITICAL FIX: Explicitly set identification on this specific socket now
+    socket.user = user;
+    socket.join(user.id); 
+
     try {
       const { data: newJob, error: insertError } = await supabase
         .from("jobs")
@@ -556,13 +555,13 @@ socket.on("start_scrape_job", async (payload) => {
       const p = scrapeParams.searchParamsForEmail || {};
       const title = `${p.customCategory || p.primaryCategory || "Search"} in ${p.area || "Unknown"}`;
 
-      // 1. Add to memory queue
+      // 1. Add to global queue
       jobQueue.push({ id: newJob.id, userId: user.id, title });
       
-      // 2. Refresh UI for everyone immediately
+      // 2. Broadcast immediately (now that socket.user is set, this won't skip)
       broadcastQueuePositions();
 
-      // 3. Check if worker should pick it up
+      // 3. Process
       processQueue();
     } catch (dbError) {
       console.error("Error creating job:", dbError);
