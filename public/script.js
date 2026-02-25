@@ -293,18 +293,19 @@ socket.on("user_queue_update", (myJobs) => {
             return;
         }
 
-        // Force visibility
+        queueCard.style.display = "block";
         queueCard.style.setProperty("display", "block", "important");
+
         if (countBadge) countBadge.textContent = `${myJobs.length} Job${myJobs.length > 1 ? 's' : ''}`;
         
         listContainer.innerHTML = myJobs.map(job => `
-            <div class="queue-item" style="display: flex; justify-content: space-between; align-items: center; background: #f8fafc; border: 1px solid #e2e8f0; padding: 12px; border-radius: 8px; margin-bottom: 8px; animation: slideIn 0.3s ease-out;">
+            <div class="queue-item" style="display: flex; justify-content: space-between; align-items: center; background: #f8fafc; border: 1px solid #e2e8f0; padding: 12px; border-radius: 8px; margin-bottom: 8px; border-left: 4px solid #f59e0b;">
                 <div style="display:flex; align-items:center; gap: 12px;">
                     <span class="queue-pos-badge" style="background: #fff7ed; color: #c2410c; border: 1px solid #ffedd5; font-weight: 800; padding: 4px 10px; border-radius: 6px; font-size: 0.75rem;">#${job.globalPosition}</span>
                     <span style="font-weight: 600; color: #1e293b; font-size: 0.9rem;">${job.title}</span> 
                 </div>
                 <div style="display: flex; align-items: center; gap: 10px; background: white; padding: 4px 10px; border-radius: 20px; border: 1px solid #e2e8f0;">
-                    <span style="font-size: 0.7rem; color: #64748b; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;">In Queue</span>
+                    <span style="font-size: 0.7rem; color: #64748b; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;">Waiting</span>
                     <i class="fas fa-hourglass-half" style="color: #f59e0b; font-size: 0.8rem; animation: spin 2s linear infinite;"></i>
                 </div>
             </div>

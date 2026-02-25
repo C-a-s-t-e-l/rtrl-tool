@@ -70,24 +70,27 @@ const supabase = createClient(
 let isWorkerRunning = false;
 let jobQueue = [];
 
-const broadcastQueuePositions = (targetUserId = null) => {
-  // If targetUserId is provided, only update that one user
-  // Otherwise, update every user who has a job in the queue
-  const userIdsToUpdate = targetUserId 
-    ? [targetUserId] 
-    : [...new Set(jobQueue.map(job => job.userId))];
+const broadcastQueuePositions = () => {
+  const connectedSockets = io.sockets.sockets;
 
-  userIdsToUpdate.forEach(userId => {
-    const userJobs = jobQueue
-      .filter(j => j.userId === userId)
-      .map((job) => ({
-        id: job.id,
-        globalPosition: jobQueue.findIndex(qj => qj.id === job.id) + 1,
-        title: job.title || "Waiting for slot..."
-      }));
+  connectedSockets.forEach(socket => {
+    // Only send to sockets that are authenticated
+    if (socket.user) {
+      const userId = socket.user.id;
+      
+      // Filter the global queue for this specific user
+      const userJobs = jobQueue
+        .filter(j => j.userId === userId)
+        .map((job) => ({
+          id: job.id,
+          // Position is the index in the global queue + 1
+          globalPosition: jobQueue.findIndex(qj => qj.id === job.id) + 1,
+          title: job.title || "Waiting for slot..."
+        }));
 
-    // Emit ONLY to that specific user's room
-    io.to(userId).emit("user_queue_update", userJobs);
+      // Direct emit to the specific connection - no "Room" delay
+      socket.emit("user_queue_update", userJobs);
+    }
   });
 };
 
@@ -530,10 +533,10 @@ socket.on("authenticate_socket", async (authToken) => {
   });
 socket.on("start_scrape_job", async (payload) => {
     const { authToken, clientLocalDate, ...scrapeParams } = payload;
-    if (!authToken) return socket.emit("job_error", { error: "Auth required" });
-
+    if (!authToken) return socket.emit("job_error", { error: "Authentication required." });
+    
     const { data: { user }, error } = await supabase.auth.getUser(authToken);
-    if (error || !user) return socket.emit("job_error", { error: "Auth failed" });
+    if (error || !user) return socket.emit("job_error", { error: "Authentication failed." });
 
     try {
       const { data: newJob, error: insertError } = await supabase
@@ -553,17 +556,17 @@ socket.on("start_scrape_job", async (payload) => {
       const p = scrapeParams.searchParamsForEmail || {};
       const title = `${p.customCategory || p.primaryCategory || "Search"} in ${p.area || "Unknown"}`;
 
-      // 1. Add to queue
+      // 1. Add to memory queue
       jobQueue.push({ id: newJob.id, userId: user.id, title });
       
-      // 2. BROADCAST IMMEDIATELY (Instantly shows the card)
-      broadcastQueuePositions(user.id);
+      // 2. Refresh UI for everyone immediately
+      broadcastQueuePositions();
 
-      // 3. Trigger worker
+      // 3. Check if worker should pick it up
       processQueue();
-
     } catch (dbError) {
-      socket.emit("job_error", { error: "Failed to create job" });
+      console.error("Error creating job:", dbError);
+      socket.emit("job_error", { error: "Failed to create job." });
     }
   });
 
