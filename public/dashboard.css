@@ -141,7 +141,6 @@
     margin-top: 0.25rem;
 }
 
-/* Usage Dashboard Styles */
 .usage-dashboard-card {
     background: #ffffff;
     border: 1px solid #e2e8f0;
@@ -244,10 +243,43 @@
     color: #64748b;
 }
 
-/* Danger states */
 .usage-warning .usage-progress-fill { background: #f59e0b; }
 .usage-danger .usage-progress-fill { background: #ef4444; }
 .usage-danger #usage-status-text { color: #ef4444; }
 
 .spin-slow { animation: spin 3s linear infinite; }
 @keyframes spin { 100% { transform: rotate(360deg); } }
+
+.queue-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 1rem;
+}
+
+.queue-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    padding: 10px 12px;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    color: #475569;
+}
+
+.queue-pos-badge {
+    background: #e2e8f0;
+    color: #475569;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    margin-right: 8px;
+}
+
+.queue-spinner {
+    color: #f59e0b;
+    animation: spin 2s linear infinite;
+}

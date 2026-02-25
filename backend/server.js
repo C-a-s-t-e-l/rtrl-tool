@@ -56,7 +56,6 @@ const io = new Server(server, {
 
 const PORT = process.env.PORT || 3000;
 const GOOGLE_MAPS_API_KEY = process.env.MAPS_API_KEY;
-const PLACEHOLDER_KEY = "%%GOOGLE_MAPS_API_KEY%%";
 
 if (!GOOGLE_MAPS_API_KEY) {
   console.error("ERROR: MAPS_API_KEY not found in .env file!");
@@ -72,15 +71,27 @@ let isWorkerRunning = false;
 let jobQueue = [];
 
 const broadcastQueuePositions = () => {
-  jobQueue.forEach((queuedJobId, index) => {
-    io.to(queuedJobId).emit("queue_position", { position: index + 1 });
+  const usersInQueue = [...new Set(jobQueue.map(job => job.userId))];
+
+  usersInQueue.forEach(userId => {
+    const userJobs = jobQueue.map((job, index) => ({
+      id: job.id,
+      globalPosition: index + 1,
+      isMine: job.userId === userId
+    })).filter(item => item.isMine);
+
+    if (userJobs.length > 0) {
+      io.to(userId).emit("user_queue_update", userJobs);
+    }
   });
 };
 
 const processQueue = async () => {
   if (isWorkerRunning || jobQueue.length === 0) return;
+  
   isWorkerRunning = true;
-  const jobId = jobQueue.shift();
+  const nextJob = jobQueue.shift();
+  const jobId = nextJob.id;
 
   broadcastQueuePositions();
 
@@ -157,8 +168,6 @@ const appendJobResult = async (jobId, newResult) => {
 
   return saveQueues[jobId];
 };
-
-
 
 const runScrapeJob = async (jobId) => {
   await updateJobStatus(jobId, "running");
@@ -244,62 +253,60 @@ const runScrapeJob = async (jobId) => {
     const finalCount = businessNames && businessNames.length > 0 ? -1 : parameters.count || -1;
 
     if (masterUrlMap.size === 0 || allProcessedBusinesses.length < finalCount || finalCount === -1) {
-// Locate this section in Phase 1: searching for categories/items
-for (const item of searchItems) {
-    try { // Add try block for internal safety
-        browser = await launchBrowser(`[Phase 1] Searching Maps for: "${item}"`);
-        let collectionPage = await browser.newPage();
-        
-        let locationQueries = [];
-        if (anchorPoint && radiusKm) locationQueries = await getSearchQueriesForRadius(anchorPoint, radiusKm, country, GOOGLE_MAPS_API_KEY, jobId);
-        else {
-            let searchAreas = postalCode && postalCode.length > 0 ? postalCode : [location];
-            for (const areaQuery of searchAreas) {
-                const base = isIndividualSearch ? `${item}, ${areaQuery}, ${country}` : `${item} in ${areaQuery}, ${country}`;
-                locationQueries.push(...await getSearchQueriesForLocation(base, areaQuery, country, jobId, isIndividualSearch));
-            }
-        }
-
-        for (const query of locationQueries) {
-            const finalQ = isIndividualSearch || query.startsWith("near ") ? `${item} ${query}` : query;
-            const discovered = new Set();
-            await collectGoogleMapsUrlsContinuously(collectionPage, finalQ, jobId, discovered, country);
+    for (const item of searchItems) {
+        try { 
+            browser = await launchBrowser(`[Phase 1] Searching Maps for: "${item}"`);
+            let collectionPage = await browser.newPage();
             
-            let initialSize = masterUrlMap.size;
-            discovered.forEach(url => {
-               if (!masterUrlMap.has(url)) {
-                   if (radiusKm && filterCenterLat) {
-                       const c = extractCoordinatesFromUrl(url);
-                       if (c && calculateDistance(filterCenterLat, filterCenterLng, c.lat, c.lng) > (parseFloat(radiusKm) + 0.2)) return;
-                   }
-                   masterUrlMap.set(url, item);
-               }
-            });
-
-            // REAL-TIME SAVE BLOCK (Already good, but ensure it's inside the loop)
-            const newUrlsFound = masterUrlMap.size - initialSize;
-            if (newUrlsFound > 0) {
-                await supabase.from("jobs").update({ 
-                    collected_urls: Array.from(masterUrlMap, ([url, cat]) => ({ url, category: cat })) 
-                }).eq("id", jobId);
+            let locationQueries = [];
+            if (anchorPoint && radiusKm) locationQueries = await getSearchQueriesForRadius(anchorPoint, radiusKm, country, GOOGLE_MAPS_API_KEY, jobId);
+            else {
+                let searchAreas = postalCode && postalCode.length > 0 ? postalCode : [location];
+                for (const areaQuery of searchAreas) {
+                    const base = isIndividualSearch ? `${item}, ${areaQuery}, ${country}` : `${item} in ${areaQuery}, ${country}`;
+                    locationQueries.push(...await getSearchQueriesForLocation(base, areaQuery, country, jobId, isIndividualSearch));
+                }
             }
-            
-            io.to(jobId).emit("progress_update", { 
-                phase: 'discovery', 
-                discovered: masterUrlMap.size, 
-                processed: 0, 
-                added: allProcessedBusinesses.length 
-            });
-        }
-    } catch (itemError) {
-        await addLog(jobId, `[Warning] Search for "${item}" encountered an error: ${itemError.message}`);
-    } finally {
-        if (browser) {
-            await browser.close();
-            browser = null; 
+
+            for (const query of locationQueries) {
+                const finalQ = isIndividualSearch || query.startsWith("near ") ? `${item} ${query}` : query;
+                const discovered = new Set();
+                await collectGoogleMapsUrlsContinuously(collectionPage, finalQ, jobId, discovered, country);
+                
+                let initialSize = masterUrlMap.size;
+                discovered.forEach(url => {
+                if (!masterUrlMap.has(url)) {
+                    if (radiusKm && filterCenterLat) {
+                        const c = extractCoordinatesFromUrl(url);
+                        if (c && calculateDistance(filterCenterLat, filterCenterLng, c.lat, c.lng) > (parseFloat(radiusKm) + 0.2)) return;
+                    }
+                    masterUrlMap.set(url, item);
+                }
+                });
+
+                const newUrlsFound = masterUrlMap.size - initialSize;
+                if (newUrlsFound > 0) {
+                    await supabase.from("jobs").update({ 
+                        collected_urls: Array.from(masterUrlMap, ([url, cat]) => ({ url, category: cat })) 
+                    }).eq("id", jobId);
+                }
+                
+                io.to(jobId).emit("progress_update", { 
+                    phase: 'discovery', 
+                    discovered: masterUrlMap.size, 
+                    processed: 0, 
+                    added: allProcessedBusinesses.length 
+                });
+            }
+        } catch (itemError) {
+            await addLog(jobId, `[Warning] Search for "${item}" encountered an error: ${itemError.message}`);
+        } finally {
+            if (browser) {
+                await browser.close();
+                browser = null; 
+            }
         }
     }
-}
         await supabase.from("jobs").update({ collected_urls: Array.from(masterUrlMap, ([url, cat]) => ({ url, category: cat })) }).eq("id", jobId);
     }
 
@@ -321,80 +328,68 @@ for (const item of searchItems) {
         const promises = batch.map(async (processItem) => {
             let detailPage = null;
             try {
-const task = async () => {
-    detailPage = await browser.newPage();
-    await detailPage.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36");
+                const task = async () => {
+                    detailPage = await browser.newPage();
+                    await detailPage.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36");
 
-    // 1. Get Google Maps Baseline
-    let googleData = await scrapeGoogleMapsDetails(detailPage, processItem.url, jobId, country);
-    if (!googleData || !googleData.BusinessName) return null;
+                    let googleData = await scrapeGoogleMapsDetails(detailPage, processItem.url, jobId, country);
+                    if (!googleData || !googleData.BusinessName) return null;
 
-    // 2. Get Website Data (Bucket mode)
-    let websiteData = { foundEmails: [], foundPhones: [], OwnerName: "", InstagramURL: "", FacebookURL: "", rawText: "" };
-    if (googleData.Website) {
-        websiteData = await scrapeWebsiteForGoldData(detailPage, googleData.Website);
-    }
+                    let websiteData = { foundEmails: [], foundPhones: [], OwnerName: "", InstagramURL: "", FacebookURL: "", rawText: "" };
+                    if (googleData.Website) {
+                        websiteData = await scrapeWebsiteForGoldData(detailPage, googleData.Website);
+                    }
 
-    // 3. Get AI Data
-    let aiResult = { ownerName: "", aiEmail: "", aiPhone: "" };
-    if (useAiEnrichment !== false) {
-        aiResult = await findBusinessOwnerWithAI(googleData.BusinessName, googleData.Suburb || country, googleData.Website, jobId);
-    }
+                    let aiResult = { ownerName: "", aiEmail: "", aiPhone: "" };
+                    if (useAiEnrichment !== false) {
+                        aiResult = await findBusinessOwnerWithAI(googleData.BusinessName, googleData.Suburb || country, googleData.Website, jobId);
+                    }
 
-    // --- DATA RANKING ENGINE ---
-    
-    // RANK EMAILS: Merge Website and AI, filter junk, deduplicate
-    const emailBucket = [...websiteData.foundEmails, aiResult.aiEmail]
-        .filter(e => e && e.includes('@') && !e.includes('wix') && !e.includes('example') && !e.includes('sentry'))
-        .map(e => e.toLowerCase().trim());
-    const uniqueEmails = Array.from(new Set(emailBucket));
+                    const emailBucket = [...websiteData.foundEmails, aiResult.aiEmail]
+                        .filter(e => e && e.includes('@') && !e.includes('wix') && !e.includes('example') && !e.includes('sentry'))
+                        .map(e => e.toLowerCase().trim());
+                    const uniqueEmails = Array.from(new Set(emailBucket));
 
-    // RANK PHONES: Merge AI, Website, and Google Maps (The Safety Net)
-    const phoneBucket = [
-        aiResult.aiPhone,           // Priority 1: AI often finds specific person's mobile
-        ...websiteData.foundPhones, // Priority 2: Website contact numbers
-        googleData.Phone            // Priority 3: Google Maps baseline
-    ].map(normalizePhoneTo61).filter(Boolean);
+                    const phoneBucket = [
+                        aiResult.aiPhone,           
+                        ...websiteData.foundPhones, 
+                        googleData.Phone            
+                    ].map(normalizePhoneTo61).filter(Boolean);
 
-    const uniquePhones = Array.from(new Set(phoneBucket));
-    
-    // Pick the winner: Look for any number starting with 614 (Mobile). 
-    // If no mobile, take the very first valid number found in the bucket.
-    const finalPhone = uniquePhones.find(p => p.startsWith('614')) || uniquePhones[0] || "";
+                    const uniquePhones = Array.from(new Set(phoneBucket));
+                    
+                    const finalPhone = uniquePhones.find(p => p.startsWith('614')) || uniquePhones[0] || "";
 
-    // RANK OWNER: Prioritize AI's findings, then Website, then fallback
-    let finalOwner = "Private Owner";
-    if (aiResult.ownerName && aiResult.ownerName !== "Private Owner") {
-        finalOwner = aiResult.ownerName;
-    } else if (websiteData.OwnerName) {
-        finalOwner = websiteData.OwnerName;
-    }
+                    let finalOwner = "Private Owner";
+                    if (aiResult.ownerName && aiResult.ownerName !== "Private Owner") {
+                        finalOwner = aiResult.ownerName;
+                    } else if (websiteData.OwnerName) {
+                        finalOwner = websiteData.OwnerName;
+                    }
 
-    // 4. Construct Final Object
-    const res = { 
-        ...googleData, 
-        OwnerName: finalOwner,
-        Email1: uniqueEmails[0] || "",
-        Email2: uniqueEmails[1] || "",
-        Email3: uniqueEmails[2] || "",
-        Phone: finalPhone,
-        InstagramURL: websiteData.InstagramURL || googleData.InstagramURL || "",
-        FacebookURL: websiteData.FacebookURL || googleData.FacebookURL || "",
-        rawText: websiteData.rawText || googleData.BusinessName
-    };
+                    const res = { 
+                        ...googleData, 
+                        OwnerName: finalOwner,
+                        Email1: uniqueEmails[0] || "",
+                        Email2: uniqueEmails[1] || "",
+                        Email3: uniqueEmails[2] || "",
+                        Phone: finalPhone,
+                        InstagramURL: websiteData.InstagramURL || googleData.InstagramURL || "",
+                        FacebookURL: websiteData.FacebookURL || googleData.FacebookURL || "",
+                        rawText: websiteData.rawText || googleData.BusinessName
+                    };
 
-    // Verifier check for the primary email
-    if (res.Email1) {
-        const isDeliverable = await verifyEmail(res.Email1);
-        if (!isDeliverable) {
-            await addLog(jobId, `[Verifier] Removing: ${res.Email1}`);
-            res.Email1 = res.Email2; res.Email2 = res.Email3; res.Email3 = "";
-        }
-    }
+                    if (res.Email1) {
+                        const isDeliverable = await verifyEmail(res.Email1);
+                        if (!isDeliverable) {
+                            await addLog(jobId, `[Verifier] Removing: ${res.Email1}`);
+                            res.Email1 = res.Email2; res.Email2 = res.Email3; res.Email3 = "";
+                        }
+                    }
 
-    res.Category = (processItem.category || "N/A").replace(/"/g, "");
-    return res;
-};
+                    res.Category = (processItem.category || "N/A").replace(/"/g, "");
+                    return res;
+                };
 
                 return await promiseWithRetry(task, 2, 5000, jobId, processItem.url);
 
@@ -478,21 +473,25 @@ const recoverStuckJobs = async () => {
   console.log(
     "[System] Checking for jobs that were running during a previous crash..."
   );
-  const { data: stuckJobs, error } = await supabase
+  
+  await supabase.from("jobs").update({ status: "queued" }).eq("status", "running");
+
+  const { data: queueList, error } = await supabase
     .from("jobs")
-    .select("id")
-    .in("status", ["running", "queued"]);
+    .select("id, user_id")
+    .eq("status", "queued")
+    .order('created_at', { ascending: true });
+
   if (error) {
     console.error("[Recovery] Error fetching stuck jobs:", error);
     return;
   }
-  if (stuckJobs && stuckJobs.length > 0) {
-    const jobIds = stuckJobs.map((j) => j.id);
+  
+  if (queueList && queueList.length > 0) {
     console.log(
-      `[Recovery] Found ${jobIds.length} stuck jobs. Re-queueing them.`
+      `[Recovery] Found ${queueList.length} stuck jobs. Re-queueing them.`
     );
-    await supabase.from("jobs").update({ status: "queued" }).in("id", jobIds);
-    jobQueue.push(...jobIds);
+    jobQueue = queueList.map(j => ({ id: j.id, userId: j.user_id }));
     processQueue();
   } else {
     console.log("[Recovery] No stuck jobs found.");
@@ -500,8 +499,7 @@ const recoverStuckJobs = async () => {
 };
 
 io.on("connection", (socket) => {
-  // console.log(`[${new Date().toLocaleString()}] [Connection] Client connected: ${socket.id}`);
-
+  
   socket.on("authenticate_socket", async (authToken) => {
     if (!authToken) return;
     try {
@@ -510,6 +508,8 @@ io.on("connection", (socket) => {
         socket.user = user; 
         socket.join(user.id);
         console.log(`[${new Date().toLocaleString()}] [Auth] Client authenticated: ${user.email} (ID: ${socket.id})`);
+        
+        broadcastQueuePositions();
       }
     } catch (e) {
       console.log(`[Auth] Failed to authenticate socket ${socket.id}`);
@@ -532,15 +532,20 @@ io.on("connection", (socket) => {
         .insert({
           user_id: user.id,
           parameters: { ...scrapeParams, clientLocalDate },
+          status: 'queued',
           logs: [`Job created by ${user.email}`],
         })
         .select()
         .single();
       if (insertError) throw insertError;
+      
       socket.emit("job_created", { jobId: newJob.id });
-      jobQueue.push(newJob.id);
-      socket.emit("queue_position", { position: jobQueue.length });
+      
+      jobQueue.push({ id: newJob.id, userId: user.id });
+      
+      broadcastQueuePositions();
       processQueue();
+
     } catch (dbError) {
       console.error("Error creating job:", dbError);
       socket.emit("job_error", {
@@ -565,10 +570,6 @@ io.on("connection", (socket) => {
       console.log(`User ${user.email} subscribed to updates for job ${jobId}`);
       
       socket.emit("job_state", job);
-      const queueIndex = jobQueue.indexOf(jobId);
-      if (queueIndex !== -1) {
-          socket.emit("queue_position", { position: queueIndex + 1 });
-      }
     }
   });
 
@@ -1215,7 +1216,6 @@ const getCleanBusinessName = (name) => {
     return cleaned.substring(0, 15); 
 };
 
-// test
 
 function deduplicateBusinesses(businesses) {
     if (!businesses || businesses.length === 0) {
@@ -1231,7 +1231,6 @@ function deduplicateBusinesses(businesses) {
         } catch (e) { return null; }
     };
 
-    // New Helper: Identify Australian Mobiles (already normalized to 614 by your scraper)
     const isMobilePhone = (phone) => {
         if (!phone) return false;
         const clean = String(phone).replace(/\D/g, "");
@@ -1270,26 +1269,22 @@ function deduplicateBusinesses(businesses) {
         if (group.length === 1) {
             uniqueBusinesses.push(group[0]);
         } else {
-            // Updated Selection Hierarchy:
-            // 1. First choice: Entry with a valid email
             const entryWithValidEmail = group.find(b => isValidEmail(b.Email1) || isValidEmail(b.Email2) || isValidEmail(b.Email3));
             
-            // 2. Second choice: Entry with a Mobile Number (starts with 614)
-const entryWithMobile = group.find(b => b.Phone && String(b.Phone).startsWith('614'));
+            const entryWithMobile = group.find(b => b.Phone && String(b.Phone).startsWith('614'));
 
-// 3. Third choice: Entry with any phone number (landline)
-const entryWithAnyPhone = group.find(b => b.Phone && String(b.Phone).length > 5);
+            const entryWithAnyPhone = group.find(b => b.Phone && String(b.Phone).length > 5);
 
-let bestEntry;
-if (entryWithValidEmail) {
-    bestEntry = entryWithValidEmail;
-} else if (entryWithMobile) {
-    bestEntry = entryWithMobile;
-} else if (entryWithAnyPhone) {
-    bestEntry = entryWithAnyPhone;
-} else {
-    bestEntry = group[0];
-}
+            let bestEntry;
+            if (entryWithValidEmail) {
+                bestEntry = entryWithValidEmail;
+            } else if (entryWithMobile) {
+                bestEntry = entryWithMobile;
+            } else if (entryWithAnyPhone) {
+                bestEntry = entryWithAnyPhone;
+            } else {
+                bestEntry = group[0];
+            }
 
             const bestEntryIndex = group.indexOf(bestEntry);
             uniqueBusinesses.push(bestEntry);
@@ -1531,7 +1526,6 @@ async function collectGoogleMapsUrlsContinuously(
       await addLog(jobId, "   -> No Google consent dialog found, proceeding.");
     }
     
-    // START FIX: Wait for result links
     try {
       await page.waitForSelector('a[href*="/maps/place/"]', { timeout: 15000 });
       await addLog(jobId, `   -> Found results list. Scraping all items...`);
@@ -1563,7 +1557,6 @@ async function collectGoogleMapsUrlsContinuously(
           consecutiveNoProgressAttempts = 0;
         else consecutiveNoProgressAttempts++;
         
-        // Use the old scroll method but with the role="feed" selector check inside evaluate
         await page.evaluate(
           (selector) => {
              const feed = document.querySelector(selector);
@@ -1593,7 +1586,6 @@ async function collectGoogleMapsUrlsContinuously(
         );
       }
     }
-    // END FIX
   } catch (error) {
     await addLog(
       jobId,
@@ -1683,18 +1675,15 @@ async function scrapePageContent(page) {
   const pageText = await page.evaluate(() => document.body.innerText);
   const links = await page.$$eval("a", (as) => as.map((a) => a.href));
   
-  // 1. Broad Email Regex
   const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
   const emails = [...new Set([
     ...links.filter(h => h.startsWith("mailto:")).map(h => h.replace("mailto:", "").split("?")[0]),
     ...(pageText.match(emailRegex) || [])
   ])];
 
-  // 2. Messy Phone Regex (Grabs anything that looks like a number to be cleaned later)
   const phoneRegex = /(?:\+61|61|0)[2-478](?:[ -]?[0-9]){8,11}/g;
   const rawPhones = pageText.match(phoneRegex) || [];
 
-  // 3. Owner Name Extraction
   let ownerName = "";
   const textLines = pageText.split(/[\n\r]+/).map((line) => line.trim());
   for (const line of textLines) {
@@ -1718,7 +1707,6 @@ async function scrapeWebsiteForGoldData(page, websiteUrl) {
   try {
     await page.goto(websiteUrl, { waitUntil: "domcontentloaded", timeout: 25000 });
     
-    // Capture details from Landing Page
     const initialLinks = await page.$$eval("a", (as) => as.map((a) => ({ href: a.href, text: a.innerText })));
     data.InstagramURL = initialLinks.find((l) => l.href.includes("instagram.com"))?.href || "";
     data.FacebookURL = initialLinks.find((l) => l.href.includes("facebook.com"))?.href || "";
@@ -1729,7 +1717,6 @@ async function scrapeWebsiteForGoldData(page, websiteUrl) {
     data.OwnerName = landing.ownerName;
     data.rawText = landing.pageText;
 
-    // Find 2 Sub-pages (Contact/About)
     const subPageLinks = await page.evaluate(() => {
         const keywords = /contact|about|team|staff|meet|connect|info/i;
         return Array.from(document.querySelectorAll('a'))
@@ -1751,8 +1738,6 @@ async function scrapeWebsiteForGoldData(page, websiteUrl) {
   return data;
 }
 
-
-// New helper to scrape the Australian Business Register for free legal data
 async function getABRContext(page, query) {
     try {
         await page.goto(`https://abr.business.gov.au/Search/Results?SearchText=${encodeURIComponent(query)}`, { waitUntil: 'domcontentloaded' });
@@ -1791,8 +1776,6 @@ function normalizeForExclusionCheck(str = "") {
     .replace(/['’`.,()&]/g, "") 
     .replace(/\s+/g, "");      
 }
-
-
 
 function extractCoordinatesFromUrl(url) {
   if (!url) return null;

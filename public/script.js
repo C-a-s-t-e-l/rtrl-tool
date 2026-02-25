@@ -3,8 +3,6 @@ document.addEventListener("DOMContentLoaded", () => {
   const SUPABASE_URL = window.CONFIG.SUPABASE_URL;
   const SUPABASE_ANON_KEY = window.CONFIG.SUPABASE_ANON_KEY;
 
-  //test
-
   const { createClient } = supabase;
   const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -37,84 +35,94 @@ document.addEventListener("DOMContentLoaded", () => {
   };
 
   function initializeMainApp() {
+    async function refreshUsageTracker() {
+      if (!currentUserSession) return;
 
-async function refreshUsageTracker() {
-    if (!currentUserSession) return;
-
-    const { data: profile, error } = await supabaseClient
-        .from('profiles')
-        .select('usage_today, daily_limit, last_reset_date')
-        .eq('id', currentUserSession.user.id)
+      const { data: profile, error } = await supabaseClient
+        .from("profiles")
+        .select("usage_today, daily_limit, last_reset_date")
+        .eq("id", currentUserSession.user.id)
         .single();
 
-    if (error || !profile) {
+      if (error || !profile) {
         console.error("Error fetching user profile for usage tracker:", error);
         return;
-    }
+      }
 
-    const current = profile.usage_today || 0;
-    const limit = profile.daily_limit || 500;
-    const lastResetDateStr = profile.last_reset_date;
+      const current = profile.usage_today || 0;
+      const limit = profile.daily_limit || 500;
+      const lastResetDateStr = profile.last_reset_date;
 
-    const today = new Date();
-    const year = today.getFullYear();
-    const month = String(today.getMonth() + 1).padStart(2, '0');
-    const day = String(today.getDate()).padStart(2, '0');
-    const todayStr = `${year}-${month}-${day}`;
+      const today = new Date();
+      const year = today.getFullYear();
+      const month = String(today.getMonth() + 1).padStart(2, "0");
+      const day = String(today.getDate()).padStart(2, "0");
+      const todayStr = `${year}-${month}-${day}`;
 
-    let displayCurrentUsage = current;
+      let displayCurrentUsage = current;
 
-    if (lastResetDateStr && lastResetDateStr < todayStr) {
+      if (lastResetDateStr && lastResetDateStr < todayStr) {
         displayCurrentUsage = 0;
-    }
+      }
 
-    const percentage = Math.min(Math.round((displayCurrentUsage / limit) * 100), 100);
+      const percentage = Math.min(
+        Math.round((displayCurrentUsage / limit) * 100),
+        100
+      );
 
-    if (elements.dashUsageCurrent) elements.dashUsageCurrent.textContent = displayCurrentUsage.toLocaleString();
-    if (elements.dashUsageLimit) elements.dashUsageLimit.textContent = limit.toLocaleString();
-    if (elements.dashUsagePercent) elements.dashUsagePercent.textContent = `${percentage}% consumed`;
+      if (elements.dashUsageCurrent)
+        elements.dashUsageCurrent.textContent =
+          displayCurrentUsage.toLocaleString();
+      if (elements.dashUsageLimit)
+        elements.dashUsageLimit.textContent = limit.toLocaleString();
+      if (elements.dashUsagePercent)
+        elements.dashUsagePercent.textContent = `${percentage}% consumed`;
 
-    if (elements.dashUsageFill) {
+      if (elements.dashUsageFill) {
         elements.dashUsageFill.style.width = `${percentage}%`;
-        elements.dashUsageFill.style.backgroundColor = percentage > 90 ? "#ef4444" : "#8b5cf6";
-    }
+        elements.dashUsageFill.style.backgroundColor =
+          percentage > 90 ? "#ef4444" : "#8b5cf6";
+      }
 
-    let planName = "Standard Plan";
-    if (limit <= 100) planName = "Starter Plan";
-    if (limit >= 1000 && limit < 5000) planName = "Power Plan";
-    if (limit >= 5000) planName = "Executive Plan";
-    if (elements.dashPlanBadge) elements.dashPlanBadge.textContent = planName;
+      let planName = "Standard Plan";
+      if (limit <= 100) planName = "Starter Plan";
+      if (limit >= 1000 && limit < 5000) planName = "Power Plan";
+      if (limit >= 5000) planName = "Executive Plan";
+      if (elements.dashPlanBadge) elements.dashPlanBadge.textContent = planName;
 
-    if (elements.dashUsageStatus) {
+      if (elements.dashUsageStatus) {
         if (displayCurrentUsage >= limit) {
-            elements.dashUsageStatus.textContent = "Daily limit reached. Resets at midnight.";
-            elements.dashUsageStatus.style.color = "#ef4444";
+          elements.dashUsageStatus.textContent =
+            "Daily limit reached. Resets at midnight.";
+          elements.dashUsageStatus.style.color = "#ef4444";
         } else {
-            elements.dashUsageStatus.textContent = "Account in good standing";
-            elements.dashUsageStatus.style.color = "#64748b";
+          elements.dashUsageStatus.textContent = "Account in good standing";
+          elements.dashUsageStatus.style.color = "#64748b";
         }
-    }
+      }
 
-    const now = new Date();
-    const midnight = new Date();
-    midnight.setHours(24, 0, 0, 0);
-    const diffMs = midnight.getTime() - now.getTime();
-    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-    const diffMinutes = Math.round((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+      const now = new Date();
+      const midnight = new Date();
+      midnight.setHours(24, 0, 0, 0);
+      const diffMs = midnight.getTime() - now.getTime();
+      const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+      const diffMinutes = Math.round(
+        (diffMs % (1000 * 60 * 60)) / (1000 * 60)
+      );
 
-    let resetTimerText = "";
-    if (diffHours > 0) {
+      let resetTimerText = "";
+      if (diffHours > 0) {
         resetTimerText = `Resets in ${diffHours}h`;
         if (diffMinutes > 0) resetTimerText += ` ${diffMinutes}m`;
-    } else if (diffMinutes > 0) {
+      } else if (diffMinutes > 0) {
         resetTimerText = `Resets in ${diffMinutes}m`;
-    } else {
+      } else {
         resetTimerText = "Resetting soon...";
+      }
+
+      if (elements.dashResetTimer)
+        elements.dashResetTimer.textContent = resetTimerText;
     }
-
-    if (elements.dashResetTimer) elements.dashResetTimer.textContent = resetTimerText;
-}
-
 
     async function loadGoogleMaps() {
       try {
@@ -141,7 +149,7 @@ async function refreshUsageTracker() {
       primaryCategorySelect: document.getElementById("primaryCategorySelect"),
       subCategoryGroup: document.getElementById("subCategoryGroup"),
       subCategoryCheckboxContainer: document.getElementById(
-        "subCategoryCheckboxContainer",
+        "subCategoryCheckboxContainer"
       ),
       customCategoryGroup: document.getElementById("customCategoryGroup"),
       customCategoryInput: document.getElementById("customCategoryInput"),
@@ -159,12 +167,12 @@ async function refreshUsageTracker() {
       userEmailInput: document.getElementById("userEmailInput"),
       bulkSearchContainer: document.getElementById("bulkSearchContainer"),
       locationSearchContainer: document.getElementById(
-        "locationSearchContainer",
+        "locationSearchContainer"
       ),
       radiusSearchContainer: document.getElementById("radiusSearchContainer"),
       anchorPointInput: document.getElementById("anchorPointInput"),
       anchorPointSuggestionsEl: document.getElementById(
-        "anchorPointSuggestions",
+        "anchorPointSuggestions"
       ),
       radiusSlider: document.getElementById("radiusSlider"),
       radiusValue: document.getElementById("radiusValue"),
@@ -172,7 +180,7 @@ async function refreshUsageTracker() {
       postcodeListSelect: document.getElementById("postcodeListSelect"),
       savePostcodeListButton: document.getElementById("savePostcodeListButton"),
       deletePostcodeListButton: document.getElementById(
-        "deletePostcodeListButton",
+        "deletePostcodeListButton"
       ),
       categoryModifierGroup: document.getElementById("categoryModifierGroup"),
       categoryModifierInput: document.getElementById("categoryModifierInput"),
@@ -202,6 +210,9 @@ async function refreshUsageTracker() {
       dashResetTimer: document.getElementById("reset-timer"),
       dashUsagePercent: document.getElementById("usage-percentage-label"),
       dashUsageStatus: document.getElementById("usage-status-text"),
+      queueCard: document.getElementById("queue-card"),
+      queueListContainer: document.getElementById("queue-list-container"),
+      queueCountBadge: document.getElementById("queue-count-badge"),
     };
 
     if (elements.useAiToggle) {
@@ -257,50 +268,65 @@ async function refreshUsageTracker() {
     });
 
     socket.on("job_created", ({ jobId }) => {
-      logMessage(elements.logEl, "Job created. Waiting in queue...", "info");
-      currentJobId = jobId;
-      localStorage.setItem("rtrl_active_job_id", jobId);
-      updateDashboardUi("queued", { position: "..." });
-      if (currentUserSession && currentUserSession.user) {
-        localStorage.setItem(
-          `rtrl_last_job_id_${currentUserSession.user.id}`,
-          jobId,
-        );
-      }
+      logMessage(elements.logEl, "Job added to queue.", "info");
+      
       if (window.rtrlApp.jobHistory) {
         window.rtrlApp.jobHistory.fetchAndRenderJobs();
       }
-      if (subscribedJobId !== currentJobId) {
-        socket.emit("subscribe_to_job", {
-          jobId,
-          authToken: currentUserSession.access_token,
-        });
-        subscribedJobId = currentJobId;
-      }
+      
+      socket.emit("subscribe_to_job", {
+        jobId,
+        authToken: currentUserSession.access_token,
+      });
+      subscribedJobId = jobId;
     });
 
-    socket.on("queue_position", (data) => {
-      const card = document.getElementById("status-card");
-      if (card && card.classList.contains("state-working")) return;
-      updateDashboardUi("queued", data);
+    socket.on("user_queue_update", (myJobs) => {
+        const queueCard = document.getElementById("queue-card");
+        const listContainer = document.getElementById("queue-list-container");
+        const countBadge = document.getElementById("queue-count-badge");
+
+        if (!myJobs || myJobs.length === 0) {
+            if (queueCard) queueCard.style.display = "none";
+            return;
+        }
+
+        if (queueCard) queueCard.style.display = "block";
+        if (countBadge) countBadge.textContent = `${myJobs.length} Job${myJobs.length > 1 ? 's' : ''}`;
+        
+        if (listContainer) {
+            listContainer.innerHTML = myJobs.map(job => `
+                <div class="queue-item" style="display: flex; justify-content: space-between; align-items: center; background: #f8fafc; border: 1px solid #e2e8f0; padding: 10px 12px; border-radius: 8px; font-size: 0.85rem; color: #475569; margin-bottom: 8px;">
+                    <div style="display:flex; align-items:center;">
+                        <span class="queue-pos-badge" style="background: #e2e8f0; color: #475569; font-weight: 700; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; margin-right: 8px;">#${job.globalPosition}</span>
+                        <span>Waiting for slot...</span> 
+                    </div>
+                    <i class="fas fa-hourglass-half" style="color: #f59e0b; animation: spin 2s linear infinite;"></i>
+                </div>
+            `).join('');
+        }
     });
 
     socket.on("job_state", (job) => {
-      if (job.status === "completed" || job.status === "failed") {
-        localStorage.removeItem("rtrl_active_job_id");
-        currentJobId = null;
-        setUiState(false, getUiElementsForStateChange());
-        if (job.status === "completed") updateDashboardUi("completed");
-        else updateDashboardUi("failed");
-      } else {
+      if (job.status === "running") {
         currentJobId = job.id;
+        localStorage.setItem("rtrl_active_job_id", job.id);
+        
         setUiState(true, getUiElementsForStateChange());
-        updateDashboardUi(job.status);
+        updateDashboardUi("running");
+      } 
+      else if (job.status === "completed" || job.status === "failed") {
+        if (job.id === currentJobId) {
+            localStorage.removeItem("rtrl_active_job_id");
+            currentJobId = null;
+            setUiState(false, getUiElementsForStateChange());
+            updateDashboardUi(job.status);
+        }
       }
     });
 
     socket.on("job_log", (message) =>
-      logMessage(elements.logEl, message, "info"),
+      logMessage(elements.logEl, message, "info")
     );
 
     socket.on("job_error", ({ error }) => {
@@ -308,21 +334,16 @@ async function refreshUsageTracker() {
       handleScrapeError({ error });
     });
 
-        socket.on("business_found", (data) => {
-        refreshUsageTracker();
+    socket.on("business_found", (data) => {
+      refreshUsageTracker();
     });
 
-        socket.on("user_profile_updated", () => {
-        console.log('[Socket] User profile updated event received. Refreshing usage tracker.');
-        refreshUsageTracker(); 
+    socket.on("user_profile_updated", () => {
+      refreshUsageTracker();
     });
 
     socket.on("job_update", (update) => {
       if (update.status) {
-        if (elements.logEl) {
-          logMessage(elements.logEl, `Job status: ${update.status}`, "info");
-        }
-
         if (window.rtrlApp.jobHistory) {
           window.rtrlApp.jobHistory.fetchAndRenderJobs();
         }
@@ -330,7 +351,7 @@ async function refreshUsageTracker() {
         const targetId = update.id || currentJobId;
         if (targetId) {
           const historyBadge = document.getElementById(
-            `job-status-${targetId}`,
+            `job-status-${targetId}`
           );
           if (historyBadge) {
             if (update.status === "completed") {
@@ -345,24 +366,11 @@ async function refreshUsageTracker() {
               historyBadge.className = "job-status status-running";
               historyBadge.innerHTML =
                 '<i class="fas fa-spinner fa-spin"></i> <span>Running</span>';
+            } else if (update.status === "queued") {
+                historyBadge.className = "job-status status-queued";
+                historyBadge.innerHTML =
+                  '<i class="fas fa-clock"></i> <span>Queued</span>';
             }
-          }
-        }
-
-        if (
-          update.id === currentJobId ||
-          (update.status === "completed" && currentJobId)
-        ) {
-          if (update.status === "running") {
-            updateDashboardUi("running");
-          } else if (
-            update.status === "completed" ||
-            update.status === "failed"
-          ) {
-            localStorage.removeItem("rtrl_active_job_id");
-            currentJobId = null;
-            setUiState(false, getUiElementsForStateChange());
-            updateDashboardUi(update.status);
           }
         }
       }
@@ -435,10 +443,6 @@ async function refreshUsageTracker() {
         headline.textContent = "Job Active";
         subtext.textContent = "Processing data...";
         if (icon) icon.className = "fas fa-circle-notch fa-spin";
-      } else if (status === "queued") {
-        headline.textContent = "Job Queued";
-        subtext.textContent = `Server is busy. You are #${data.position || "?"} in the waiting list.`;
-        if (icon) icon.className = "fas fa-clock";
       } else if (status === "completed") {
         card.classList.add("phase-complete");
         headline.textContent = "Job Completed";
@@ -457,6 +461,11 @@ async function refreshUsageTracker() {
         headline.textContent = "Job Failed";
         subtext.textContent = "Please check job history or try again.";
         if (icon) icon.className = "fas fa-times-circle";
+      } else {
+        card.className = "status-card";
+        headline.textContent = "Ready to Start";
+        subtext.textContent = "Waiting for input...";
+        if (icon) icon.className = "fas fa-play";
       }
     }
 
@@ -469,7 +478,7 @@ async function refreshUsageTracker() {
         "phase-scraping",
         "phase-ai",
         "phase-complete",
-        "phase-error",
+        "phase-error"
       );
       if (phase === "discovery") {
         card.classList.add("phase-scraping");
@@ -604,7 +613,7 @@ async function refreshUsageTracker() {
             }
           })
           .catch((err) =>
-            console.error("Admin check failed, but continuing..."),
+            console.error("Admin check failed, but continuing...")
           );
 
         if (elements.userEmailInput.value.trim() === "")
@@ -658,7 +667,7 @@ async function refreshUsageTracker() {
     function setupPostcodeListHandlers() {
       elements.postcodeListSelect.addEventListener("change", () => {
         const sl = savedPostcodeLists.find(
-          (list) => list.id == elements.postcodeListSelect.value,
+          (list) => list.id == elements.postcodeListSelect.value
         );
         window.rtrlApp.postalCodes.length = 0;
         elements.postalCodeContainer
@@ -674,7 +683,7 @@ async function refreshUsageTracker() {
       const observer = new MutationObserver(
         () =>
           (elements.savePostcodeListButton.disabled =
-            elements.postalCodeContainer.querySelector(".tag") === null),
+            elements.postalCodeContainer.querySelector(".tag") === null)
       );
       observer.observe(elements.postalCodeContainer, { childList: true });
       elements.savePostcodeListButton.addEventListener("click", async () => {
@@ -708,7 +717,7 @@ async function refreshUsageTracker() {
               headers: {
                 Authorization: `Bearer ${currentUserSession.access_token}`,
               },
-            },
+            }
           );
           if (response.ok) await fetchPostcodeLists();
         }
@@ -905,7 +914,7 @@ async function refreshUsageTracker() {
             if (status === google.maps.GeocoderStatus.OK && results[0])
               resolve(results[0]);
             else reject();
-          },
+          }
         );
       });
     }
@@ -916,7 +925,7 @@ async function refreshUsageTracker() {
         const countryName =
           (
             details.address_components.find((c) =>
-              c.types.includes("country"),
+              c.types.includes("country")
             ) || {}
           ).long_name || "";
         if (countryName) elements.countryInput.value = countryName;
@@ -947,7 +956,7 @@ async function refreshUsageTracker() {
       try {
         const details = await getPlaceDetails(item.place_id);
         const pc = details.address_components.find((c) =>
-          c.types.includes("postal_code"),
+          c.types.includes("postal_code")
         );
         if (pc) {
           await window.rtrlApp.validateAndAddTag(pc.long_name);
@@ -964,7 +973,7 @@ async function refreshUsageTracker() {
       }
       const iso = countries.find(
         (c) =>
-          c.text.toLowerCase() === elements.countryInput.value.toLowerCase(),
+          c.text.toLowerCase() === elements.countryInput.value.toLowerCase()
       )?.value;
       if (!iso || !window.rtrlApp.state.googleMapsGeocoder) return;
       window.rtrlApp.state.googleMapsGeocoder.geocode(
@@ -972,11 +981,11 @@ async function refreshUsageTracker() {
         (res, status) => {
           if (status === google.maps.GeocoderStatus.OK && res[0]) {
             const pcComp = res[0].address_components.find((c) =>
-              c.types.includes("postal_code"),
+              c.types.includes("postal_code")
             );
             if (pcComp && pcComp.long_name === v) {
               const sub = res[0].address_components.find((c) =>
-                c.types.includes("locality"),
+                c.types.includes("locality")
               );
               window.rtrlApp.postalCodes.push(v);
               const tagEl = document.createElement("span");
@@ -984,12 +993,12 @@ async function refreshUsageTracker() {
               tagEl.innerHTML = `<span>${sub ? sub.long_name + " " : ""}${v}</span> <span class="tag-close-btn" data-value="${v}">&times;</span>`;
               elements.postalCodeContainer.insertBefore(
                 tagEl,
-                elements.postalCodeInput,
+                elements.postalCodeInput
               );
               elements.postalCodeInput.value = "";
             }
           }
-        },
+        }
       );
     };
 
@@ -1047,7 +1056,7 @@ async function refreshUsageTracker() {
         return (sel.style.display = "none");
       const iso = countries.find(
         (c) =>
-          c.text.toLowerCase() === elements.countryInput.value.toLowerCase(),
+          c.text.toLowerCase() === elements.countryInput.value.toLowerCase()
       )?.value;
       const req = { input: el.value, types: t };
       if (iso) req.componentRestrictions = { country: iso };
@@ -1064,35 +1073,32 @@ async function refreshUsageTracker() {
               })),
               "description",
               "place_id",
-              onSelect,
+              onSelect
             );
           else sel.style.display = "none";
-        },
+        }
       );
     };
 
     window.rtrlApp.startResearch = () => {
       if (!currentUserSession) return;
-      setUiState(true, getUiElementsForStateChange());
-      document.getElementById("status-card").className =
-        "status-card state-working phase-scraping";
+      
       const ns = elements.businessNamesInput.value
         .trim()
         .split("\n")
         .map((n) => n.trim())
         .filter(Boolean);
       const ss = Array.from(
-        elements.subCategoryCheckboxContainer.querySelectorAll("input:checked"),
+        elements.subCategoryCheckboxContainer.querySelectorAll("input:checked")
       )
         .map((c) => c.value)
         .filter((v) => v !== "select_all");
 
       const localToday = new Date();
       const localYear = localToday.getFullYear();
-      const localMonth = String(localToday.getMonth() + 1).padStart(2, '0'); 
-      const localDay = String(localToday.getDate()).padStart(2, '0');
+      const localMonth = String(localToday.getMonth() + 1).padStart(2, "0");
+      const localDay = String(localToday.getDate()).padStart(2, "0");
       const clientLocalDateParam = `${localYear}-${localMonth}-${localDay}`;
-
 
       const p = {
         country: elements.countryInput.value,
@@ -1116,7 +1122,7 @@ async function refreshUsageTracker() {
         let b = ss.length > 0 ? ss : [elements.primaryCategorySelect.value];
         p.categoriesToLoop = elements.categoryModifierInput.value.trim()
           ? b.map(
-              (c) => `"${elements.categoryModifierInput.value.trim()}" ${c}`,
+              (c) => `"${elements.categoryModifierInput.value.trim()}" ${c}`
             )
           : b;
       }
@@ -1129,8 +1135,8 @@ async function refreshUsageTracker() {
       const areaKey = window.rtrlApp.state.selectedAnchorPoint
         ? elements.anchorPointInput.value.split(",")[0]
         : window.rtrlApp.postalCodes.length > 0
-          ? window.rtrlApp.postalCodes.join("_")
-          : elements.locationInput.value.split(",")[0];
+        ? window.rtrlApp.postalCodes.join("_")
+        : elements.locationInput.value.split(",")[0];
       p.searchParamsForEmail = {
         primaryCategory: elements.primaryCategorySelect.value,
         subCategory: ss.length > 1 ? "multiple_subcategories" : ss[0] || "",
@@ -1176,14 +1182,14 @@ async function refreshUsageTracker() {
     function initializeApp() {
       window.rtrlApp.jobHistory.init(
         () => currentUserSession?.access_token,
-        BACKEND_URL,
+        BACKEND_URL
       );
       window.rtrlApp.exclusionFeature.init(
-        () => currentUserSession?.access_token,
+        () => currentUserSession?.access_token
       );
       if (localStorage.getItem("rtrl_last_used_email"))
         elements.userEmailInput.value = localStorage.getItem(
-          "rtrl_last_used_email",
+          "rtrl_last_used_email"
         );
       populatePrimaryCategories(elements.primaryCategorySelect, categories, "");
       setupPostcodeListHandlers();
@@ -1195,7 +1201,7 @@ async function refreshUsageTracker() {
         window.rtrlApp.postalCodes,
         window.rtrlApp.customKeywords,
         window.rtrlApp.map,
-        window.rtrlApp.searchCircle,
+        window.rtrlApp.searchCircle
       );
       loadGoogleMaps();
     }
