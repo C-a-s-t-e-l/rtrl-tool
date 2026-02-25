@@ -37,39 +37,23 @@ document.addEventListener("DOMContentLoaded", () => {
   function initializeMainApp() {
     async function refreshUsageTracker() {
       if (!currentUserSession) return;
-
       const { data: profile, error } = await supabaseClient
         .from("profiles")
         .select("usage_today, daily_limit, last_reset_date")
         .eq("id", currentUserSession.user.id)
         .single();
-
-      if (error || !profile) {
-        console.error("Error fetching user profile for usage tracker:", error);
-        return;
-      }
-
+      if (error || !profile) return;
       const current = profile.usage_today || 0;
       const limit = profile.daily_limit || 500;
       const lastResetDateStr = profile.last_reset_date;
-
       const today = new Date();
-      const year = today.getFullYear();
-      const month = String(today.getMonth() + 1).padStart(2, "0");
-      const day = String(today.getDate()).padStart(2, "0");
-      const todayStr = `${year}-${month}-${day}`;
-
-      let displayCurrentUsage = current;
-
-      if (lastResetDateStr && lastResetDateStr < todayStr) {
-        displayCurrentUsage = 0;
-      }
-
+      const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+      let displayCurrentUsage =
+        lastResetDateStr && lastResetDateStr < todayStr ? 0 : current;
       const percentage = Math.min(
         Math.round((displayCurrentUsage / limit) * 100),
         100,
       );
-
       if (elements.dashUsageCurrent)
         elements.dashUsageCurrent.textContent =
           displayCurrentUsage.toLocaleString();
@@ -77,19 +61,16 @@ document.addEventListener("DOMContentLoaded", () => {
         elements.dashUsageLimit.textContent = limit.toLocaleString();
       if (elements.dashUsagePercent)
         elements.dashUsagePercent.textContent = `${percentage}% consumed`;
-
       if (elements.dashUsageFill) {
         elements.dashUsageFill.style.width = `${percentage}%`;
         elements.dashUsageFill.style.backgroundColor =
           percentage > 90 ? "#ef4444" : "#8b5cf6";
       }
-
       let planName = "Standard Plan";
       if (limit <= 100) planName = "Starter Plan";
       if (limit >= 1000 && limit < 5000) planName = "Power Plan";
       if (limit >= 5000) planName = "Executive Plan";
       if (elements.dashPlanBadge) elements.dashPlanBadge.textContent = planName;
-
       if (elements.dashUsageStatus) {
         if (displayCurrentUsage >= limit) {
           elements.dashUsageStatus.textContent =
@@ -100,24 +81,18 @@ document.addEventListener("DOMContentLoaded", () => {
           elements.dashUsageStatus.style.color = "#64748b";
         }
       }
-
       const now = new Date();
       const midnight = new Date();
       midnight.setHours(24, 0, 0, 0);
       const diffMs = midnight.getTime() - now.getTime();
       const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
       const diffMinutes = Math.round((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-
-      let resetTimerText = "";
-      if (diffHours > 0) {
-        resetTimerText = `Resets in ${diffHours}h`;
-        if (diffMinutes > 0) resetTimerText += ` ${diffMinutes}m`;
-      } else if (diffMinutes > 0) {
-        resetTimerText = `Resets in ${diffMinutes}m`;
-      } else {
-        resetTimerText = "Resetting soon...";
-      }
-
+      let resetTimerText =
+        diffHours > 0
+          ? `Resets in ${diffHours}h ${diffMinutes}m`
+          : diffMinutes > 0
+            ? `Resets in ${diffMinutes}m`
+            : "Resetting soon...";
       if (elements.dashResetTimer)
         elements.dashResetTimer.textContent = resetTimerText;
     }
@@ -128,16 +103,14 @@ document.addEventListener("DOMContentLoaded", () => {
           headers: { "ngrok-skip-browser-warning": "true" },
         });
         const config = await response.json();
-        const googleMapsApiKey = config.googleMapsApiKey;
-
-        if (googleMapsApiKey) {
+        if (config.googleMapsApiKey) {
           const script = document.createElement("script");
-          script.src = `https://maps.googleapis.com/maps/api/js?key=${googleMapsApiKey}&libraries=places&callback=initMap`;
+          script.src = `https://maps.googleapis.com/maps/api/js?key=${config.googleMapsApiKey}&libraries=places&callback=initMap`;
           script.async = true;
           document.head.appendChild(script);
         }
       } catch (error) {
-        console.error("Failed to fetch config from server:", error);
+        console.error(error);
       }
     }
 
@@ -182,8 +155,6 @@ document.addEventListener("DOMContentLoaded", () => {
       ),
       categoryModifierGroup: document.getElementById("categoryModifierGroup"),
       categoryModifierInput: document.getElementById("categoryModifierInput"),
-      loginGoogleBtn: document.getElementById("login-google"),
-      loginMicrosoftBtn: document.getElementById("login-microsoft"),
       loginOverlay: document.getElementById("login-overlay"),
       appContent: document.getElementById("app-content"),
       logoutButton: document.getElementById("logout-button"),
@@ -199,8 +170,6 @@ document.addEventListener("DOMContentLoaded", () => {
       signupEmailInput: document.getElementById("signup-email-input"),
       signupPasswordInput: document.getElementById("signup-password-input"),
       signupEmailBtn: document.getElementById("signup-email-btn"),
-      progressBar: document.getElementById("progressBar"),
-      progressPercentage: document.getElementById("progressPercentage"),
       dashUsageCurrent: document.getElementById("dash-usage-current"),
       dashUsageLimit: document.getElementById("dash-usage-limit"),
       dashUsageFill: document.getElementById("dash-usage-fill"),
@@ -210,47 +179,27 @@ document.addEventListener("DOMContentLoaded", () => {
       dashUsageStatus: document.getElementById("usage-status-text"),
       queueCard: document.getElementById("queue-card"),
       queueListContainer: document.getElementById("queue-list-container"),
-      queueCountBadge: document.getElementById("queue-count-badge"),
     };
 
     if (elements.useAiToggle) {
-      const savedAiState = localStorage.getItem("rtrl_use_ai_enrichment");
-      if (savedAiState !== null) {
-        elements.useAiToggle.checked = savedAiState === "true";
-      } else {
-        elements.useAiToggle.checked = true;
-      }
-      elements.useAiToggle.addEventListener("change", (e) => {
-        localStorage.setItem("rtrl_use_ai_enrichment", e.target.checked);
-      });
+      elements.useAiToggle.checked =
+        localStorage.getItem("rtrl_use_ai_enrichment") !== "false";
+      elements.useAiToggle.addEventListener("change", (e) =>
+        localStorage.setItem("rtrl_use_ai_enrichment", e.target.checked),
+      );
     }
 
     const socket = io(BACKEND_URL, {
       extraHeaders: { "ngrok-skip-browser-warning": "true" },
       transports: ["websocket", "polling"],
       reconnection: true,
-      reconnectionAttempts: Infinity,
       timeout: 240000,
     });
 
-    let disconnectTimeout = null;
-    let hasLoggedDisconnect = false;
-    let isFirstConnection = true;
-
     socket.on("connect", () => {
-      if (disconnectTimeout) {
-        clearTimeout(disconnectTimeout);
-        disconnectTimeout = null;
-      }
-      if (isFirstConnection || hasLoggedDisconnect) {
-        logMessage(elements.logEl, "Connected to server.", "success");
-        isFirstConnection = false;
-        hasLoggedDisconnect = false;
-      }
       const savedJobId = localStorage.getItem("rtrl_active_job_id");
       if (savedJobId && currentUserSession) {
         currentJobId = savedJobId;
-        subscribedJobId = savedJobId;
         socket.emit("subscribe_to_job", {
           jobId: savedJobId,
           authToken: currentUserSession.access_token,
@@ -258,42 +207,15 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     });
 
-    socket.on("disconnect", (reason) => {
-      disconnectTimeout = setTimeout(() => {
-        logMessage(elements.logEl, "Connection lost. Reconnecting...", "error");
-        hasLoggedDisconnect = true;
-      }, 15000);
-    });
-
-    socket.on("job_created", ({ jobId }) => {
-      logMessage(elements.logEl, "Job added to queue.", "info");
-
-      if (window.rtrlApp.jobHistory) {
-        window.rtrlApp.jobHistory.fetchAndRenderJobs();
-      }
-
-      socket.emit("subscribe_to_job", {
-        jobId,
-        authToken: currentUserSession.access_token,
-      });
-      subscribedJobId = jobId;
-    });
-
     socket.on("user_queue_update", (myJobs) => {
-      const queueCard = document.getElementById("queue-card");
-      const listContainer = document.getElementById("queue-list-container");
-
-      if (!queueCard || !listContainer) return;
-
-      // IF EMPTY: Hide and clear
+      if (!elements.queueCard || !elements.queueListContainer) return;
       if (!myJobs || myJobs.length === 0) {
-        queueCard.style.setProperty("display", "none", "important");
-        listContainer.innerHTML = "";
+        elements.queueCard.style.display = "none";
+        elements.queueListContainer.innerHTML = "";
         return;
       }
-      queueCard.style.setProperty("display", "block", "important");
-
-      listContainer.innerHTML = myJobs
+      elements.queueCard.style.display = "block";
+      elements.queueListContainer.innerHTML = myJobs
         .map(
           (job) => `
         <div class="queue-item" style="display: flex; justify-content: space-between; align-items: center; background: #f8fafc; border: 1px solid #e2e8f0; padding: 12px; border-radius: 8px; margin-bottom: 8px; border-left: 4px solid #f59e0b;">
@@ -305,39 +227,10 @@ document.addEventListener("DOMContentLoaded", () => {
                 <span style="font-size: 0.7rem; color: #64748b; font-weight: 700; text-transform: uppercase;">Waiting</span>
                 <i class="fas fa-hourglass-half" style="color: #f59e0b; font-size: 0.8rem; animation: spin 2s linear infinite;"></i>
             </div>
-        </div>
-    `,
+        </div>`,
         )
         .join("");
     });
-
-    // public/script.js (~line 330)
-    function resetStatusUI() {
-      const fill = document.getElementById("progress-fill");
-      const pctLabel = document.getElementById("pct-label");
-      const phaseLabel = document.getElementById("phase-label");
-
-      if (fill) fill.style.width = `0%`;
-      if (pctLabel) pctLabel.textContent = `0%`;
-      if (phaseLabel) phaseLabel.textContent = "Initializing...";
-
-      if (document.getElementById("stat-found"))
-        document.getElementById("stat-found").textContent = "0";
-      if (document.getElementById("stat-processed"))
-        document.getElementById("stat-processed").textContent = "0";
-      if (document.getElementById("stat-enriched"))
-        document.getElementById("stat-enriched").textContent = "0";
-
-      const icon = document.getElementById("status-icon");
-      if (icon) icon.className = "fas fa-satellite-dish spin-slow";
-
-      const headline = document.getElementById("status-headline");
-      if (headline) headline.textContent = "Extracting Data...";
-
-      const subtext = document.getElementById("status-subtext");
-      if (subtext)
-        subtext.textContent = "Moving job from queue to active thread...";
-    }
 
     socket.on("job_state", (job) => {
       if (job.status === "running") {
@@ -345,32 +238,38 @@ document.addEventListener("DOMContentLoaded", () => {
         localStorage.setItem("rtrl_active_job_id", job.id);
         resetStatusUI();
         updateDashboardUi("running");
+      } else if (job.status === "queued") {
+        currentJobId = job.id;
+        localStorage.setItem("rtrl_active_job_id", job.id);
       } else if (job.status === "completed" || job.status === "failed") {
-        if (job.id === currentJobId) {
+        updateDashboardUi(job.status);
+      }
+    });
+
+    socket.on("job_update", (data) => {
+      if (data.id === currentJobId || !currentJobId) {
+        if (data.status === "running") {
+          currentJobId = data.id;
+          localStorage.setItem("rtrl_active_job_id", data.id);
+          resetStatusUI();
+          updateDashboardUi("running");
+        } else if (data.status === "completed" || data.status === "failed") {
+          updateDashboardUi(data.status);
           localStorage.removeItem("rtrl_active_job_id");
           currentJobId = null;
-          updateDashboardUi(job.status);
         }
       }
     });
 
-    socket.on("job_log", (message) =>
-      logMessage(elements.logEl, message, "info"),
-    );
-
-    socket.on("job_error", ({ error }) => {
-      logMessage(elements.logEl, `Error: ${error}`, "error");
-    });
-
-    socket.on("business_found", (data) => {
-      refreshUsageTracker();
-    });
-
-    socket.on("user_profile_updated", () => {
-      refreshUsageTracker();
-    });
-
     socket.on("progress_update", (data) => {
+      const card = document.getElementById("status-card");
+      if (
+        card &&
+        !card.classList.contains("phase-scraping") &&
+        !card.classList.contains("phase-ai")
+      ) {
+        updateDashboardUi("running");
+      }
       const {
         phase,
         processed,
@@ -381,36 +280,40 @@ document.addEventListener("DOMContentLoaded", () => {
         aiProcessed,
         aiTarget,
       } = data;
-      let visualPercent = 0;
-      let phaseText = "Initializing...";
+      let visualPercent = 0,
+        phaseText = "Initializing...";
       if (phase === "discovery") {
         phaseText = "Phase 1/3: Scanning Maps";
-        visualPercent = 5 + (discovered > 0 ? 5 : 0);
+        visualPercent = 10;
         updateStatusCardPhase("discovery");
       } else if (phase === "scraping") {
         phaseText = "Phase 1/3: Scraping Data";
-        let scrapePct = 0;
-        if (target === -1) {
-          if (discovered > 0) scrapePct = processed / discovered;
-        } else {
-          if (target > 0) scrapePct = added / target;
-        }
-        visualPercent = 10 + Math.round((scrapePct > 1 ? 1 : scrapePct) * 60);
+        let scrapePct =
+          target === -1
+            ? discovered > 0
+              ? processed / discovered
+              : 0
+            : target > 0
+              ? added / target
+              : 0;
+        visualPercent = 10 + Math.round(Math.min(scrapePct, 1) * 60);
         updateStatusCardPhase("scraping");
       } else if (phase === "ai") {
         phaseText = "Phase 2/3: AI Enrichment";
-        let aiPct = 0;
-        if (aiTarget > 0) aiPct = aiProcessed / aiTarget;
-        visualPercent = 70 + Math.round((aiPct > 1 ? 1 : aiPct) * 25);
+        visualPercent =
+          70 +
+          Math.round(
+            Math.min(aiTarget > 0 ? aiProcessed / aiTarget : 0, 1) * 25,
+          );
         updateStatusCardPhase("ai");
       } else if (phase === "completed") {
         visualPercent = 100;
         phaseText = "Phase 3/3: Complete";
         updateStatusCardPhase("complete");
       }
-      const fill = document.getElementById("progress-fill");
-      const pctLabel = document.getElementById("pct-label");
-      const phaseLabel = document.getElementById("phase-label");
+      const fill = document.getElementById("progress-fill"),
+        pctLabel = document.getElementById("pct-label"),
+        phaseLabel = document.getElementById("phase-label");
       if (fill) fill.style.width = `${visualPercent}%`;
       if (pctLabel) pctLabel.textContent = `${visualPercent}%`;
       if (phaseLabel) phaseLabel.textContent = phaseText;
@@ -422,16 +325,33 @@ document.addEventListener("DOMContentLoaded", () => {
         document.getElementById("stat-enriched").textContent = enriched || 0;
     });
 
-    function updateDashboardUi(status, data = {}) {
-      const headline = document.getElementById("status-headline");
-      const subtext = document.getElementById("status-subtext");
-      const icon = document.getElementById("status-icon");
-      const card = document.getElementById("status-card");
+    function resetStatusUI() {
+      const fill = document.getElementById("progress-fill"),
+        pctLabel = document.getElementById("pct-label"),
+        phaseLabel = document.getElementById("phase-label");
+      if (fill) fill.style.width = `0%`;
+      if (pctLabel) pctLabel.textContent = `0%`;
+      if (phaseLabel) phaseLabel.textContent = "Initializing...";
+      ["stat-found", "stat-processed", "stat-enriched"].forEach((id) => {
+        if (document.getElementById(id))
+          document.getElementById(id).textContent = "0";
+      });
+      const icon = document.getElementById("status-icon"),
+        headline = document.getElementById("status-headline"),
+        subtext = document.getElementById("status-subtext");
+      if (icon) icon.className = "fas fa-satellite-dish spin-slow";
+      if (headline) headline.textContent = "Extracting Data...";
+      if (subtext)
+        subtext.textContent = "Moving job from queue to active thread...";
+    }
 
+    function updateDashboardUi(status) {
+      const headline = document.getElementById("status-headline"),
+        subtext = document.getElementById("status-subtext"),
+        icon = document.getElementById("status-icon"),
+        card = document.getElementById("status-card");
       if (!headline || !card) return;
-
       card.className = "status-card";
-
       if (status === "running") {
         card.classList.add("state-working", "phase-scraping");
         headline.textContent = "Job Active";
@@ -442,11 +362,9 @@ document.addEventListener("DOMContentLoaded", () => {
         headline.textContent = "Job Completed";
         subtext.textContent = "Check your email for results.";
         if (icon) icon.className = "fas fa-check-circle";
-
-        const fill = document.getElementById("progress-fill");
-        const pct = document.getElementById("pct-label");
-        const phase = document.getElementById("phase-label");
-
+        const fill = document.getElementById("progress-fill"),
+          pct = document.getElementById("pct-label"),
+          phase = document.getElementById("phase-label");
         if (fill) fill.style.width = "100%";
         if (pct) pct.textContent = "100%";
         if (phase) phase.textContent = "Phase 3/3: Complete";
@@ -456,7 +374,6 @@ document.addEventListener("DOMContentLoaded", () => {
         subtext.textContent = "Please check job history or try again.";
         if (icon) icon.className = "fas fa-times-circle";
       } else {
-        card.className = "status-card";
         headline.textContent = "Ready to Start";
         subtext.textContent = "Waiting for input...";
         if (icon) icon.className = "fas fa-play";
@@ -464,9 +381,9 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function updateStatusCardPhase(phase) {
-      const card = document.getElementById("status-card");
-      const icon = document.getElementById("status-icon");
-      const headline = document.getElementById("status-headline");
+      const card = document.getElementById("status-card"),
+        icon = document.getElementById("status-icon"),
+        headline = document.getElementById("status-headline");
       if (!card) return;
       card.classList.remove(
         "phase-scraping",
@@ -494,8 +411,8 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function setupPasswordToggle(toggleId, inputId) {
-      const toggleBtn = document.getElementById(toggleId);
-      const inputField = document.getElementById(inputId);
+      const toggleBtn = document.getElementById(toggleId),
+        inputField = document.getElementById(inputId);
       if (toggleBtn && inputField) {
         toggleBtn.addEventListener("click", () => {
           const type =
@@ -514,20 +431,20 @@ document.addEventListener("DOMContentLoaded", () => {
 
     document
       .getElementById("login-google")
-      ?.addEventListener("click", async () => {
-        await supabaseClient.auth.signInWithOAuth({
+      ?.addEventListener("click", () =>
+        supabaseClient.auth.signInWithOAuth({
           provider: "google",
           options: { redirectTo: window.location.origin },
-        });
-      });
+        }),
+      );
     document
       .getElementById("login-microsoft")
-      ?.addEventListener("click", async () => {
-        await supabaseClient.auth.signInWithOAuth({
+      ?.addEventListener("click", () =>
+        supabaseClient.auth.signInWithOAuth({
           provider: "azure",
           options: { scopes: "email", redirectTo: window.location.origin },
-        });
-      });
+        }),
+      );
     document.getElementById("to-signup-btn")?.addEventListener("click", (e) => {
       e.preventDefault();
       elements.flipCardContainer.classList.add("flipped");
@@ -538,10 +455,9 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     elements.loginEmailBtn?.addEventListener("click", async () => {
-      const email = elements.emailInputAuth.value;
-      const password = elements.passwordInputAuth.value;
-      if (!email || !password)
-        return alert("Please enter both email and password.");
+      const email = elements.emailInputAuth.value,
+        password = elements.passwordInputAuth.value;
+      if (!email || !password) return alert("Please enter credentials.");
       elements.loginEmailBtn.disabled = true;
       const { error } = await supabaseClient.auth.signInWithPassword({
         email,
@@ -554,10 +470,9 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     elements.signupEmailBtn?.addEventListener("click", async () => {
-      const email = elements.signupEmailInput.value;
-      const password = elements.signupPasswordInput.value;
-      if (!email || !password)
-        return alert("Please enter both email and password.");
+      const email = elements.signupEmailInput.value,
+        password = elements.signupPasswordInput.value;
+      if (!email || !password) return alert("Please enter credentials.");
       elements.signupEmailBtn.disabled = true;
       const { data, error } = await supabaseClient.auth.signUp({
         email,
@@ -584,40 +499,27 @@ document.addEventListener("DOMContentLoaded", () => {
       if (session) {
         if (socket.connected)
           socket.emit("authenticate_socket", session.access_token);
-
         elements.loginOverlay.style.display = "none";
         elements.appContent.style.display = "block";
         elements.userMenu.style.display = "block";
         elements.userInfoSpan.textContent =
           session.user.user_metadata.full_name || "User";
         elements.userEmailDisplay.textContent = session.user.email;
-
         refreshUsageTracker();
-
         supabaseClient
           .from("profiles")
           .select("role")
           .eq("id", session.user.id)
           .single()
           .then(({ data: profile }) => {
-            if (profile && profile.role === "admin") {
-              const adminLink = document.getElementById("admin-control-link");
-              if (adminLink) adminLink.style.display = "flex";
-            }
-          })
-          .catch((err) =>
-            console.error("Admin check failed, but continuing..."),
-          );
-
-        if (elements.userEmailInput.value.trim() === "")
+            if (profile?.role === "admin")
+              document.getElementById("admin-control-link").style.display =
+                "flex";
+          });
+        if (elements.userEmailInput.value === "")
           elements.userEmailInput.value = session.user.email;
-
         fetchPostcodeLists();
-
-        if (window.rtrlApp.jobHistory) {
-          window.rtrlApp.jobHistory.fetchAndRenderJobs();
-        }
-
+        window.rtrlApp.jobHistory.fetchAndRenderJobs();
         fetch(`${BACKEND_URL}/api/exclusions`, {
           headers: { Authorization: `Bearer ${session.access_token}` },
         })
@@ -668,21 +570,16 @@ document.addEventListener("DOMContentLoaded", () => {
         if (sl) {
           sl.postcodes.forEach((pc) => window.rtrlApp.validateAndAddTag(pc));
           elements.deletePostcodeListButton.style.display = "inline-flex";
-        } else {
-          elements.deletePostcodeListButton.style.display = "none";
-        }
+        } else elements.deletePostcodeListButton.style.display = "none";
       });
-      const observer = new MutationObserver(
+      new MutationObserver(
         () =>
           (elements.savePostcodeListButton.disabled =
             elements.postalCodeContainer.querySelector(".tag") === null),
-      );
-      observer.observe(elements.postalCodeContainer, { childList: true });
+      ).observe(elements.postalCodeContainer, { childList: true });
       elements.savePostcodeListButton.addEventListener("click", async () => {
-        if (!currentUserSession || window.rtrlApp.postalCodes.length === 0)
-          return;
         const listName = prompt("Name this list:", "");
-        if (!listName) return;
+        if (!listName || !currentUserSession) return;
         const response = await fetch(`${BACKEND_URL}/api/postcode-lists`, {
           method: "POST",
           headers: {
@@ -694,7 +591,7 @@ document.addEventListener("DOMContentLoaded", () => {
             postcodes: window.rtrlApp.postalCodes,
           }),
         });
-        if (response.status === 201) await fetchPostcodeLists();
+        if (response.status === 201) fetchPostcodeLists();
       });
       elements.deletePostcodeListButton.addEventListener("click", async () => {
         if (
@@ -711,7 +608,7 @@ document.addEventListener("DOMContentLoaded", () => {
               },
             },
           );
-          if (response.ok) await fetchPostcodeLists();
+          if (response.ok) fetchPostcodeLists();
         }
       });
     }
@@ -975,7 +872,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const pcComp = res[0].address_components.find((c) =>
               c.types.includes("postal_code"),
             );
-            if (pcComp && pcComp.long_name === v) {
+            if (pcComp?.long_name === v) {
               const sub = res[0].address_components.find((c) =>
                 c.types.includes("locality"),
               );
@@ -1024,19 +921,18 @@ document.addEventListener("DOMContentLoaded", () => {
       if (window.rtrlApp.searchCircle) {
         window.rtrlApp.searchCircle.setLatLng(c);
         window.rtrlApp.searchCircle.setRadius(r);
-      } else {
+      } else
         window.rtrlApp.searchCircle = L.circle(c, {
           radius: r,
           color: "#20c997",
           fillColor: "#20c997",
           fillOpacity: 0.2,
         }).addTo(window.rtrlApp.map);
-      }
       window.rtrlApp.map.fitBounds(window.rtrlApp.searchCircle.getBounds());
     };
 
     window.rtrlApp.initializeMapServices = () => {
-      if (window.google && google.maps && google.maps.places) {
+      if (window.google?.maps?.places) {
         window.rtrlApp.state.googleMapsService =
           new google.maps.places.AutocompleteService();
         window.rtrlApp.state.googleMapsGeocoder = new google.maps.Geocoder();
@@ -1074,7 +970,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
     window.rtrlApp.startResearch = () => {
       if (!currentUserSession) return;
-
       const ns = elements.businessNamesInput.value
         .trim()
         .split("\n")
@@ -1085,13 +980,7 @@ document.addEventListener("DOMContentLoaded", () => {
       )
         .map((c) => c.value)
         .filter((v) => v !== "select_all");
-
       const localToday = new Date();
-      const localYear = localToday.getFullYear();
-      const localMonth = String(localToday.getMonth() + 1).padStart(2, "0");
-      const localDay = String(localToday.getDate()).padStart(2, "0");
-      const clientLocalDateParam = `${localYear}-${localMonth}-${localDay}`;
-
       const p = {
         country: elements.countryInput.value,
         businessNames: ns,
@@ -1141,14 +1030,11 @@ document.addEventListener("DOMContentLoaded", () => {
         postcodes: window.rtrlApp.postalCodes,
         country: elements.countryInput.value,
       };
-
       socket.emit("start_scrape_job", {
         authToken: currentUserSession.access_token,
-        clientLocalDate: clientLocalDateParam,
+        clientLocalDate: `${localToday.getFullYear()}-${String(localToday.getMonth() + 1).padStart(2, "0")}-${String(localToday.getDate()).padStart(2, "0")}`,
         ...p,
       });
-
-      // UI Feedback to show it was added to queue, instead of locking the UI
       const originalText = elements.startButton.innerHTML;
       elements.startButton.innerHTML =
         '<i class="fas fa-check"></i> Added to Queue!';
@@ -1158,11 +1044,6 @@ document.addEventListener("DOMContentLoaded", () => {
         elements.startButton.style.backgroundColor = "";
       }, 2000);
     };
-
-    function handleScrapeError() {
-      document.getElementById("status-card").className =
-        "status-card state-error";
-    }
 
     function initializeApp() {
       window.rtrlApp.jobHistory.init(
@@ -1213,7 +1094,6 @@ document.addEventListener("DOMContentLoaded", () => {
       radius: document.getElementById("radiusSlider"),
       aiToggle: document.getElementById("useAiToggle"),
     };
-
     el.location.value = "";
     el.anchor.value = "";
     el.names.value = "";
@@ -1221,15 +1101,12 @@ document.addEventListener("DOMContentLoaded", () => {
     window.rtrlApp.customKeywords.length = 0;
     window.rtrlApp.state.selectedAnchorPoint = null;
     document.querySelectorAll(".tag").forEach((t) => t.remove());
-
     if (window.rtrlApp.searchCircle) {
       window.rtrlApp.map.removeLayer(window.rtrlApp.searchCircle);
       window.rtrlApp.searchCircle = null;
     }
-
     if (el.aiToggle) el.aiToggle.checked = p.useAiEnrichment !== false;
     el.country.value = p.country || "Australia";
-
     if (p.count === -1) {
       el.findAll.checked = true;
       el.count.value = "";
@@ -1239,32 +1116,26 @@ document.addEventListener("DOMContentLoaded", () => {
       el.count.value = p.count || "";
       el.count.disabled = false;
     }
-
-    if (p.businessNames && p.businessNames.length > 0) {
+    if (p.businessNames?.length > 0) {
       el.names.value = p.businessNames.join("\n");
       document
         .getElementById("individualSearchContainer")
         .classList.remove("collapsed");
-    } else {
-      el.names.value = "";
-      if (p.categoriesToLoop) {
-        p.categoriesToLoop.forEach((kw) => {
-          window.rtrlApp.customKeywords.push(kw);
-          const t = document.createElement("span");
-          t.className = "tag";
-          t.innerHTML = `<span>${kw}</span> <span class="tag-close-btn" data-value="${kw}">&times;</span>`;
-          document
-            .getElementById("customKeywordContainer")
-            .insertBefore(t, el.customCat);
-        });
-      }
+    } else if (p.categoriesToLoop) {
+      p.categoriesToLoop.forEach((kw) => {
+        window.rtrlApp.customKeywords.push(kw);
+        const t = document.createElement("span");
+        t.className = "tag";
+        t.innerHTML = `<span>${kw}</span> <span class="tag-close-btn" data-value="${kw}">&times;</span>`;
+        document
+          .getElementById("customKeywordContainer")
+          .insertBefore(t, el.customCat);
+      });
     }
-
     if (p.radiusKm && p.anchorPoint) {
       el.radius.value = p.radiusKm;
       document.getElementById("radiusValue").textContent = `${p.radiusKm} km`;
       el.anchor.value = p.searchParamsForEmail?.area || "Selected Area";
-
       const co = p.anchorPoint.split(",");
       if (co.length === 2) {
         const nc = L.latLng(parseFloat(co[0]), parseFloat(co[1]));
@@ -1272,11 +1143,9 @@ document.addEventListener("DOMContentLoaded", () => {
           center: nc,
           name: el.anchor.value,
         };
-
         document
           .getElementById("radiusSearchContainer")
           .classList.remove("collapsed");
-
         setTimeout(() => {
           window.rtrlApp.map.invalidateSize();
           window.rtrlApp.map.setView(nc, 11);
@@ -1285,14 +1154,12 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     } else {
       el.location.value = p.location || "";
-      if (p.postalCode) {
+      if (p.postalCode)
         p.postalCode.forEach((pc) => window.rtrlApp.validateAndAddTag(pc));
-      }
       document
         .getElementById("locationSearchContainer")
         .classList.remove("collapsed");
     }
-
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 });

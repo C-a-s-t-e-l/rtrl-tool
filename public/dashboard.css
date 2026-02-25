@@ -287,3 +287,7 @@
 .queue-visible {
     display: block !important;
 }
+
+#queue-card {
+    display: none;
+}
