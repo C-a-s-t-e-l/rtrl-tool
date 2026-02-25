@@ -310,17 +310,31 @@ socket.on("user_queue_update", (myJobs) => {
         }
     });
 
-    function resetStatusUI() {
+function resetStatusUI() {
         const fill = document.getElementById("progress-fill");
         const pctLabel = document.getElementById("pct-label");
         const phaseLabel = document.getElementById("phase-label");
+        
         if (fill) fill.style.width = `0%`;
         if (pctLabel) pctLabel.textContent = `0%`;
-        if (phaseLabel) phaseLabel.textContent = "Phase 0/3: Starting...";
+        if (phaseLabel) phaseLabel.textContent = "Initializing...";
         
-        if (document.getElementById("stat-found")) document.getElementById("stat-found").textContent = "0";
-        if (document.getElementById("stat-processed")) document.getElementById("stat-processed").textContent = "0";
-        if (document.getElementById("stat-enriched")) document.getElementById("stat-enriched").textContent = "0";
+        const stats = {
+            "stat-found": "0",
+            "stat-processed": "0",
+            "stat-enriched": "0"
+        };
+        
+        for (const [id, val] of Object.entries(stats)) {
+            const el = document.getElementById(id);
+            if (el) el.textContent = val;
+        }
+
+        const icon = document.getElementById("status-icon");
+        if (icon) icon.className = "fas fa-satellite-dish spin-slow";
+        
+        const headline = document.getElementById("status-headline");
+        if (headline) headline.textContent = "Extracting Data...";
     }
 
     socket.on("job_state", (job) => {
@@ -355,7 +369,7 @@ socket.on("user_queue_update", (myJobs) => {
       refreshUsageTracker();
     });
 
-    socket.on("job_update", (update) => {
+socket.on("job_update", (update) => {
       if (update.status) {
         if (window.rtrlApp.jobHistory) {
           window.rtrlApp.jobHistory.fetchAndRenderJobs();
@@ -365,34 +379,30 @@ socket.on("user_queue_update", (myJobs) => {
         if (targetId) {
           const historyBadge = document.getElementById(`job-status-${targetId}`);
           if (historyBadge) {
-            if (update.status === "completed") {
-              historyBadge.className = "job-status status-completed";
-              historyBadge.innerHTML =
-                '<i class="fas fa-check-circle"></i> <span>Completed</span>';
-            } else if (update.status === "failed") {
-              historyBadge.className = "job-status status-failed";
-              historyBadge.innerHTML =
-                '<i class="fas fa-exclamation-triangle"></i> <span>Failed</span>';
-            } else if (update.status === "running") {
-              historyBadge.className = "job-status status-running";
-              historyBadge.innerHTML =
-                '<i class="fas fa-spinner fa-spin"></i> <span>Running</span>';
-            } else if (update.status === "queued") {
-                historyBadge.className = "job-status status-queued";
-                historyBadge.innerHTML =
-                  '<i class="fas fa-clock"></i> <span>Queued</span>';
-            }
+            // Update the badge in the history list if it exists
+            const statusIcons = {
+                completed: '<i class="fas fa-check-circle"></i> <span>Completed</span>',
+                failed: '<i class="fas fa-exclamation-triangle"></i> <span>Failed</span>',
+                running: '<i class="fas fa-spinner fa-spin"></i> <span>Running</span>',
+                queued: '<i class="fas fa-clock"></i> <span>Queued</span>'
+            };
+            historyBadge.className = `job-status status-${update.status}`;
+            historyBadge.innerHTML = statusIcons[update.status] || update.status;
           }
 
           if (update.status === "running") {
               currentJobId = targetId;
               localStorage.setItem("rtrl_active_job_id", targetId);
-              resetStatusUI();
+              
+              resetStatusUI(); 
+              
               updateDashboardUi("running");
-          } else if (update.status === "completed" || update.status === "failed") {
+              
+              logMessage(elements.logEl, "Next job in queue started...", "info");
+          } 
+          else if (update.status === "completed" || update.status === "failed") {
               if (targetId === currentJobId) {
                   localStorage.removeItem("rtrl_active_job_id");
-                  currentJobId = null;
                   updateDashboardUi(update.status);
               }
           }

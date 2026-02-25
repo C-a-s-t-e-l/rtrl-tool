@@ -91,34 +91,41 @@ const processQueue = async () => {
   if (isWorkerRunning || jobQueue.length === 0) return;
   
   isWorkerRunning = true;
-  const nextJob = jobQueue.shift();
+  const nextJob = jobQueue[0]; // Look at the first item
   const jobId = nextJob.id;
 
-  broadcastQueuePositions();
-
-  console.log(`[Worker] Picked up job ${jobId}`);
+  console.log(`[Worker] Starting job ${jobId}`);
+  
   try {
+    // Remove it from the queue array BEFORE starting the scrape 
+    // so the waiting list UI updates instantly
+    jobQueue.shift(); 
+    broadcastQueuePositions();
+
     await runScrapeJob(jobId);
   } catch (error) {
-    console.error(`[Worker] Critical unhandled error in job ${jobId}:`, error);
+    console.error(`[Worker] Error in job ${jobId}:`, error);
     await updateJobStatus(jobId, "failed");
-    await addLog(
-      jobId,
-      `[FATAL_ERROR] Worker failed unexpectedly: ${error.message}`
-    );
   } finally {
     isWorkerRunning = false;
-    console.log(
-      `[Worker] Finished processing job ${jobId}. Checking for more work.`
-    );
+    // Always broadcast after a job cycle to keep UI in sync
+    broadcastQueuePositions();
     process.nextTick(processQueue);
   }
 };
 
 const updateJobStatus = async (jobId, status) => {
   await supabase.from("jobs").update({ status }).eq("id", jobId);
-  // FIX: Added id to the payload so frontend knows WHICH job just started/finished
-  io.to(jobId).emit("job_update", { id: jobId, status }); 
+  
+  // If a job is no longer queued, ensure it's removed from the memory queue
+  if (status !== 'queued') {
+      jobQueue = jobQueue.filter(j => j.id !== jobId);
+  }
+
+  io.to(jobId).emit("job_update", { id: jobId, status });
+  
+  // Immediately tell all users to refresh their waiting lists
+  broadcastQueuePositions();
 };
 
 const addLog = async (jobId, message) => {
