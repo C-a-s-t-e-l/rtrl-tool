@@ -3,6 +3,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const SUPABASE_URL = window.CONFIG.SUPABASE_URL;
   const SUPABASE_ANON_KEY = window.CONFIG.SUPABASE_ANON_KEY;
 
+  //test
+
   const { createClient } = supabase;
   const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 

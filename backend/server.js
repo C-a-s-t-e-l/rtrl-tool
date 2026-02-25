@@ -1215,6 +1215,8 @@ const getCleanBusinessName = (name) => {
     return cleaned.substring(0, 15); 
 };
 
+// test
+
 function deduplicateBusinesses(businesses) {
     if (!businesses || businesses.length === 0) {
         return { uniqueBusinesses: [], duplicates: [] };
