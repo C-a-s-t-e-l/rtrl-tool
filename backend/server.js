@@ -70,21 +70,24 @@ const supabase = createClient(
 let isWorkerRunning = false;
 let jobQueue = [];
 
-const broadcastQueuePositions = () => {
-  const connectedSockets = io.sockets.sockets;
-  connectedSockets.forEach(socket => {
-    if (socket.user) {
-      const userId = socket.user.id;
-      const userJobs = jobQueue
-        .filter(j => j.userId === userId)
-        .map((job) => ({
-          id: job.id,
-          globalPosition: jobQueue.findIndex(qj => qj.id === job.id) + 1,
-          title: job.title || "Waiting for slot..."
-        }));
-      // This MUST be sent even if userJobs is empty to hide the card
-      socket.emit("user_queue_update", userJobs);
-    }
+const broadcastQueuePositions = (targetUserId = null) => {
+  // If targetUserId is provided, only update that one user
+  // Otherwise, update every user who has a job in the queue
+  const userIdsToUpdate = targetUserId 
+    ? [targetUserId] 
+    : [...new Set(jobQueue.map(job => job.userId))];
+
+  userIdsToUpdate.forEach(userId => {
+    const userJobs = jobQueue
+      .filter(j => j.userId === userId)
+      .map((job) => ({
+        id: job.id,
+        globalPosition: jobQueue.findIndex(qj => qj.id === job.id) + 1,
+        title: job.title || "Waiting for slot..."
+      }));
+
+    // Emit ONLY to that specific user's room
+    io.to(userId).emit("user_queue_update", userJobs);
   });
 };
 
@@ -508,32 +511,30 @@ const recoverStuckJobs = async () => {
 
 io.on("connection", (socket) => {
   
-  socket.on("authenticate_socket", async (authToken) => {
+socket.on("authenticate_socket", async (authToken) => {
     if (!authToken) return;
     try {
       const { data: { user }, error } = await supabase.auth.getUser(authToken);
       if (user && !error) {
         socket.user = user; 
+        // JOIN a private room based on user ID
         socket.join(user.id);
-        console.log(`[${new Date().toLocaleString()}] [Auth] Client authenticated: ${user.email} (ID: ${socket.id})`);
+        console.log(`[Auth] Client authenticated: ${user.email}`);
         
-        broadcastQueuePositions();
+        // Sync queue state immediately on login
+        broadcastQueuePositions(user.id);
       }
     } catch (e) {
-      console.log(`[Auth] Failed to authenticate socket ${socket.id}`);
+      console.log(`[Auth] Failed to authenticate socket`);
     }
   });
-
 socket.on("start_scrape_job", async (payload) => {
     const { authToken, clientLocalDate, ...scrapeParams } = payload;
-    if (!authToken)
-      return socket.emit("job_error", { error: "Authentication required." });
-    const {
-      data: { user },
-      error,
-    } = await supabase.auth.getUser(authToken);
-    if (error || !user)
-      return socket.emit("job_error", { error: "Authentication failed." });
+    if (!authToken) return socket.emit("job_error", { error: "Auth required" });
+
+    const { data: { user }, error } = await supabase.auth.getUser(authToken);
+    if (error || !user) return socket.emit("job_error", { error: "Auth failed" });
+
     try {
       const { data: newJob, error: insertError } = await supabase
         .from("jobs")
@@ -543,26 +544,26 @@ socket.on("start_scrape_job", async (payload) => {
           status: 'queued',
           logs: [`Job created by ${user.email}`],
         })
-        .select()
-        .single();
+        .select().single();
+
       if (insertError) throw insertError;
       
       socket.emit("job_created", { jobId: newJob.id });
       
       const p = scrapeParams.searchParamsForEmail || {};
-      const category = p.customCategory || p.primaryCategory || "Search";
-      const area = p.area || "Unknown Area";
+      const title = `${p.customCategory || p.primaryCategory || "Search"} in ${p.area || "Unknown"}`;
 
-      jobQueue.push({ id: newJob.id, userId: user.id, title: `${category} in ${area}` });
+      // 1. Add to queue
+      jobQueue.push({ id: newJob.id, userId: user.id, title });
       
-      broadcastQueuePositions();
+      // 2. BROADCAST IMMEDIATELY (Instantly shows the card)
+      broadcastQueuePositions(user.id);
+
+      // 3. Trigger worker
       processQueue();
 
     } catch (dbError) {
-      console.error("Error creating job:", dbError);
-      socket.emit("job_error", {
-        error: "Failed to create job in the database.",
-      });
+      socket.emit("job_error", { error: "Failed to create job" });
     }
   });
 
