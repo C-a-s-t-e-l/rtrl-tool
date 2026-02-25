@@ -72,24 +72,24 @@ let jobQueue = [];
 
 const broadcastQueuePositions = () => {
   const connectedSockets = io.sockets.sockets;
-  const notifiedUsers = new Set();
 
   connectedSockets.forEach(socket => {
-    // Check if user is authenticated
-    if (socket.user && !notifiedUsers.has(socket.user.id)) {
+    // Only send to sockets that are authenticated
+    if (socket.user) {
       const userId = socket.user.id;
       
+      // Filter the global queue for this specific user
       const userJobs = jobQueue
         .filter(j => j.userId === userId)
         .map((job) => ({
           id: job.id,
+          // Position is the index in the global queue + 1
           globalPosition: jobQueue.findIndex(qj => qj.id === job.id) + 1,
-          title: job.title || "Waiting..."
+          title: job.title || "Waiting for slot..."
         }));
 
-      // Direct emit to the user's private room
-      io.to(userId).emit("user_queue_update", userJobs);
-      notifiedUsers.add(userId);
+      // Direct emit to the specific connection - no "Room" delay
+      socket.emit("user_queue_update", userJobs);
     }
   });
 };
@@ -102,21 +102,17 @@ const processQueue = async () => {
   const jobId = nextJob.id;
 
   try {
-    // 1. Remove from queue first
+    // Shift and update UI BEFORE starting the long scrape process
     jobQueue.shift(); 
-    
-    // 2. Broadcast immediately so the frontend "Waiting List" clears 
-    // before the heavy scraping starts
     broadcastQueuePositions();
 
-    // 3. Start the job
     await runScrapeJob(jobId);
   } catch (error) {
     console.error(`[Worker] Error in job ${jobId}:`, error);
     await updateJobStatus(jobId, "failed");
   } finally {
     isWorkerRunning = false;
-    broadcastQueuePositions(); // Clean up again
+    broadcastQueuePositions();
     process.nextTick(processQueue);
   }
 };
@@ -518,7 +514,7 @@ const recoverStuckJobs = async () => {
 
 io.on("connection", (socket) => {
   
-socket.on("authenticate_socket", async (authToken) => {
+  socket.on("authenticate_socket", async (authToken) => {
     if (!authToken) return;
     try {
       const { data: { user }, error } = await supabase.auth.getUser(authToken);
@@ -529,22 +525,23 @@ socket.on("authenticate_socket", async (authToken) => {
         console.log(`[Auth] Client authenticated: ${user.email}`);
         
         // Sync queue state immediately on login
-        broadcastQueuePositions(user.id);
+        broadcastQueuePositions();
       }
     } catch (e) {
       console.log(`[Auth] Failed to authenticate socket`);
     }
   });
-socket.on("start_scrape_job", async (payload) => {
+
+  socket.on("start_scrape_job", async (payload) => {
     const { authToken, clientLocalDate, ...scrapeParams } = payload;
     if (!authToken) return socket.emit("job_error", { error: "Authentication required." });
     
     const { data: { user }, error } = await supabase.auth.getUser(authToken);
     if (error || !user) return socket.emit("job_error", { error: "Authentication failed." });
 
-    // CRITICAL FIX: Explicitly set identification on this specific socket now
+    // Explicitly associate user with this socket
     socket.user = user;
-    socket.join(user.id); 
+    socket.join(user.id);
 
     try {
       const { data: newJob, error: insertError } = await supabase
@@ -559,23 +556,26 @@ socket.on("start_scrape_job", async (payload) => {
 
       if (insertError) throw insertError;
       
-socket.emit("job_created", { jobId: newJob.id });
+      socket.emit("job_created", { jobId: newJob.id });
       
       const p = scrapeParams.searchParamsForEmail || {};
       const title = `${p.customCategory || p.primaryCategory || "Search"} in ${p.area || "Unknown"}`;
 
+      // 1. Add to memory queue
       jobQueue.push({ id: newJob.id, userId: user.id, title });
       
+      // 2. Only show waiting list if something is already running
       if (isWorkerRunning) {
           broadcastQueuePositions();
       }
 
+      // 3. Check if worker should pick it up
       processQueue();
     } catch (dbError) {
       console.error("Error creating job:", dbError);
       socket.emit("job_error", { error: "Failed to create job." });
     }
-});
+  });
 
   socket.on("subscribe_to_job", async ({ jobId, authToken }) => {
     if (!authToken) return;
@@ -596,11 +596,12 @@ socket.emit("job_created", { jobId: newJob.id });
     }
   });
 
- socket.on("disconnect", () => {
+  socket.on("disconnect", () => {
     const userIdentifier = socket.user ? socket.user.email : socket.id;
-    console.log(`[${new Date().toLocaleString()}] [Disconnection] Client disconnected: ${userIdentifier}`);
+    console.log(`[Disconnection] Client disconnected: ${userIdentifier}`);
   });
 });
+
 
 app.use(express.json());
 app.get("/api/config", (req, res) =>
