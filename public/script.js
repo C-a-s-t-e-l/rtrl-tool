@@ -284,19 +284,23 @@ document.addEventListener("DOMContentLoaded", () => {
 socket.on("user_queue_update", (myJobs) => {
     const queueCard = document.getElementById("queue-card");
     const listContainer = document.getElementById("queue-list-container");
-    const countBadge = document.getElementById("queue-count-badge");
 
     if (!queueCard || !listContainer) return;
 
+    // IF EMPTY: Hide the card immediately and clear HTML
     if (!myJobs || myJobs.length === 0) {
         queueCard.classList.remove("queue-visible");
+        queueCard.style.setProperty("display", "none", "important");
+        listContainer.innerHTML = "";
         return;
     }
 
+    // IF NOT EMPTY: Show the card
     queueCard.classList.add("queue-visible");
+    queueCard.style.setProperty("display", "block", "important");
 
-    if (countBadge) {
-        countBadge.textContent = `${myJobs.length} Job${myJobs.length > 1 ? 's' : ''}`;
+    if (document.getElementById("queue-count-badge")) {
+        document.getElementById("queue-count-badge").textContent = `${myJobs.length} Job${myJobs.length > 1 ? 's' : ''}`;
     }
     
     listContainer.innerHTML = myJobs.map(job => `
@@ -306,7 +310,7 @@ socket.on("user_queue_update", (myJobs) => {
                 <span style="font-weight: 600; color: #1e293b; font-size: 0.9rem;">${job.title}</span> 
             </div>
             <div style="display: flex; align-items: center; gap: 10px; background: white; padding: 4px 10px; border-radius: 20px; border: 1px solid #e2e8f0;">
-                <span style="font-size: 0.7rem; color: #64748b; font-weight: 700; text-transform: uppercase;">Waiting</span>
+                <span style="font-size: 0.7rem; color: #64748b; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;">Waiting</span>
                 <i class="fas fa-hourglass-half" style="color: #f59e0b; font-size: 0.8rem; animation: spin 2s linear infinite;"></i>
             </div>
         </div>

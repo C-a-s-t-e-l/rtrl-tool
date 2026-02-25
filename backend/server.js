@@ -71,21 +71,26 @@ let isWorkerRunning = false;
 let jobQueue = [];
 
 const broadcastQueuePositions = () => {
-  // Get all unique users who have jobs in the queue
-  const userIdsInQueue = [...new Set(jobQueue.map(j => j.userId))];
+  const connectedSockets = io.sockets.sockets;
+  const notifiedUsers = new Set();
 
-  userIdsInQueue.forEach(userId => {
-    // Build the specific queue list for THIS user
-    const userJobs = jobQueue
-      .filter(j => j.userId === userId)
-      .map((job) => ({
-        id: job.id,
-        globalPosition: jobQueue.findIndex(qj => qj.id === job.id) + 1,
-        title: job.title || "Waiting for slot..."
-      }));
+  connectedSockets.forEach(socket => {
+    // Check if user is authenticated
+    if (socket.user && !notifiedUsers.has(socket.user.id)) {
+      const userId = socket.user.id;
+      
+      const userJobs = jobQueue
+        .filter(j => j.userId === userId)
+        .map((job) => ({
+          id: job.id,
+          globalPosition: jobQueue.findIndex(qj => qj.id === job.id) + 1,
+          title: job.title || "Waiting..."
+        }));
 
-    // Emit specifically to that user's room (instant dispatch)
-    io.to(userId).emit("user_queue_update", userJobs);
+      // Direct emit to the user's private room
+      io.to(userId).emit("user_queue_update", userJobs);
+      notifiedUsers.add(userId);
+    }
   });
 };
 
@@ -97,17 +102,21 @@ const processQueue = async () => {
   const jobId = nextJob.id;
 
   try {
-    // Shift and update UI BEFORE starting the long scrape process
+    // 1. Remove from queue first
     jobQueue.shift(); 
+    
+    // 2. Broadcast immediately so the frontend "Waiting List" clears 
+    // before the heavy scraping starts
     broadcastQueuePositions();
 
+    // 3. Start the job
     await runScrapeJob(jobId);
   } catch (error) {
     console.error(`[Worker] Error in job ${jobId}:`, error);
     await updateJobStatus(jobId, "failed");
   } finally {
     isWorkerRunning = false;
-    broadcastQueuePositions();
+    broadcastQueuePositions(); // Clean up again
     process.nextTick(processQueue);
   }
 };
@@ -550,24 +559,23 @@ socket.on("start_scrape_job", async (payload) => {
 
       if (insertError) throw insertError;
       
-      socket.emit("job_created", { jobId: newJob.id });
+socket.emit("job_created", { jobId: newJob.id });
       
       const p = scrapeParams.searchParamsForEmail || {};
       const title = `${p.customCategory || p.primaryCategory || "Search"} in ${p.area || "Unknown"}`;
 
-      // 1. Add to global queue
       jobQueue.push({ id: newJob.id, userId: user.id, title });
       
-      // 2. Broadcast immediately (now that socket.user is set, this won't skip)
-      broadcastQueuePositions();
+      if (isWorkerRunning) {
+          broadcastQueuePositions();
+      }
 
-      // 3. Process
       processQueue();
     } catch (dbError) {
       console.error("Error creating job:", dbError);
       socket.emit("job_error", { error: "Failed to create job." });
     }
-  });
+});
 
   socket.on("subscribe_to_job", async ({ jobId, authToken }) => {
     if (!authToken) return;
