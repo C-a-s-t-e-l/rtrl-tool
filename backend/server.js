@@ -118,6 +118,7 @@ const processQueue = async () => {
 };
 
 const updateJobStatus = async (jobId, status) => {
+  // 1. Fetch user_id so we can notify the specific user
   const { data: job } = await supabase.from("jobs").select("user_id").eq("id", jobId).single();
   
   await supabase.from("jobs").update({ status }).eq("id", jobId);
@@ -126,8 +127,10 @@ const updateJobStatus = async (jobId, status) => {
       jobQueue = jobQueue.filter(j => j.id !== jobId);
   }
 
+  // Notify the specific Job Room
   io.to(jobId).emit("job_update", { id: jobId, status });
   
+  // 2. Notify the User's Room so their dashboard switches focus automatically
   if (job) {
     io.to(job.user_id).emit("user_job_transition", { jobId, status });
   }
@@ -143,55 +146,27 @@ const addLog = async (jobId, message) => {
 const saveQueues = {}; 
 
 const appendJobResult = async (jobId, newResult) => {
-  if (!saveQueues[jobId]) {
-      saveQueues[jobId] = Promise.resolve();
+  try {
+    const { error } = await supabase.rpc("append_job_result", { 
+      job_id: jobId, 
+      new_result: newResult 
+    });
+
+    if (error) throw error;
+    
+    io.to(jobId).emit("business_found", newResult);
+  } catch (error) {
+    console.error(`[appendJobResult Error] For job ${jobId}:`, error);
+    io.to(jobId).emit("business_found", newResult); 
   }
-
-  saveQueues[jobId] = saveQueues[jobId].then(async () => {
-      try {
-        const { data: currentJob, error: fetchError } = await supabase
-          .from("jobs")
-          .select("results")
-          .eq("id", jobId)
-          .single();
-
-        if (fetchError) {
-          throw new Error(`Failed to fetch current results: ${fetchError.message}`);
-        }
-
-        const existingResults = currentJob.results || [];
-        const updatedResults = [...existingResults, newResult];
-
-        const { error: updateError } = await supabase
-          .from("jobs")
-          .update({ results: updatedResults })
-          .eq("id", jobId);
-
-        if (updateError) {
-          throw new Error(`Failed to save updated results: ${updateError.message}`);
-        }
-        
-        io.to(jobId).emit("business_found", newResult);
-
-      } catch (error) {
-        console.error(`[appendJobResult Error] For job ${jobId}:`, error);
-        io.to(jobId).emit("business_found", newResult);
-        await addLog(jobId, `[Warning] Database save glitch. Item shown in UI but might not persist.`);
-      }
-  }).catch(err => {
-      console.error("Critical error in save queue:", err);
-  });
-
-  return saveQueues[jobId];
 };
 
 const runScrapeJob = async (jobId) => {
-  // 1. Immediately move status to running and update queues
+  // 1. Immediately move status to running
   await updateJobStatus(jobId, "running");
+  console.log(`[Worker] Job ${jobId} picked up.`); 
 
-   console.log(`[Worker] Job ${jobId} picked up.`); 
-
-  // 2. CRITICAL: Tell the frontend to clear any "Completed" or "Finished" UI states from previous jobs
+  // 2. CRITICAL: Reset the frontend UI bars/stats to 0 immediately
   io.to(jobId).emit("progress_update", { 
       phase: 'discovery', 
       processed: 0, 
@@ -215,24 +190,15 @@ const runScrapeJob = async (jobId) => {
     return;
   }
 
-  const { data: settings } = await supabase
-    .from('system_settings')
-    .select('is_paused')
-    .eq('id', 1)
-    .single();
-
-  if (settings && settings.is_paused) {
+  // Pre-scrape System Checks
+  const { data: settings } = await supabase.from('system_settings').select('is_paused').eq('id', 1).single();
+  if (settings?.is_paused) {
     await addLog(jobId, "[SYSTEM] Research is currently PAUSED by Admin. Job cancelled.");
     await updateJobStatus(jobId, "failed");
     return;
   }
 
-  const { data: userProfile } = await supabase
-    .from('profiles')
-    .select('usage_today, daily_limit')
-    .eq('id', job.user_id)
-    .single();
-
+  const { data: userProfile } = await supabase.from('profiles').select('usage_today, daily_limit').eq('id', job.user_id).single();
   if (userProfile && userProfile.usage_today >= userProfile.daily_limit) {
     await addLog(jobId, `[QUOTA ERROR] Daily limit reached. Job failed.`);
     await updateJobStatus(jobId, "failed");
@@ -245,6 +211,7 @@ const runScrapeJob = async (jobId) => {
     clientLocalDate 
   } = parameters;
 
+  // Setup Geofencing for Radius Search
   let filterCenterLat = null, filterCenterLng = null;
   if (radiusKm && anchorPoint) {
     try {
@@ -279,6 +246,7 @@ const runScrapeJob = async (jobId) => {
     const searchItems = isIndividualSearch ? businessNames : (categoriesToLoop && categoriesToLoop.length > 0 ? categoriesToLoop : []);
     const finalCount = businessNames && businessNames.length > 0 ? -1 : parameters.count || -1;
 
+    // --- PHASE 1: DISCOVERY ---
     if (masterUrlMap.size === 0 || allProcessedBusinesses.length < finalCount || finalCount === -1) {
       for (const item of searchItems) {
         try { 
@@ -322,6 +290,14 @@ const runScrapeJob = async (jobId) => {
       await supabase.from("jobs").update({ collected_urls: Array.from(masterUrlMap, ([url, cat]) => ({ url, category: cat })) }).eq("id", jobId);
     }
 
+    // --- GRACEFUL CHECK: Did we find anything? ---
+    if (masterUrlMap.size === 0) {
+        await addLog(jobId, "No businesses were found matching your search criteria. Research ended.");
+        await updateJobStatus(jobId, "completed");
+        return; 
+    }
+
+    // --- PHASE 2: PROCESSING ---
     await addLog(jobId, `--- Starting Data Extraction & AI Analysis ---`);
     browser = await launchBrowser("[System] Processing businesses...");
     const urlsToProcess = Array.from(masterUrlMap, ([url, cat]) => ({ url, category: cat })).filter(item => !allProcessedBusinesses.some(b => b.GoogleMapsURL === item.url));
@@ -329,6 +305,13 @@ const runScrapeJob = async (jobId) => {
     let processedInSession = 0;
 
     for (let i = 0; i < urlsToProcess.length; i += CONCURRENCY) {
+        // --- CRITICAL FIX: MID-SCRAPE QUOTA CHECK ---
+        const { data: currentProfile } = await supabase.from('profiles').select('usage_today, daily_limit').eq('id', job.user_id).single();
+        if (currentProfile && currentProfile.usage_today >= currentProfile.daily_limit) {
+            await addLog(jobId, "[QUOTA STOP] Daily limit reached. Stopping processing to save credits.");
+            break; 
+        }
+
         if (finalCount !== -1 && allProcessedBusinesses.length >= finalCount) break;
         const batch = urlsToProcess.slice(i, i + CONCURRENCY);
         const promises = batch.map(async (processItem) => {
@@ -424,22 +407,22 @@ const recoverStuckJobs = async () => {
 };
 
 io.on("connection", (socket) => {
-  
+  const connectTime = new Date().toLocaleString('en-AU', { timeZone: 'Australia/Sydney' });
+  console.log(`[${connectTime}] [Socket] New connection established: ${socket.id}`);
+
   socket.on("authenticate_socket", async (authToken) => {
     if (!authToken) return;
     try {
       const { data: { user }, error } = await supabase.auth.getUser(authToken);
       if (user && !error) {
         socket.user = user; 
-        // JOIN a private room based on user ID
         socket.join(user.id);
-        console.log(`[Auth] Client authenticated: ${user.email}`);
-        
-        // Sync queue state immediately on login
+        const authTime = new Date().toLocaleString('en-AU', { timeZone: 'Australia/Sydney' });
+        console.log(`[${authTime}] [Auth] User Authenticated: ${user.email}`);
         broadcastQueuePositions();
       }
     } catch (e) {
-      console.log(`[Auth] Failed to authenticate socket`);
+      console.log(`[${new Date().toLocaleString()}] [Auth] Failed to authenticate socket`);
     }
   });
 
@@ -508,8 +491,9 @@ io.on("connection", (socket) => {
   });
 
   socket.on("disconnect", () => {
+    const disconnectTime = new Date().toLocaleString('en-AU', { timeZone: 'Australia/Sydney' });
     const userIdentifier = socket.user ? socket.user.email : socket.id;
-    console.log(`[Disconnection] Client disconnected: ${userIdentifier}`);
+    console.log(`[${disconnectTime}] [Disconnection] Client gone: ${userIdentifier}`);
   });
 });
 

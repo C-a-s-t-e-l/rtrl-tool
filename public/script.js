@@ -240,19 +240,28 @@ socket.on("user_queue_update", (myJobs) => {
         </div>`).join("");
     });
 
-        socket.on("user_job_transition", ({ jobId, status }) => {
+    socket.on("job_created", ({ jobId }) => {
+        const now = new Date().toLocaleTimeString();
+        logMessage(elements.logEl, `[${now}] Search added to waiting list.`, "info");
+        if (window.rtrlApp.jobHistory) {
+            window.rtrlApp.jobHistory.fetchAndRenderJobs();
+        }
+    });
+
+    socket.on("user_job_transition", ({ jobId, status }) => {
         if (status === "running") {
-            // Focus on the new job
+            const now = new Date().toLocaleTimeString();
+            logMessage(elements.logEl, `[${now}] Worker picked up Job ${jobId.substring(0,8)}...`, "info");
+            
             currentJobId = jobId;
             localStorage.setItem("rtrl_active_job_id", jobId);
             
-            socket.emit("subscribe_to_job", { 
-                jobId, 
-                authToken: currentUserSession.access_token 
-            });
-
+            socket.emit("subscribe_to_job", { jobId, authToken: currentUserSession.access_token });
+            
             resetStatusUI();
             updateDashboardUi("running");
+
+            window.scrollTo({ top: 0, behavior: 'smooth' });
             
             if (window.rtrlApp.jobHistory) {
                 window.rtrlApp.jobHistory.fetchAndRenderJobs();

@@ -247,8 +247,6 @@
 .usage-danger .usage-progress-fill { background: #ef4444; }
 .usage-danger #usage-status-text { color: #ef4444; }
 
-.spin-slow { animation: spin 3s linear infinite; }
-@keyframes spin { 100% { transform: rotate(360deg); } }
 
 .queue-list {
     display: flex;
@@ -290,4 +288,17 @@
 
 #queue-card {
     display: none;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.fa-hourglass-half {
+    animation: spin 2s linear infinite;
+}
+
+.spin-slow {
+    animation: spin 3s linear infinite;
 }
