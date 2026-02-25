@@ -190,40 +190,44 @@ document.addEventListener("DOMContentLoaded", () => {
       timeout: 240000,
     });
 
-    socket.on("connect", () => {
+socket.on("connect", () => {
       const now = new Date().toLocaleTimeString();
       logMessage(elements.logEl, `[${now}] Connected to server.`, "success");
-      const savedJobId = localStorage.getItem("rtrl_active_job_id");
-      if (savedJobId && currentUserSession) {
-        currentJobId = savedJobId;
-        socket.emit("subscribe_to_job", {
-          jobId: savedJobId,
-          authToken: currentUserSession.access_token,
-        });
+      
+      if (currentUserSession) {
+          socket.emit("authenticate_socket", currentUserSession.access_token);
+          const savedJobId = localStorage.getItem("rtrl_active_job_id");
+          if (savedJobId) {
+            currentJobId = savedJobId;
+            socket.emit("subscribe_to_job", {
+              jobId: savedJobId,
+              authToken: currentUserSession.access_token,
+            });
+          }
       }
     });
 
     socket.on("disconnect", () => {
       const now = new Date().toLocaleTimeString();
-      logMessage(elements.logEl, `[${now}] Connection lost.`, "error");
+      logMessage(elements.logEl, `[${now}] Connection lost. Reconnecting...`, "error");
     });
 
-    socket.on("user_queue_update", (myJobs) => {
+socket.on("user_queue_update", (myJobs) => {
       if (!elements.queueCard || !elements.queueListContainer) return;
+
       if (!myJobs || myJobs.length === 0) {
         elements.queueCard.style.display = "none";
-        elements.queueListContainer.innerHTML = "";
-        if (elements.queueCountBadge)
-          elements.queueCountBadge.textContent = "0 Jobs";
+        if (elements.queueCountBadge) elements.queueCountBadge.textContent = "0 Jobs";
         return;
       }
+
       elements.queueCard.style.display = "block";
-      if (elements.queueCountBadge)
-        elements.queueCountBadge.textContent = `${myJobs.length} Job${myJobs.length !== 1 ? "s" : ""}`;
+      if (elements.queueCountBadge) {
+          elements.queueCountBadge.textContent = `${myJobs.length} Job${myJobs.length !== 1 ? 's' : ''}`;
+      }
 
       elements.queueListContainer.innerHTML = myJobs
-        .map(
-          (job) => `
+        .map((job) => `
         <div class="queue-item" style="display: flex; justify-content: space-between; align-items: center; background: #f8fafc; border: 1px solid #e2e8f0; padding: 12px; border-radius: 8px; margin-bottom: 8px; border-left: 4px solid #f59e0b;">
             <div style="display:flex; align-items:center; gap: 12px;">
                 <span class="queue-pos-badge" style="background: #fff7ed; color: #c2410c; border: 1px solid #ffedd5; font-weight: 800; padding: 4px 10px; border-radius: 6px; font-size: 0.75rem;">#${job.globalPosition}</span>
@@ -233,9 +237,31 @@ document.addEventListener("DOMContentLoaded", () => {
                 <span style="font-size: 0.7rem; color: #64748b; font-weight: 700; text-transform: uppercase;">Waiting</span>
                 <i class="fas fa-hourglass-half" style="color: #f59e0b; font-size: 0.8rem; animation: spin 2s linear infinite;"></i>
             </div>
-        </div>`,
-        )
-        .join("");
+        </div>`).join("");
+    });
+
+        socket.on("user_job_transition", ({ jobId, status }) => {
+        if (status === "running") {
+            // Focus on the new job
+            currentJobId = jobId;
+            localStorage.setItem("rtrl_active_job_id", jobId);
+            
+            socket.emit("subscribe_to_job", { 
+                jobId, 
+                authToken: currentUserSession.access_token 
+            });
+
+            resetStatusUI();
+            updateDashboardUi("running");
+            
+            if (window.rtrlApp.jobHistory) {
+                window.rtrlApp.jobHistory.fetchAndRenderJobs();
+            }
+        } else if (status === "completed" || status === "failed") {
+            if (window.rtrlApp.jobHistory) {
+                window.rtrlApp.jobHistory.fetchAndRenderJobs();
+            }
+        }
     });
 
     socket.on("job_state", (job) => {
@@ -270,7 +296,7 @@ document.addEventListener("DOMContentLoaded", () => {
     socket.on("progress_update", (data) => {
       const card = document.getElementById("status-card");
       if (card && !card.classList.contains("state-working")) {
-        updateDashboardUi("running");
+          updateDashboardUi("running");
       }
       const {
         phase,

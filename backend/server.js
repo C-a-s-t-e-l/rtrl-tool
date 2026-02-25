@@ -118,17 +118,20 @@ const processQueue = async () => {
 };
 
 const updateJobStatus = async (jobId, status) => {
+  const { data: job } = await supabase.from("jobs").select("user_id").eq("id", jobId).single();
+  
   await supabase.from("jobs").update({ status }).eq("id", jobId);
   
-  // If job is no longer in the waiting phase, remove from memory queue
   if (status !== 'queued') {
       jobQueue = jobQueue.filter(j => j.id !== jobId);
   }
 
-  // Notify the specific job room of the status change
   io.to(jobId).emit("job_update", { id: jobId, status });
   
-  // Re-broadcast the waiting list to everyone to update their UI
+  if (job) {
+    io.to(job.user_id).emit("user_job_transition", { jobId, status });
+  }
+
   broadcastQueuePositions();
 };
 
