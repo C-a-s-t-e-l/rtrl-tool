@@ -929,6 +929,11 @@ input:checked + .slider:before {
   border-radius: 50%;
 }
 
+.collapsible-section {
+    transition: border-color 0.3s ease;
+    border: 1px solid var(--border-color); 
+}
+
 @keyframes wave-animation {
     0% { transform: scale(1); opacity: 0.6; }
     100% { transform: scale(1.6); opacity: 0; }

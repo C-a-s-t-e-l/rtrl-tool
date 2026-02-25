@@ -1012,82 +1012,97 @@ socket.on("user_queue_update", (myJobs) => {
       );
     };
 
-    window.rtrlApp.startResearch = () => {
-      if (!currentUserSession) return;
-      const ns = elements.businessNamesInput.value
-        .trim()
-        .split("\n")
-        .map((n) => n.trim())
-        .filter(Boolean);
-      const ss = Array.from(
-        elements.subCategoryCheckboxContainer.querySelectorAll("input:checked"),
-      )
-        .map((c) => c.value)
-        .filter((v) => v !== "select_all");
-      const localToday = new Date();
-      const p = {
+window.rtrlApp.startResearch = () => {
+    if (!currentUserSession) return;
+
+    document.querySelectorAll(".collapsible-section").forEach(s => s.style.borderColor = "");
+    const errors = [];
+
+    const businessNames = elements.businessNamesInput.value.trim();
+    const hasCustomKeywords = window.rtrlApp.customKeywords.length > 0;
+    const hasPrimaryCategory = elements.primaryCategorySelect.value !== "";
+    
+    if (!businessNames && !hasCustomKeywords && !hasPrimaryCategory) {
+        errors.push("Missing Business Type: Please select a Category, enter Custom Keywords, or provide Specific Names.");
+        document.getElementById("bulkSearchContainer").closest(".collapsible-section").style.borderColor = "#ef4444";
+        document.getElementById("individualSearchContainer").closest(".collapsible-section").style.borderColor = "#ef4444";
+    }
+
+    const hasLocationText = elements.locationInput.value.trim().length > 0;
+    const hasPostcodes = window.rtrlApp.postalCodes.length > 0;
+    const hasRadiusAnchor = window.rtrlApp.state.selectedAnchorPoint !== null;
+
+    if (!hasLocationText && !hasPostcodes && !hasRadiusAnchor) {
+        errors.push("Missing Location: Please provide a Suburb, Postcodes, or a Radius center point.");
+        document.getElementById("locationSearchContainer").closest(".collapsible-section").style.borderColor = "#ef4444";
+        document.getElementById("radiusSearchContainer").closest(".collapsible-section").style.borderColor = "#ef4444";
+    }
+
+    if (errors.length > 0) {
+        const errorMsg = errors.join("\n\n");
+        alert("Search cannot start:\n\n" + errorMsg);
+        logMessage(elements.logEl, "Validation Failed: Parameters missing.", "error");
+        return; 
+    }
+
+    const ns = businessNames.split("\n").map((n) => n.trim()).filter(Boolean);
+    const ss = Array.from(elements.subCategoryCheckboxContainer.querySelectorAll("input:checked")).map((c) => c.value).filter((v) => v !== "select_all");
+    const localToday = new Date();
+    
+    const p = {
         country: elements.countryInput.value,
         businessNames: ns,
         userEmail: elements.userEmailInput.value.trim(),
         exclusionList: window.rtrlApp.exclusionFeature.getExclusionList(),
         useAiEnrichment: elements.useAiToggle.checked,
-      };
-      if (window.rtrlApp.state.selectedAnchorPoint) {
+    };
+
+    if (window.rtrlApp.state.selectedAnchorPoint) {
         const { lat, lng } = window.rtrlApp.state.selectedAnchorPoint.center;
         p.anchorPoint = `${lat},${lng}`;
         p.radiusKm = parseInt(elements.radiusSlider.value, 10);
-      } else {
+    } else {
         p.location = elements.locationInput.value.trim();
         p.postalCode = window.rtrlApp.postalCodes;
-      }
-      if (ns.length > 0) p.count = -1;
-      else if (window.rtrlApp.customKeywords.length > 0)
+    }
+
+    if (ns.length > 0) p.count = -1;
+    else if (window.rtrlApp.customKeywords.length > 0)
         p.categoriesToLoop = window.rtrlApp.customKeywords;
-      else {
+    else {
         let b = ss.length > 0 ? ss : [elements.primaryCategorySelect.value];
-        p.categoriesToLoop = elements.categoryModifierInput.value.trim()
-          ? b.map(
-              (c) => `"${elements.categoryModifierInput.value.trim()}" ${c}`,
-            )
-          : b;
-      }
-      if (ns.length === 0)
-        p.count =
-          elements.findAllBusinessesCheckbox.checked ||
-          !elements.countInput.value.trim()
-            ? -1
-            : parseInt(elements.countInput.value, 10);
-      const areaKey = window.rtrlApp.state.selectedAnchorPoint
-        ? elements.anchorPointInput.value.split(",")[0]
-        : window.rtrlApp.postalCodes.length > 0
-          ? window.rtrlApp.postalCodes.join("_")
-          : elements.locationInput.value.split(",")[0];
-      p.searchParamsForEmail = {
+        p.categoriesToLoop = elements.categoryModifierInput.value.trim() ? b.map((c) => `"${elements.categoryModifierInput.value.trim()}" ${c}`) : b;
+    }
+
+    if (ns.length === 0)
+        p.count = elements.findAllBusinessesCheckbox.checked || !elements.countInput.value.trim() ? -1 : parseInt(elements.countInput.value, 10);
+
+    const areaKey = window.rtrlApp.state.selectedAnchorPoint ? elements.anchorPointInput.value.split(",")[0] : (window.rtrlApp.postalCodes.length > 0 ? window.rtrlApp.postalCodes.join("_") : elements.locationInput.value.split(",")[0]);
+
+    p.searchParamsForEmail = {
         primaryCategory: elements.primaryCategorySelect.value,
         subCategory: ss.length > 1 ? "multiple_subcategories" : ss[0] || "",
         subCategoryList: ss,
-        customCategory:
-          window.rtrlApp.customKeywords.length > 0
-            ? window.rtrlApp.customKeywords.join(", ")
-            : elements.categoryModifierInput.value,
+        customCategory: window.rtrlApp.customKeywords.length > 0 ? window.rtrlApp.customKeywords.join(", ") : elements.categoryModifierInput.value,
         area: areaKey,
         postcodes: window.rtrlApp.postalCodes,
         country: elements.countryInput.value,
-      };
-      socket.emit("start_scrape_job", {
+    };
+
+    socket.emit("start_scrape_job", {
         authToken: currentUserSession.access_token,
         clientLocalDate: `${localToday.getFullYear()}-${String(localToday.getMonth() + 1).padStart(2, "0")}-${String(localToday.getDate()).padStart(2, "0")}`,
         ...p,
-      });
-      const originalText = elements.startButton.innerHTML;
-      elements.startButton.innerHTML =
-        '<i class="fas fa-check"></i> Added to Queue!';
-      elements.startButton.style.backgroundColor = "#10b981";
-      setTimeout(() => {
+    });
+
+    const originalText = elements.startButton.innerHTML;
+    elements.startButton.innerHTML = '<i class="fas fa-check"></i> Added to Queue!';
+    elements.startButton.style.backgroundColor = "#10b981";
+    setTimeout(() => {
         elements.startButton.innerHTML = originalText;
         elements.startButton.style.backgroundColor = "";
-      }, 2000);
-    };
+    }, 2000);
+};
 
     function initializeApp() {
       window.rtrlApp.jobHistory.init(
