@@ -307,19 +307,30 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 
+    function resetStatusUI() {
+        const fill = document.getElementById("progress-fill");
+        const pctLabel = document.getElementById("pct-label");
+        const phaseLabel = document.getElementById("phase-label");
+        if (fill) fill.style.width = `0%`;
+        if (pctLabel) pctLabel.textContent = `0%`;
+        if (phaseLabel) phaseLabel.textContent = "Phase 0/3: Starting...";
+        
+        if (document.getElementById("stat-found")) document.getElementById("stat-found").textContent = "0";
+        if (document.getElementById("stat-processed")) document.getElementById("stat-processed").textContent = "0";
+        if (document.getElementById("stat-enriched")) document.getElementById("stat-enriched").textContent = "0";
+    }
+
     socket.on("job_state", (job) => {
       if (job.status === "running") {
         currentJobId = job.id;
         localStorage.setItem("rtrl_active_job_id", job.id);
-        
-        setUiState(true, getUiElementsForStateChange());
+        resetStatusUI();
         updateDashboardUi("running");
       } 
       else if (job.status === "completed" || job.status === "failed") {
         if (job.id === currentJobId) {
             localStorage.removeItem("rtrl_active_job_id");
             currentJobId = null;
-            setUiState(false, getUiElementsForStateChange());
             updateDashboardUi(job.status);
         }
       }
@@ -331,7 +342,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
     socket.on("job_error", ({ error }) => {
       logMessage(elements.logEl, `Error: ${error}`, "error");
-      handleScrapeError({ error });
     });
 
     socket.on("business_found", (data) => {
@@ -348,11 +358,9 @@ document.addEventListener("DOMContentLoaded", () => {
           window.rtrlApp.jobHistory.fetchAndRenderJobs();
         }
 
-        const targetId = update.id || currentJobId;
+        const targetId = update.id; 
         if (targetId) {
-          const historyBadge = document.getElementById(
-            `job-status-${targetId}`
-          );
+          const historyBadge = document.getElementById(`job-status-${targetId}`);
           if (historyBadge) {
             if (update.status === "completed") {
               historyBadge.className = "job-status status-completed";
@@ -371,6 +379,19 @@ document.addEventListener("DOMContentLoaded", () => {
                 historyBadge.innerHTML =
                   '<i class="fas fa-clock"></i> <span>Queued</span>';
             }
+          }
+
+          if (update.status === "running") {
+              currentJobId = targetId;
+              localStorage.setItem("rtrl_active_job_id", targetId);
+              resetStatusUI();
+              updateDashboardUi("running");
+          } else if (update.status === "completed" || update.status === "failed") {
+              if (targetId === currentJobId) {
+                  localStorage.removeItem("rtrl_active_job_id");
+                  currentJobId = null;
+                  updateDashboardUi(update.status);
+              }
           }
         }
       }
@@ -597,7 +618,6 @@ document.addEventListener("DOMContentLoaded", () => {
         elements.userInfoSpan.textContent =
           session.user.user_metadata.full_name || "User";
         elements.userEmailDisplay.textContent = session.user.email;
-        elements.startButton.disabled = false;
 
         refreshUsageTracker();
 
@@ -637,7 +657,6 @@ document.addEventListener("DOMContentLoaded", () => {
         elements.loginOverlay.style.display = "flex";
         elements.appContent.style.display = "none";
         elements.userMenu.style.display = "none";
-        elements.startButton.disabled = true;
       }
     });
 
@@ -1149,34 +1168,26 @@ document.addEventListener("DOMContentLoaded", () => {
         postcodes: window.rtrlApp.postalCodes,
         country: elements.countryInput.value,
       };
+      
       socket.emit("start_scrape_job", {
         authToken: currentUserSession.access_token,
         clientLocalDate: clientLocalDateParam,
         ...p,
       });
+
+      // UI Feedback to show it was added to queue, instead of locking the UI
+      const originalText = elements.startButton.innerHTML;
+      elements.startButton.innerHTML = '<i class="fas fa-check"></i> Added to Queue!';
+      elements.startButton.style.backgroundColor = "#10b981";
+      setTimeout(() => {
+          elements.startButton.innerHTML = originalText;
+          elements.startButton.style.backgroundColor = "";
+      }, 2000);
     };
 
     function handleScrapeError() {
-      setUiState(false, getUiElementsForStateChange());
       document.getElementById("status-card").className =
         "status-card state-error";
-    }
-    function getUiElementsForStateChange() {
-      return {
-        startButton: elements.startButton,
-        primaryCategorySelect: elements.primaryCategorySelect,
-        subCategoryCheckboxContainer: elements.subCategoryCheckboxContainer,
-        customCategoryInput: elements.customCategoryInput,
-        locationInput: elements.locationInput,
-        postalCodeInput: elements.postalCodeInput,
-        countryInput: elements.countryInput,
-        countInput: elements.countInput,
-        findAllBusinessesCheckbox: elements.findAllBusinessesCheckbox,
-        businessNamesInput: elements.businessNamesInput,
-        userEmailInput: elements.userEmailInput,
-        anchorPointInput: elements.anchorPointInput,
-        radiusSlider: elements.radiusSlider,
-      };
     }
 
     function initializeApp() {
@@ -1229,19 +1240,6 @@ document.addEventListener("DOMContentLoaded", () => {
       aiToggle: document.getElementById("useAiToggle"),
     };
 
-    const ui = {
-      h: document.getElementById("status-headline"),
-      s: document.getElementById("status-subtext"),
-      i: document.getElementById("status-icon"),
-      c: document.getElementById("status-card"),
-      f: document.getElementById("progress-fill"),
-      p: document.getElementById("pct-label"),
-      ph: document.getElementById("phase-label"),
-      fnd: document.getElementById("stat-found"),
-      prc: document.getElementById("stat-processed"),
-      enr: document.getElementById("stat-enriched"),
-    };
-
     el.location.value = "";
     el.anchor.value = "";
     el.names.value = "";
@@ -1254,19 +1252,6 @@ document.addEventListener("DOMContentLoaded", () => {
       window.rtrlApp.map.removeLayer(window.rtrlApp.searchCircle);
       window.rtrlApp.searchCircle = null;
     }
-
-    if (ui.c) ui.c.className = "status-card";
-    if (ui.h) ui.h.textContent = "Search Parameters Loaded";
-    if (ui.s)
-      ui.s.textContent =
-        "Sidebar updated from history. Check your parameters then click Start.";
-    if (ui.i) ui.i.className = "fas fa-file-import";
-    if (ui.f) ui.f.style.width = "0%";
-    if (ui.p) ui.p.textContent = "0%";
-    if (ui.ph) ui.ph.textContent = "Phase 0/3: Ready";
-    if (ui.fnd) ui.fnd.textContent = "0";
-    if (ui.prc) ui.prc.textContent = "0";
-    if (ui.enr) ui.enr.textContent = "0";
 
     if (el.aiToggle) el.aiToggle.checked = p.useAiEnrichment !== false;
     el.country.value = p.country || "Australia";

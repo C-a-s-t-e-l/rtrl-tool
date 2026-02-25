@@ -116,7 +116,8 @@ const processQueue = async () => {
 
 const updateJobStatus = async (jobId, status) => {
   await supabase.from("jobs").update({ status }).eq("id", jobId);
-  io.to(jobId).emit("job_update", { status });
+  // FIX: Added id to the payload so frontend knows WHICH job just started/finished
+  io.to(jobId).emit("job_update", { id: jobId, status }); 
 };
 
 const addLog = async (jobId, message) => {
