@@ -1015,6 +1015,7 @@ socket.on("user_queue_update", (myJobs) => {
 window.rtrlApp.startResearch = () => {
     if (!currentUserSession) return;
 
+    // 1. Reset visual indicators
     document.querySelectorAll(".collapsible-section").forEach(s => {
         s.style.borderColor = "";
         s.style.boxShadow = "";
@@ -1023,6 +1024,7 @@ window.rtrlApp.startResearch = () => {
     const errorModal = document.getElementById("alert-modal");
     const errorText = document.getElementById("alert-modal-message");
 
+    // 2. Component Validation Checks
     const businessNames = elements.businessNamesInput.value.trim();
     const hasCustomKeywords = window.rtrlApp.customKeywords.length > 0;
     const hasPrimaryCategory = elements.primaryCategorySelect.value !== "";
@@ -1033,38 +1035,52 @@ window.rtrlApp.startResearch = () => {
     const hasRadiusAnchor = window.rtrlApp.state.selectedAnchorPoint !== null;
     const hasLocationDef = hasLocationText || hasPostcodes || hasRadiusAnchor;
 
-    const expandSection = (elementId) => {
+    // 3. Helper to expand and highlight sections
+    const expandAndHighlight = (elementId) => {
         const content = document.getElementById(elementId);
         if (content && content.classList.contains("collapsed")) {
             content.classList.remove("collapsed");
             const icon = content.previousElementSibling.querySelector(".toggle-icon");
             if (icon) icon.classList.add("open");
+            
+            // Special case for Radius Map
+            if (elementId === "radiusSearchContainer" && window.rtrlApp.map) {
+                setTimeout(() => window.rtrlApp.map.invalidateSize(), 300);
+            }
         }
         const section = content.closest(".collapsible-section");
         section.style.borderColor = "#ef4444";
         section.style.boxShadow = "0 0 0 1px #ef4444";
     };
 
+    // 4. Conditional Validation Flow
     if (!hasBusinessDef && !hasLocationDef) {
-        errorText.innerHTML = "You haven't defined <b>what</b> to search for or <b>where</b> to search. Please fill out both sections.";
+        errorText.innerHTML = "You haven't defined <b>what</b> to search for or <b>where</b> to search. Please complete the highlighted sections.";
+        expandAndHighlight("bulkSearchContainer");
+        expandAndHighlight("locationSearchContainer");
+        expandAndHighlight("radiusSearchContainer");
         errorModal.style.display = "flex";
         return;
     }
 
     if (!hasBusinessDef) {
         errorText.innerHTML = "Please specify a <b>Category</b> or enter <b>Business Names</b> so the system knows what to look for.";
-        expandSection("bulkSearchContainer");
+        expandAndHighlight("bulkSearchContainer");
+        expandAndHighlight("individualSearchContainer");
         errorModal.style.display = "flex";
         return;
     }
 
     if (!hasLocationDef) {
-        errorText.innerHTML = "The system needs a <b>Location</b>. Please provide a Suburb, Postcodes, or a Radius center point.";
-        expandSection("locationSearchContainer");
+        errorText.innerHTML = "The system needs a <b>Location</b>. Please provide a Suburb or define a Search Radius.";
+        // FIX: Opens both location options
+        expandAndHighlight("locationSearchContainer");
+        expandAndHighlight("radiusSearchContainer");
         errorModal.style.display = "flex";
         return;
     }
 
+    // --- IF VALID: Proceed ---
     const ns = businessNames.split("\n").map((n) => n.trim()).filter(Boolean);
     const ss = Array.from(elements.subCategoryCheckboxContainer.querySelectorAll("input:checked")).map((c) => c.value).filter((v) => v !== "select_all");
     const localToday = new Date();
