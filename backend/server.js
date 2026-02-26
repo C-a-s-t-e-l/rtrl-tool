@@ -348,7 +348,11 @@ const runScrapeJob = async (jobId) => {
                 }
                 allProcessedBusinesses.push(businessData);
                 await appendJobResult(jobId, businessData);
-                await supabase.rpc('increment_usage', { user_id_param: job.user_id, client_local_date_param: clientLocalDate });
+                const safeDate = clientLocalDate || new Date().toISOString().split('T')[0];
+                await supabase.rpc('increment_usage', { 
+    user_id_param: job.user_id, 
+    client_local_date_param: safeDate 
+});
             }
         }
         const enrichedCount = allProcessedBusinesses.filter(b => b.OwnerName && b.OwnerName !== "Private Owner").length;

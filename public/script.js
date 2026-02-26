@@ -34,67 +34,42 @@ document.addEventListener("DOMContentLoaded", () => {
   };
 
   function initializeMainApp() {
-    async function refreshUsageTracker() {
-      if (!currentUserSession) return;
-      const { data: profile, error } = await supabaseClient
-        .from("profiles")
-        .select("usage_today, daily_limit, last_reset_date")
-        .eq("id", currentUserSession.user.id)
-        .single();
-      if (error || !profile) return;
-      const current = profile.usage_today || 0;
-      const limit = profile.daily_limit || 500;
-      const lastResetDateStr = profile.last_reset_date;
-      const today = new Date();
-      const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-      let displayCurrentUsage =
-        lastResetDateStr && lastResetDateStr < todayStr ? 0 : current;
-      const percentage = Math.min(
-        Math.round((displayCurrentUsage / limit) * 100),
-        100,
-      );
-      if (elements.dashUsageCurrent)
-        elements.dashUsageCurrent.textContent =
-          displayCurrentUsage.toLocaleString();
-      if (elements.dashUsageLimit)
-        elements.dashUsageLimit.textContent = limit.toLocaleString();
-      if (elements.dashUsagePercent)
-        elements.dashUsagePercent.textContent = `${percentage}% consumed`;
-      if (elements.dashUsageFill) {
-        elements.dashUsageFill.style.width = `${percentage}%`;
-        elements.dashUsageFill.style.backgroundColor =
-          percentage > 90 ? "#ef4444" : "#8b5cf6";
-      }
-      let planName = "Standard Plan";
-      if (limit <= 100) planName = "Starter Plan";
-      if (limit >= 1000 && limit < 5000) planName = "Power Plan";
-      if (limit >= 5000) planName = "Executive Plan";
-      if (elements.dashPlanBadge) elements.dashPlanBadge.textContent = planName;
-      if (elements.dashUsageStatus) {
-        if (displayCurrentUsage >= limit) {
-          elements.dashUsageStatus.textContent =
-            "Daily limit reached. Resets at midnight.";
-          elements.dashUsageStatus.style.color = "#ef4444";
-        } else {
-          elements.dashUsageStatus.textContent = "Account in good standing";
-          elements.dashUsageStatus.style.color = "#64748b";
-        }
-      }
-      const now = new Date();
-      const midnight = new Date();
-      midnight.setHours(24, 0, 0, 0);
-      const diffMs = midnight.getTime() - now.getTime();
-      const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-      const diffMinutes = Math.round((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-      let resetTimerText =
-        diffHours > 0
-          ? `Resets in ${diffHours}h ${diffMinutes}m`
-          : diffMinutes > 0
-            ? `Resets in ${diffMinutes}m`
-            : "Resetting soon...";
-      if (elements.dashResetTimer)
-        elements.dashResetTimer.textContent = resetTimerText;
-    }
+async function refreshUsageTracker() {
+  if (!currentUserSession) return;
+  const { data: profile, error } = await supabaseClient
+    .from("profiles")
+    .select("usage_today, daily_limit, last_reset_date")
+    .eq("id", currentUserSession.user.id)
+    .single();
+
+  if (error || !profile) return;
+
+  const now = new Date();
+  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+
+  let displayUsage = profile.usage_today || 0;
+  if (profile.last_reset_date && profile.last_reset_date < todayStr) {
+    displayUsage = 0;
+  }
+
+  const limit = profile.daily_limit || 500;
+  const percentage = Math.min(Math.round((displayUsage / limit) * 100), 100);
+
+  if (elements.dashUsageCurrent) elements.dashUsageCurrent.textContent = displayUsage.toLocaleString();
+  if (elements.dashUsageLimit) elements.dashUsageLimit.textContent = limit.toLocaleString();
+  if (elements.dashUsageFill) {
+    elements.dashUsageFill.style.width = `${percentage}%`;
+    elements.dashUsageFill.style.backgroundColor = percentage > 90 ? "#ef4444" : "#8b5cf6";
+  }
+  if (elements.dashUsagePercent) elements.dashUsagePercent.textContent = `${percentage}% consumed`;
+  
+  const midnight = new Date();
+  midnight.setHours(24, 0, 0, 0);
+  const diffMs = midnight.getTime() - now.getTime();
+  const hours = Math.floor(diffMs / (1000 * 60 * 60));
+  const mins = Math.round((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+  if (elements.dashResetTimer) elements.dashResetTimer.textContent = `Resets in ${hours}h ${mins}m`;
+}
 
     async function loadGoogleMaps() {
       try {
