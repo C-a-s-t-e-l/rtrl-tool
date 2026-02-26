@@ -1015,38 +1015,52 @@ socket.on("user_queue_update", (myJobs) => {
 window.rtrlApp.startResearch = () => {
     if (!currentUserSession) return;
 
-    document.querySelectorAll(".collapsible-section").forEach(s => s.style.borderColor = "");
+    document.querySelectorAll(".collapsible-section").forEach(s => {
+        s.style.borderColor = "";
+        s.style.boxShadow = "";
+    });
+    
     const errorModal = document.getElementById("alert-modal");
     const errorText = document.getElementById("alert-modal-message");
 
     const businessNames = elements.businessNamesInput.value.trim();
     const hasCustomKeywords = window.rtrlApp.customKeywords.length > 0;
     const hasPrimaryCategory = elements.primaryCategorySelect.value !== "";
-    
     const hasBusinessDef = businessNames || hasCustomKeywords || hasPrimaryCategory;
 
     const hasLocationText = elements.locationInput.value.trim().length > 0;
     const hasPostcodes = window.rtrlApp.postalCodes.length > 0;
     const hasRadiusAnchor = window.rtrlApp.state.selectedAnchorPoint !== null;
-
     const hasLocationDef = hasLocationText || hasPostcodes || hasRadiusAnchor;
 
+    const expandSection = (elementId) => {
+        const content = document.getElementById(elementId);
+        if (content && content.classList.contains("collapsed")) {
+            content.classList.remove("collapsed");
+            const icon = content.previousElementSibling.querySelector(".toggle-icon");
+            if (icon) icon.classList.add("open");
+        }
+        const section = content.closest(".collapsible-section");
+        section.style.borderColor = "#ef4444";
+        section.style.boxShadow = "0 0 0 1px #ef4444";
+    };
+
     if (!hasBusinessDef && !hasLocationDef) {
-        errorText.innerHTML = "You haven't defined what to search for <b>or</b> where to search. Please fill out the categories and location.";
+        errorText.innerHTML = "You haven't defined <b>what</b> to search for or <b>where</b> to search. Please fill out both sections.";
         errorModal.style.display = "flex";
         return;
     }
 
     if (!hasBusinessDef) {
-        errorText.innerHTML = "Please define a <b>Business Category</b>, enter <b>Custom Keywords</b>, or provide <b>Specific Names</b>.";
-        document.getElementById("bulkSearchContainer").closest(".collapsible-section").style.borderColor = "#ef4444";
+        errorText.innerHTML = "Please specify a <b>Category</b> or enter <b>Business Names</b> so the system knows what to look for.";
+        expandSection("bulkSearchContainer");
         errorModal.style.display = "flex";
         return;
     }
 
     if (!hasLocationDef) {
-        errorText.innerHTML = "Please provide a <b>Search Location</b> (Suburb, Postcodes, or Radius Center).";
-        document.getElementById("locationSearchContainer").closest(".collapsible-section").style.borderColor = "#ef4444";
+        errorText.innerHTML = "The system needs a <b>Location</b>. Please provide a Suburb, Postcodes, or a Radius center point.";
+        expandSection("locationSearchContainer");
         errorModal.style.display = "flex";
         return;
     }
