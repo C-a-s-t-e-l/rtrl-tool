@@ -675,5 +675,19 @@
     <script src="event-handlers.js"></script>
 
     <script src="script.js?v=2"></script>
+
+
+    <div id="alert-modal" class="login-overlay" style="display: none; background: rgba(15, 23, 42, 0.7); z-index: 11000;">
+    <div class="card" style="max-width: 400px; width: 90%; text-align: center; padding: 2rem; border-top: 5px solid #ef4444;">
+        <div style="width: 60px; height: 60px; background: #fee2e2; color: #ef4444; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.5rem; font-size: 1.5rem;">
+            <i class="fas fa-exclamation-triangle"></i>
+        </div>
+        <h3 style="margin-bottom: 0.5rem; font-size: 1.25rem;">Incomplete Search</h3>
+        <p id="alert-modal-message" style="color: #64748b; font-size: 0.95rem; line-height: 1.5; margin-bottom: 1.5rem;"></p>
+        <button onclick="document.getElementById('alert-modal').style.display='none'" class="btn btn-primary" style="margin-top: 0; background: #1e293b;">
+            Got it, I'll fix that
+        </button>
+    </div>
+</div>
   </body>
 </html>

@@ -1016,33 +1016,39 @@ window.rtrlApp.startResearch = () => {
     if (!currentUserSession) return;
 
     document.querySelectorAll(".collapsible-section").forEach(s => s.style.borderColor = "");
-    const errors = [];
+    const errorModal = document.getElementById("alert-modal");
+    const errorText = document.getElementById("alert-modal-message");
 
     const businessNames = elements.businessNamesInput.value.trim();
     const hasCustomKeywords = window.rtrlApp.customKeywords.length > 0;
     const hasPrimaryCategory = elements.primaryCategorySelect.value !== "";
     
-    if (!businessNames && !hasCustomKeywords && !hasPrimaryCategory) {
-        errors.push("Missing Business Type: Please select a Category, enter Custom Keywords, or provide Specific Names.");
-        document.getElementById("bulkSearchContainer").closest(".collapsible-section").style.borderColor = "#ef4444";
-        document.getElementById("individualSearchContainer").closest(".collapsible-section").style.borderColor = "#ef4444";
-    }
+    const hasBusinessDef = businessNames || hasCustomKeywords || hasPrimaryCategory;
 
     const hasLocationText = elements.locationInput.value.trim().length > 0;
     const hasPostcodes = window.rtrlApp.postalCodes.length > 0;
     const hasRadiusAnchor = window.rtrlApp.state.selectedAnchorPoint !== null;
 
-    if (!hasLocationText && !hasPostcodes && !hasRadiusAnchor) {
-        errors.push("Missing Location: Please provide a Suburb, Postcodes, or a Radius center point.");
-        document.getElementById("locationSearchContainer").closest(".collapsible-section").style.borderColor = "#ef4444";
-        document.getElementById("radiusSearchContainer").closest(".collapsible-section").style.borderColor = "#ef4444";
+    const hasLocationDef = hasLocationText || hasPostcodes || hasRadiusAnchor;
+
+    if (!hasBusinessDef && !hasLocationDef) {
+        errorText.innerHTML = "You haven't defined what to search for <b>or</b> where to search. Please fill out the categories and location.";
+        errorModal.style.display = "flex";
+        return;
     }
 
-    if (errors.length > 0) {
-        const errorMsg = errors.join("\n\n");
-        alert("Search cannot start:\n\n" + errorMsg);
-        logMessage(elements.logEl, "Validation Failed: Parameters missing.", "error");
-        return; 
+    if (!hasBusinessDef) {
+        errorText.innerHTML = "Please define a <b>Business Category</b>, enter <b>Custom Keywords</b>, or provide <b>Specific Names</b>.";
+        document.getElementById("bulkSearchContainer").closest(".collapsible-section").style.borderColor = "#ef4444";
+        errorModal.style.display = "flex";
+        return;
+    }
+
+    if (!hasLocationDef) {
+        errorText.innerHTML = "Please provide a <b>Search Location</b> (Suburb, Postcodes, or Radius Center).";
+        document.getElementById("locationSearchContainer").closest(".collapsible-section").style.borderColor = "#ef4444";
+        errorModal.style.display = "flex";
+        return;
     }
 
     const ns = businessNames.split("\n").map((n) => n.trim()).filter(Boolean);
