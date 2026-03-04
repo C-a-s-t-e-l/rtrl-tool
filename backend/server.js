@@ -1014,7 +1014,7 @@ app.get("/api/jobs/history", async (req, res) => {
             .neq('status', 'queued');
 
         if (searchTerm) {
-            query = query.ilike('parameters->searchParamsForEmail->>area', `%${searchTerm}%`);
+            query = query.or(`parameters->searchParamsForEmail->>area.ilike.%${searchTerm}%,parameters->searchParamsForEmail->>primaryCategory.ilike.%${searchTerm}%,parameters->searchParamsForEmail->>customCategory.ilike.%${searchTerm}%`);
         }
 
         const { data, error, count } = await query
