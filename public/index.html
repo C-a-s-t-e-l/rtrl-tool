@@ -653,14 +653,18 @@
                 </div>
             </div>
 
-            <div class="card" id="jobHistoryCard">
-              <div class="card-header results-header">
-                <h2><i class="fas fa-history"></i> Job History</h2>
-              </div>
-              <div id="job-list-container">
-                <p class="placeholder-text">Your past jobs will appear here.</p>
-              </div>
-            </div>
+<div class="card" id="jobHistoryCard">
+    <div class="card-header results-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+        <h2><i class="fas fa-history"></i> Job History</h2>
+        <div class="search-wrapper" style="max-width: 250px; margin-bottom: 0;">
+            <i class="fas fa-search"></i>
+            <input type="text" id="history-search-input" placeholder="Search by area..." style="padding: 8px 12px 8px 35px; font-size: 0.8rem;">
+        </div>
+    </div>
+    <div id="job-list-container">
+        <p class="placeholder-text">Your past jobs will appear here.</p>
+    </div>
+</div>
           </div>
         </main>
       </div>

@@ -995,22 +995,29 @@ app.post("/api/jobs/:jobId/resend-email", async (req, res) => {
 app.get("/api/jobs/history", async (req, res) => {
     try {
         const authHeader = req.headers.authorization;
-        if (!authHeader || !authHeader.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
+        if (!authHeader) return res.status(401).json({ error: 'Unauthorized' });
         
         const token = authHeader.split(' ')[1];
-        const { data: { user }, error: userError } = await supabase.auth.getUser(token);
-        if (userError || !user) return res.status(401).json({ error: 'Auth failed' });
+        const { data: { user } } = await supabase.auth.getUser(token);
+        if (!user) return res.status(401).json({ error: 'Auth failed' });
 
         const page = parseInt(req.query.page) || 0;
         const limit = parseInt(req.query.limit) || 10;
+        const searchTerm = req.query.search || "";
         const from = page * limit;
         const to = from + limit - 1;
 
-        const { data, error, count } = await supabase
+        let query = supabase
             .from('jobs')
             .select('id, created_at, parameters, status, result_count', { count: 'exact' })
             .eq('user_id', user.id)
-            .neq('status', 'queued')
+            .neq('status', 'queued');
+
+        if (searchTerm) {
+            query = query.ilike('parameters->searchParamsForEmail->>area', `%${searchTerm}%`);
+        }
+
+        const { data, error, count } = await query
             .order('created_at', { ascending: false })
             .range(from, to);
 
@@ -1022,7 +1029,6 @@ app.get("/api/jobs/history", async (req, res) => {
             hasMore: count > to + 1
         });
     } catch (dbError) {
-        console.error("History Error:", dbError);
         res.status(500).json({ error: 'Failed to fetch history.' });
     }
 });

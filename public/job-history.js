@@ -5,9 +5,13 @@ window.rtrlApp.jobHistory = (function () {
     let historyCache = [];
     let currentPage = 0;
     const itemsPerPage = 10;
+    let currentSearch = "";
+    let isInitialLoadDone = false;
+    let searchTimeout;
 
     function init(provider, url) {
         listContainer = document.getElementById('job-list-container');
+        const searchInput = document.getElementById('history-search-input');
         tokenProvider = provider;
         backendUrl = url;
 
@@ -37,22 +41,36 @@ window.rtrlApp.jobHistory = (function () {
                 const pageBtn = e.target.closest('.page-nav-btn');
                 if (pageBtn && !pageBtn.disabled) {
                     currentPage = parseInt(pageBtn.dataset.page);
-                    fetchAndRenderJobs();
+                    fetchAndRenderJobs(true);
                     window.scrollTo({ top: document.getElementById('jobHistoryCard').offsetTop - 20, behavior: 'smooth' });
                 }
             });
         }
+
+        if (searchInput) {
+            searchInput.addEventListener('input', (e) => {
+                clearTimeout(searchTimeout);
+                searchTimeout = setTimeout(() => {
+                    currentSearch = e.target.value.trim();
+                    currentPage = 0;
+                    fetchAndRenderJobs(true);
+                }, 500);
+            });
+        }
     }
 
-    async function fetchAndRenderJobs() {
+    async function fetchAndRenderJobs(force = false) {
         if (!listContainer) return;
+        if (isInitialLoadDone && !force) return;
+
         const token = tokenProvider();
         if (!token) return;
 
         listContainer.innerHTML = '<div class="loading-text"><i class="fas fa-spinner fa-spin"></i> Loading history...</div>';
 
         try {
-            const response = await fetch(`${backendUrl}/api/jobs/history?page=${currentPage}&limit=${itemsPerPage}`, {
+            const url = `${backendUrl}/api/jobs/history?page=${currentPage}&limit=${itemsPerPage}&search=${encodeURIComponent(currentSearch)}`;
+            const response = await fetch(url, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
 
@@ -61,9 +79,12 @@ window.rtrlApp.jobHistory = (function () {
                 const jobs = data.jobs || [];
                 const totalCount = data.totalCount || 0;
                 historyCache = jobs;
+                isInitialLoadDone = true;
 
                 if (jobs.length === 0) {
-                    listContainer.innerHTML = '<p class="placeholder-text">No jobs found.</p>';
+                    listContainer.innerHTML = currentSearch 
+                        ? `<p class="placeholder-text">No history matching "${currentSearch}"</p>`
+                        : '<p class="placeholder-text">No jobs found.</p>';
                     return;
                 }
 
@@ -179,7 +200,7 @@ window.rtrlApp.jobHistory = (function () {
                             <a href="${backendUrl}/api/jobs/${id}/download/all?authToken=${authToken}" class="job-action-btn" download><i class="fas fa-file-zipper"></i> Download All (.zip)</a>
                             <button class="job-action-btn resend-email-btn" data-job-id="${id}"><i class="fas fa-paper-plane"></i> Resend Email</button>
                             <button class="job-action-btn email-body-list-btn" data-job-id="${id}"><i class="fas fa-mobile-alt"></i> Send Mobile List</button>
-                            <button class="job-action-btn clone-job-btn" style="background: #e0f2fe; border-color: #bae6fd; color: #0369a1;" data-job-id="${id}"><i class="fas fa-sync-alt"></i> Repeat This Search</button>
+                            <button class="job-action-btn clone-job-btn" style="background: #e0f2fe; border-color: #bae6fd; color: #0369a1;" data-job-id="${id}"><i class="fas fa-sync-alt"></i> Repeat Search</button>
                         </div>
                     </div>
                 </div>

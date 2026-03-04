@@ -16,17 +16,19 @@ function setupEventListeners(
       const icon = header.querySelector(".toggle-icon");
 
       content.classList.toggle("collapsed");
-      icon.classList.toggle("open");
+      if (icon) icon.classList.toggle("open");
 
-      if (
-        content.id === "radiusSearchContainer" &&
-        !content.classList.contains("collapsed")
-      ) {
-        setTimeout(() => {
-          if (map) {
+      if (!content.classList.contains("collapsed")) {
+        
+        if (content.id === "radiusSearchContainer" && map) {
+          setTimeout(() => {
             map.invalidateSize();
-          }
-        }, 300);
+          }, 300);
+        }
+
+        if (content.querySelector('#job-list-container')) {
+          window.rtrlApp.jobHistory.fetchAndRenderJobs();
+        }
       }
     });
   });
@@ -311,16 +313,6 @@ function setupEventListeners(
 
   elements.businessNamesInput.addEventListener("input", (e) => {
     const isIndividualSearch = e.target.value.trim().length > 0;
-    document.querySelectorAll(".collapsible-card").forEach((card) => {
-      const content = card.querySelector(".collapsible-content");
-      if (
-        content &&
-        content.id !== "individualSearchContainer" &&
-        card.querySelector("h3").textContent.includes("Specific Name")
-      ) {
-      }
-    });
-
     window.rtrlApp.setRadiusInputsState(isIndividualSearch);
     window.rtrlApp.setLocationInputsState(isIndividualSearch);
   });
