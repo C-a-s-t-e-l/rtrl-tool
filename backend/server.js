@@ -154,19 +154,18 @@ const appendJobResult = async (jobId, newResult) => {
 
     if (error) throw error;
     
+    await supabase.rpc('increment_job_result_count', { job_id_param: jobId });
+
     io.to(jobId).emit("business_found", newResult);
   } catch (error) {
-    console.error(`[appendJobResult Error] For job ${jobId}:`, error);
-    io.to(jobId).emit("business_found", newResult); 
+    console.error(`[appendJobResult Error] Job ${jobId}:`, error);
   }
 };
 
 const runScrapeJob = async (jobId) => {
-  // 1. Immediately move status to running
   await updateJobStatus(jobId, "running");
   console.log(`[Worker] Job ${jobId} picked up.`); 
 
-  // 2. CRITICAL: Reset the frontend UI bars/stats to 0 immediately
   io.to(jobId).emit("progress_update", { 
       phase: 'discovery', 
       processed: 0, 
@@ -359,12 +358,27 @@ const runScrapeJob = async (jobId) => {
         io.to(jobId).emit("progress_update", { phase: 'scraping', processed: processedInSession, discovered: masterUrlMap.size, added: allProcessedBusinesses.length, target: finalCount, enriched: enrichedCount, aiTarget: finalCount === -1 ? masterUrlMap.size : finalCount, aiProcessed: allProcessedBusinesses.length });
         processedInSession++;
     }
-    if (browser) await browser.close();
+if (browser) await browser.close();
+
     const { uniqueBusinesses, duplicates } = deduplicateBusinesses(allProcessedBusinesses);
+
     if (userEmail && uniqueBusinesses.length > 0) {
-        const emailParams = { ...searchParamsForEmail, radiusKm: parameters.radiusKm };
+        const emailParams = { 
+            ...searchParamsForEmail, 
+            radiusKm: parameters.radiusKm,
+            userEmail: userEmail 
+        };
+
         await sendResultsByEmail(userEmail, uniqueBusinesses, emailParams, duplicates);
+
+        try {
+            const { sendAdminStatsSummary } = require("./emailService");
+            await sendAdminStatsSummary(jobId, uniqueBusinesses, emailParams);
+        } catch (adminErr) {
+            console.error("[Admin Stats] Trigger failed:", adminErr);
+        }
     }
+
     await updateJobStatus(jobId, "completed");
   } catch (error) {
     console.error(`[Job: ${jobId}] Critical error:`, error);
@@ -981,35 +995,35 @@ app.post("/api/jobs/:jobId/resend-email", async (req, res) => {
 app.get("/api/jobs/history", async (req, res) => {
     try {
         const authHeader = req.headers.authorization;
-        if (!authHeader || !authHeader.startsWith('Bearer ')) {
-            return res.status(401).json({ error: 'Authentication required.' });
-        }
+        if (!authHeader || !authHeader.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
+        
         const token = authHeader.split(' ')[1];
-
         const { data: { user }, error: userError } = await supabase.auth.getUser(token);
-        if (userError || !user) {
-            return res.status(401).json({ error: 'Authentication failed.' });
-        }
+        if (userError || !user) return res.status(401).json({ error: 'Auth failed' });
 
-        const { data, error } = await supabase
+        const page = parseInt(req.query.page) || 0;
+        const limit = parseInt(req.query.limit) || 10;
+        const from = page * limit;
+        const to = from + limit - 1;
+
+        const { data, error, count } = await supabase
             .from('jobs')
-            .select('id, created_at, parameters, status, results')
+            .select('id, created_at, parameters, status, result_count', { count: 'exact' })
             .eq('user_id', user.id)
             .neq('status', 'queued')
             .order('created_at', { ascending: false })
-            .limit(50);
+            .range(from, to);
 
         if (error) throw error;
-        
-        const jobs = data.map(job => ({
-            ...job,
-            results: job.results?.length || 0
-        }));
 
-        res.json(jobs || []);
+        res.json({
+            jobs: data || [],
+            totalCount: count,
+            hasMore: count > to + 1
+        });
     } catch (dbError) {
-        console.error("Error fetching job history:", dbError);
-        res.status(500).json({ error: 'Failed to fetch job history.' });
+        console.error("History Error:", dbError);
+        res.status(500).json({ error: 'Failed to fetch history.' });
     }
 });
 

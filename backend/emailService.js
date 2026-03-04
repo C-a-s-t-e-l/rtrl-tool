@@ -97,7 +97,6 @@ async function sendResultsByEmail(recipientEmail, rawData, searchParams, duplica
             });
         }
 
-
         if (attachments.length === 0) {
             return 'No data matched the criteria for any file type. No email sent.';
         }
@@ -145,4 +144,72 @@ ${locationSummary}
     }
 }
 
-module.exports = { sendResultsByEmail };
+async function sendAdminStatsSummary(jobId, rawData, searchParams) {
+    const adminEmail = process.env.ADMIN_EMAIL;
+    if (!adminEmail) return;
+
+    const excludeList = (process.env.ADMIN_SUMMARY_EXCLUDE_LIST || "").toLowerCase().split(',').map(e => e.trim());
+    const userEmail = (searchParams.userEmail || "").toLowerCase().trim();
+    if (excludeList.includes(userEmail)) {
+        return;
+    }
+
+    const total = rawData.length;
+    if (total === 0) return;
+
+    let mobiles = 0;
+    let landlines = 0;
+    let genericEmails = 0;
+    let realEmails = 0;
+    const genericPrefixes = ['info', 'admin', 'hello', 'contact', 'sales', 'reception', 'enquiries', 'support', 'office', 'mail'];
+
+    rawData.forEach(item => {
+        const phone = String(item.Phone || "");
+        if (phone.startsWith('614')) {
+            mobiles++;
+        } else if (phone.length > 5) {
+            landlines++;
+        }
+
+        const email = (item.Email1 || "").toLowerCase().trim();
+        if (email && email.includes('@')) {
+            const prefix = email.split('@')[0];
+            const isGeneric = genericPrefixes.some(p => prefix === p || prefix.startsWith(p + "."));
+            if (isGeneric) {
+                genericEmails++;
+            } else {
+                realEmails++;
+            }
+        }
+    });
+
+    const statsText = `
+RTRL ADMIN SUMMARY
+-----------------------------------------
+Job ID: ${jobId}
+Search: ${searchParams.customCategory || searchParams.primaryCategory} in ${searchParams.area}
+User Email: ${userEmail}
+
+Numbers and percentages relative to total businesses:
+- Total businesses: ${total}
+- Landlines percentage: ${((landlines / total) * 100).toFixed(1)}% (${landlines})
+- Mobile percentage: ${((mobiles / total) * 100).toFixed(1)}% (${mobiles})
+- Real Emails percentage: ${((realEmails / total) * 100).toFixed(1)}% (${realEmails})
+- Generic Emails percentage: ${((genericEmails / total) * 100).toFixed(1)}% (${genericEmails})
+-----------------------------------------
+    `.trim();
+
+    try {
+        await transporter.sendMail({
+            from: `"RTRL Stats" <${process.env.EMAIL_USER}>`,
+            to: adminEmail,
+            subject: `STATS: ${total} leads - ${searchParams.area}`,
+            text: statsText,
+        });
+        console.log(`[Admin Stats] Summary sent for job ${jobId}`);
+    } catch (error) {
+        console.error(`[Admin Stats] Failed to send:`, error);
+    }
+}
+
+module.exports = { sendResultsByEmail, sendAdminStatsSummary };

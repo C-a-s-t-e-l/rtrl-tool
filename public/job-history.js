@@ -1,12 +1,12 @@
 window.rtrlApp.jobHistory = (function () {
-    let containerEl, listContainer;
+    let listContainer;
     let tokenProvider = () => null;
     let backendUrl = '';
     let historyCache = [];
+    let currentPage = 0;
+    const itemsPerPage = 10;
 
     function init(provider, url) {
-        containerEl = document.getElementById('jobHistoryCard');
-        if (!containerEl) return;
         listContainer = document.getElementById('job-list-container');
         tokenProvider = provider;
         backendUrl = url;
@@ -33,16 +33,55 @@ window.rtrlApp.jobHistory = (function () {
                         window.rtrlApp.cloneJobIntoForm(job.parameters);
                     }
                 }
+
+                const pageBtn = e.target.closest('.page-nav-btn');
+                if (pageBtn && !pageBtn.disabled) {
+                    currentPage = parseInt(pageBtn.dataset.page);
+                    fetchAndRenderJobs();
+                    window.scrollTo({ top: document.getElementById('jobHistoryCard').offsetTop - 20, behavior: 'smooth' });
+                }
             });
         }
     }
 
+    async function fetchAndRenderJobs() {
+        if (!listContainer) return;
+        const token = tokenProvider();
+        if (!token) return;
+
+        listContainer.innerHTML = '<div class="loading-text"><i class="fas fa-spinner fa-spin"></i> Loading history...</div>';
+
+        try {
+            const response = await fetch(`${backendUrl}/api/jobs/history?page=${currentPage}&limit=${itemsPerPage}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                const jobs = data.jobs || [];
+                const totalCount = data.totalCount || 0;
+                historyCache = jobs;
+
+                if (jobs.length === 0) {
+                    listContainer.innerHTML = '<p class="placeholder-text">No jobs found.</p>';
+                    return;
+                }
+
+                let html = jobs.map(renderJob).join('');
+                html += renderPagination(totalCount);
+                listContainer.innerHTML = html;
+            }
+        } catch (error) {
+            listContainer.innerHTML = '<p class="error-text">An error occurred while loading history.</p>';
+        }
+    }
+
     function renderJob(job) {
-        const { id, created_at, parameters, status, results } = job;
+        const { id, created_at, parameters, status, result_count } = job;
         const p = parameters || {};
-        const s = p.searchParamsForEmail || {}; 
+        const s = p.searchParamsForEmail || {};
         const date = new Date(created_at).toLocaleString();
-        const totalResults = results || 0;
+        const totalResults = result_count || 0;
 
         let searchType = "Suburb/Area Search";
         let locationDetail = s.area || p.location || "N/A";
@@ -60,29 +99,22 @@ window.rtrlApp.jobHistory = (function () {
 
         const isBroadMode = !s.primaryCategory && s.customCategory;
         const keywordType = isBroadMode ? "Custom Keyword Search" : "Preset Category Search";
-        
-        let summaryParts = [];
 
+        let summaryParts = [];
         if (isBroadMode) {
             summaryParts.push(`Custom Keywords: "${s.customCategory}"`);
         } else {
             summaryParts.push(`Cat: ${s.primaryCategory || "N/A"}`);
             summaryParts.push(`Sub_Cat: ${(s.subCategoryList && s.subCategoryList.length > 0) ? s.subCategoryList.join(", ") : "None"}`);
-            if (s.customCategory) {
-                summaryParts.push(`Keyword: "${s.customCategory}"`);
-            }
+            if (s.customCategory) summaryParts.push(`Keyword: "${s.customCategory}"`);
         }
 
         const detailedSummary = summaryParts.join(" ; ");
 
         let statusIcon = 'fa-clock', statusClass = 'status-queued', statusText = 'Queued';
-        if (status === 'running') {
-            statusIcon = 'fa-spinner fa-spin'; statusClass = 'status-running'; statusText = 'Running';
-        } else if (status === 'completed') {
-            statusIcon = 'fa-check-circle'; statusClass = 'status-completed'; statusText = 'Completed';
-        } else if (status === 'failed') {
-            statusIcon = 'fa-exclamation-triangle'; statusClass = 'status-failed'; statusText = 'Failed';
-        }
+        if (status === 'running') { statusIcon = 'fa-spinner fa-spin'; statusClass = 'status-running'; statusText = 'Running'; }
+        else if (status === 'completed') { statusIcon = 'fa-check-circle'; statusClass = 'status-completed'; statusText = 'Completed'; }
+        else if (status === 'failed') { statusIcon = 'fa-exclamation-triangle'; statusClass = 'status-failed'; statusText = 'Failed'; }
 
         const authToken = tokenProvider();
 
@@ -156,6 +188,34 @@ window.rtrlApp.jobHistory = (function () {
         `;
     }
 
+    function renderPagination(totalCount) {
+        const totalPages = Math.ceil(totalCount / itemsPerPage);
+        if (totalPages <= 1) return "";
+
+        let buttons = [];
+        buttons.push(`<button class="page-nav-btn" data-page="0" ${currentPage === 0 ? 'disabled' : ''}><i class="fas fa-angle-double-left"></i></button>`);
+        
+        let startPage = Math.max(0, currentPage - 2);
+        let endPage = Math.min(totalPages - 1, startPage + 4);
+        
+        if (endPage - startPage < 4) {
+            startPage = Math.max(0, endPage - 4);
+        }
+
+        for (let i = startPage; i <= endPage; i++) {
+            buttons.push(`<button class="page-nav-btn ${i === currentPage ? 'active' : ''}" data-page="${i}">${i + 1}</button>`);
+        }
+
+        buttons.push(`<button class="page-nav-btn" data-page="${totalPages - 1}" ${currentPage === totalPages - 1 ? 'disabled' : ''}><i class="fas fa-angle-double-right"></i></button>`);
+
+        return `
+            <div class="pagination-controls" style="display: flex; justify-content: center; align-items: center; gap: 8px; margin-top: 30px; padding: 20px 0;">
+                ${buttons.join('')}
+                <div style="font-size: 0.8rem; color: #64748b; margin-left: 10px;">Page ${currentPage + 1} of ${totalPages}</div>
+            </div>
+        `;
+    }
+
     async function resendEmail(jobId, buttonEl) {
         const token = tokenProvider();
         if (!token) return;
@@ -180,21 +240,6 @@ window.rtrlApp.jobHistory = (function () {
             buttonEl.innerHTML = response.ok ? `<i class="fas fa-check"></i> Sent` : `<i class="fas fa-times"></i> Failed`;
         } catch (error) { buttonEl.innerHTML = `<i class="fas fa-times"></i> Error`; }
         finally { setTimeout(() => { buttonEl.innerHTML = originalText; buttonEl.disabled = false; }, 3000); }
-    }
-
-    async function fetchAndRenderJobs() {
-        if (!listContainer) return;
-        const token = tokenProvider();
-        if (!token) return;
-        try {
-            const response = await fetch(`${backendUrl}/api/jobs/history`, { headers: { 'Authorization': `Bearer ${token}` } });
-            if (response.ok) {
-                const jobs = await response.json();
-                historyCache = jobs;
-                if (jobs.length === 0) { listContainer.innerHTML = '<p class="placeholder-text">No jobs found.</p>'; return; }
-                listContainer.innerHTML = jobs.map(renderJob).join('');
-            }
-        } catch (error) { listContainer.innerHTML = '<p class="error-text">An error occurred while loading history.</p>'; }
     }
 
     return { init, fetchAndRenderJobs };
