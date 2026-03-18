@@ -68,7 +68,7 @@ window.rtrlApp.review = (function() {
     async function saveProgress() {
         const indicator = document.getElementById('rev-save-indicator');
         if (indicator) {
-            indicator.innerHTML = '<i class="fas fa-sync fa-spin"></i> Saving selection...';
+            indicator.innerHTML = '<i class="fas fa-sync fa-spin"></i> Saving changes...';
             indicator.classList.add('visible');
         }
 
@@ -81,7 +81,7 @@ window.rtrlApp.review = (function() {
         await sbClient.from('jobs').update({ results: resultsToSave }).eq('id', currentJobId);
 
         setTimeout(() => {
-            if (indicator) indicator.innerHTML = '<i class="fas fa-check"></i> Changes saved to database';
+            if (indicator) indicator.innerHTML = '<i class="fas fa-check"></i> Changes saved';
         }, 500);
     }
 
@@ -91,16 +91,21 @@ window.rtrlApp.review = (function() {
     }
 
     function updateCounters() {
-        const count = masterData.filter(d => d._checked).length;
-        const total = masterData.length;
+        const selectedCount = masterData.filter(d => d._checked).length;
         const el = document.getElementById('rev-selection-count');
-        if (el) el.textContent = `${count} selected for export`;
+        if (el) el.textContent = `${selectedCount} SELECTED FOR EXPORT`;
     }
 
     function renderModal() {
         if (document.getElementById('review-modal')) document.getElementById('review-modal').remove();
         const s = jobParams.searchParamsForEmail || {};
         const title = `${s.customCategory || s.primaryCategory || "Search"} in ${s.area || "Area"}${jobParams.radiusKm ? ` (${jobParams.radiusKm}km Radius)` : ""}`;
+
+        const counts = {
+            active: masterData.filter(d => d._reviewStatus === 'Active').length,
+            dup: masterData.filter(d => d._reviewStatus === 'Duplicate').length,
+            excl: masterData.filter(d => d._reviewStatus === 'Excluded').length
+        };
 
         const overlay = document.createElement('div');
         overlay.className = 'review-overlay';
@@ -110,9 +115,11 @@ window.rtrlApp.review = (function() {
                 <div class="review-header">
                     <div style="flex: 1">
                         <h3 style="margin:0; font-size: 1.1rem; color: #1e293b;">${title}</h3>
-                        <div class="review-summary" style="margin-top:8px; display:flex; align-items:center; gap:10px">
-                            <span id="rev-selection-count" class="sum-pill sum-active" style="background:#e0f2fe; color:#0369a1">0 selected for export</span>
-                            <span style="font-size: 0.7rem; color: #94a3b8">Total found: ${masterData.length}</span>
+                        <div class="review-summary">
+                            <span id="rev-selection-count" class="sum-pill sum-active" style="background:#e0f2fe; color:#0369a1; border: 1px solid #bae6fd;">0 SELECTED FOR EXPORT</span>
+                            <span class="sum-pill sum-active">${counts.active} Unique</span>
+                            <span class="sum-pill sum-dup">${counts.dup} Duplicates</span>
+                            <span class="sum-pill sum-excl">${counts.excl} Excluded</span>
                         </div>
                     </div>
                     <div class="review-controls">

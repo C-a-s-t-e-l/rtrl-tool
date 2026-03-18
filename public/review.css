@@ -221,3 +221,16 @@
     flex-grow: 1;
     max-width: 700px;
 }
+
+.review-table input[type="checkbox"]:focus {
+    outline: none !important;
+    box-shadow: none !important;
+}
+
+.review-summary {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+}
