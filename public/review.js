@@ -3,6 +3,7 @@ window.rtrlApp.review = (function() {
     let filteredData = [];
     let currentJobId = null;
     let jobParams = {};
+    let saveTimeout = null;
 
     function init() {
         const observer = new MutationObserver((mutations) => {
@@ -14,12 +15,10 @@ window.rtrlApp.review = (function() {
                             if (!container.querySelector('.btn-review-trigger')) {
                                 const resendBtn = container.querySelector('.resend-email-btn');
                                 if (!resendBtn) return;
-                                
                                 const jobId = resendBtn.dataset.jobId;
                                 const btn = document.createElement('button');
                                 btn.className = 'job-action-btn btn-review-trigger';
                                 btn.style.backgroundColor = '#f0f9ff';
-                                btn.style.borderColor = '#bae6fd';
                                 btn.innerHTML = `<i class="fas fa-list-check"></i> Review & Filter`;
                                 btn.onclick = () => openReview(jobId);
                                 container.appendChild(btn);
@@ -29,7 +28,6 @@ window.rtrlApp.review = (function() {
                 });
             });
         });
-
         const list = document.getElementById('job-list-container');
         if (list) observer.observe(list, { childList: true, subtree: true });
     }
@@ -38,18 +36,13 @@ window.rtrlApp.review = (function() {
         currentJobId = jobId;
         try {
             const sbClient = supabase.createClient(window.CONFIG.SUPABASE_URL, window.CONFIG.SUPABASE_ANON_KEY);
-            const { data, error } = await sbClient
-                .from('jobs').select('results, parameters').eq('id', jobId).single();
-
-            if (error || !data) throw new Error("Could not fetch job data");
+            const { data, error } = await sbClient.from('jobs').select('results, parameters').eq('id', jobId).single();
+            if (error || !data) throw new Error("Fetch failed");
 
             jobParams = data.parameters || {};
             processData(data.results || [], jobParams.exclusionList || []);
             renderModal();
-        } catch (err) {
-            console.error("Review Error:", err);
-            alert("Failed to load data for review.");
-        }
+        } catch (err) { alert("Failed to load review workspace."); }
     }
 
     function processData(results, exclusionList) {
@@ -59,30 +52,51 @@ window.rtrlApp.review = (function() {
 
         masterData = results.map((item, index) => {
             const name = norm(item.BusinessName);
-            const fb = item.FacebookURL?.split('/').filter(p => p && !['p','pages','groups','company'].includes(p.toLowerCase())).pop()?.toLowerCase();
-            const ig = item.InstagramURL?.split('/').filter(p => p).pop()?.toLowerCase();
-            const signature = fb && ig ? `SOC:${fb}_${ig}` : `NAME:${name.substring(0,15)}`;
+            const signature = `NAME:${name.substring(0,15)}_${norm(item.StreetAddress)}`;
             
             let status = "Active";
             if (excl.some(ex => name.includes(ex))) status = "Excluded";
             else if (seen.has(signature)) status = "Duplicate";
             if (status === "Active") seen.add(signature);
 
-            return { ...item, _id: index, _reviewStatus: status, _checked: status === "Active" };
+            // Logic: If the database already has a saved selection state, use it. 
+            // Otherwise, default to checking "Active" items.
+            const isChecked = (item._selected !== undefined) ? item._selected : (status === "Active");
+
+            return { ...item, _id: index, _reviewStatus: status, _checked: isChecked };
         });
         filteredData = [...masterData];
     }
 
+    async function saveProgress() {
+        const indicator = document.getElementById('rev-save-indicator');
+        if (indicator) {
+            indicator.innerHTML = '<i class="fas fa-sync fa-spin"></i> Saving changes...';
+            indicator.classList.add('visible');
+        }
+
+        const resultsToSave = masterData.map(item => {
+            const { _id, _reviewStatus, _checked, ...cleanItem } = item;
+            return { ...cleanItem, _selected: _checked };
+        });
+
+        const sbClient = supabase.createClient(window.CONFIG.SUPABASE_URL, window.CONFIG.SUPABASE_ANON_KEY);
+        await sbClient.from('jobs').update({ results: resultsToSave }).eq('id', currentJobId);
+
+        setTimeout(() => {
+            if (indicator) indicator.innerHTML = '<i class="fas fa-check"></i> All progress saved';
+        }, 500);
+    }
+
+    function debouncedSave() {
+        clearTimeout(saveTimeout);
+        saveTimeout = setTimeout(saveProgress, 1500);
+    }
+
     function renderModal() {
         if (document.getElementById('review-modal')) document.getElementById('review-modal').remove();
-
         const s = jobParams.searchParamsForEmail || {};
-        const title = `${s.customCategory || s.primaryCategory || "Search"} in ${s.area || "Area"}${jobParams.radiusKm ? ` (${jobParams.radiusKm}km)` : ""}`;
-        const counts = {
-            active: masterData.filter(d => d._reviewStatus === 'Active').length,
-            dup: masterData.filter(d => d._reviewStatus === 'Duplicate').length,
-            excl: masterData.filter(d => d._reviewStatus === 'Excluded').length
-        };
+        const title = `${s.customCategory || s.primaryCategory || "Search"} in ${s.area || "Area"}`;
 
         const overlay = document.createElement('div');
         overlay.className = 'review-overlay';
@@ -90,35 +104,34 @@ window.rtrlApp.review = (function() {
         overlay.innerHTML = `
             <div class="review-window">
                 <div class="review-header">
-                    <div style="flex: 1"><h3 style="margin:0; font-size: 1.1rem; color: #1e293b;">${title}</h3>
+                    <div style="flex: 1"><h3 style="margin:0">${title}</h3>
                         <div class="review-summary" style="margin-top:8px">
-                            <span class="sum-pill sum-active">${counts.active} Unique</span>
-                            <span class="sum-pill sum-dup">${counts.dup} Duplicates</span>
-                            <span class="sum-pill sum-excl">${counts.excl} Excluded</span>
+                            <span class="sum-pill sum-active">Selection active</span>
                         </div>
                     </div>
                     <div class="review-controls">
-                        <input type="text" class="review-search" placeholder="Quick filter..." id="rev-search">
-                        <button class="btn-review-close" id="rev-only-active" style="white-space:nowrap; background:#fff; border:1px solid #cbd5e1;">Reset to Active Only</button>
+                        <input type="text" class="review-search" placeholder="Quick Filter..." id="rev-search">
+                        <button class="btn-review-close" id="rev-only-active" style="background:#fff; border:1px solid #cbd5e1;">Reset to Active Only</button>
                     </div>
                 </div>
                 <div class="review-table-container">
                     <table class="review-table">
-                        <thead><tr><th><input type="checkbox" id="rev-master-check" checked></th><th>Status</th><th>Name</th><th>Category</th><th>Address</th><th>Phone</th><th>Email</th><th>Links</th></tr></thead>
+                        <thead><tr><th><input type="checkbox" id="rev-master-check"></th><th>Status</th><th>Name</th><th>Category</th><th>Address</th><th>Phone</th><th>Links</th></tr></thead>
                         <tbody id="rev-body"></tbody>
                     </table>
                 </div>
                 <div class="review-footer">
-                    <button class="btn-review-close" onclick="document.getElementById('review-modal').remove()">Cancel</button>
+                    <div id="rev-save-indicator" class="save-indicator"></div>
+                    <button class="btn-review-close" onclick="document.getElementById('review-modal').remove()">Close Workspace</button>
                     
                     <div class="tooltip-wrapper">
-                        <button class="btn-review-export" style="background:#10b981" id="rev-export-xlsx">Download Refined Excel</button>
-                        <span class="tooltip-text">Saves a complete Excel file containing all data for your selected leads.</span>
+                        <button class="btn-review-export" style="background:#10b981" id="rev-export-xlsx">Refined Master (.xlsx)</button>
+                        <span class="tooltip-text">Downloads a high-detail Excel file of your checked leads.</span>
                     </div>
 
                     <div class="tooltip-wrapper">
-                        <button class="btn-review-export" id="rev-export-csv">Download Refined CSV</button>
-                        <span class="tooltip-text">Saves a lightweight CSV file of selected leads, perfect for dialers or SMS tools.</span>
+                        <button class="btn-review-export" id="rev-export-zip">Refined Files (.zip)</button>
+                        <span class="tooltip-text">Generates a ZIP containing SMS lists, Email lists, and split files based on your selection.</span>
                     </div>
                 </div>
             </div>`;
@@ -127,14 +140,13 @@ window.rtrlApp.review = (function() {
 
         document.getElementById('rev-search').oninput = (e) => {
             const term = e.target.value.toLowerCase();
-            filteredData = masterData.filter(d => (d.BusinessName||"").toLowerCase().includes(term) || (d.StreetAddress||"").toLowerCase().includes(term) || (d.Category||"").toLowerCase().includes(term));
+            filteredData = masterData.filter(d => (d.BusinessName||"").toLowerCase().includes(term) || (d.StreetAddress||"").toLowerCase().includes(term));
             updateTable();
         };
-        document.getElementById('rev-master-check').onclick = (e) => { filteredData.forEach(d => d._checked = e.target.checked); updateTable(); };
-        document.getElementById('rev-only-active').onclick = () => { masterData.forEach(d => d._checked = d._reviewStatus === 'Active'); updateTable(); };
-        
-        document.getElementById('rev-export-xlsx').onclick = () => handleExport('xlsx');
-        document.getElementById('rev-export-csv').onclick = () => handleExport('csv');
+        document.getElementById('rev-master-check').onclick = (e) => { filteredData.forEach(d => d._checked = e.target.checked); updateTable(); debouncedSave(); };
+        document.getElementById('rev-only-active').onclick = () => { masterData.forEach(d => d._checked = d._reviewStatus === 'Active'); updateTable(); debouncedSave(); };
+        document.getElementById('rev-export-xlsx').onclick = () => exportMasterXLSX();
+        document.getElementById('rev-export-zip').onclick = () => exportRefinedZip();
     }
 
     function updateTable() {
@@ -142,52 +154,66 @@ window.rtrlApp.review = (function() {
             <tr class="row-${d._reviewStatus.toLowerCase()}">
                 <td><input type="checkbox" ${d._checked ? 'checked' : ''} onchange="window.rtrlApp.review.toggle(${d._id})"></td>
                 <td><span class="status-badge badge-${d._reviewStatus.toLowerCase()}">${d._reviewStatus}</span></td>
-                <td style="font-weight:600; color:#1e293b;">${d.BusinessName}</td>
-                <td style="color:#64748b; font-size:0.8rem;">${d.Category}</td>
-                <td style="font-size:0.8rem; color:#475569;">${d.StreetAddress || 'N/A'}</td>
+                <td style="font-weight:600">${d.BusinessName}</td>
+                <td style="color:#64748b; font-size:0.75rem">${d.Category}</td>
+                <td style="font-size:0.75rem">${d.StreetAddress || ''}</td>
                 <td>${d.Phone || ''}</td>
-                <td title="${d.Email1}">${d.Email1 ? d.Email1.substring(0,12)+'...' : ''}</td>
                 <td><div style="display:flex;gap:10px">
-                    ${d.Website ? `<a href="${d.Website}" target="_blank" style="color:#3b82f6"><i class="fas fa-external-link-alt"></i></a>` : ''}
-                    ${d.FacebookURL ? `<a href="${d.FacebookURL}" target="_blank" style="color:#1877f2"><i class="fab fa-facebook"></i></a>` : ''}
+                    ${d.Website ? `<a href="${d.Website}" target="_blank"><i class="fas fa-link"></i></a>` : ''}
                 </div></td>
             </tr>`).join('');
     }
 
-    function handleExport(type) {
+    function exportMasterXLSX() {
         const selected = masterData.filter(d => d._checked);
-        if (selected.length === 0) return alert("Select at least one business.");
-
-        const cleanData = selected.map(d => ({
-            BusinessName: d.BusinessName,
-            Category: d.Category,
-            Suburb: d.Suburb,
-            StreetAddress: d.StreetAddress,
-            Website: d.Website,
-            Phone: d.Phone,
-            Email1: d.Email1,
-            Email2: d.Email2,
-            Email3: d.Email3,
-            Facebook: d.FacebookURL,
-            Instagram: d.InstagramURL,
-            Rating: d.StarRating,
-            Reviews: d.ReviewCount
-        }));
-
-        const ws = XLSX.utils.json_to_sheet(cleanData);
+        if (!selected.length) return alert("Select leads first.");
+        const ws = XLSX.utils.json_to_sheet(selected.map(({_id, _reviewStatus, _checked, ...rest}) => rest));
         const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "Refined Leads");
+        XLSX.utils.book_append_sheet(wb, ws, "Master List");
+        XLSX.writeFile(wb, `Refined_Master_${currentJobId}.xlsx`);
+    }
 
-        const fileName = `Refined_Leads_${currentJobId}.${type}`;
-        if (type === 'xlsx') XLSX.writeFile(wb, fileName);
-        else XLSX.writeFile(wb, fileName, { bookType: 'csv' });
+    async function exportRefinedZip() {
+        const selected = masterData.filter(d => d._checked);
+        if (!selected.length) return alert("Select leads first.");
+
+        const zip = new JSZip();
         
-        document.getElementById('review-modal').remove();
+        // 1. Master Excel
+        const wsFull = XLSX.utils.json_to_sheet(selected.map(({_id, _reviewStatus, _checked, ...rest}) => rest));
+        const wbFull = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wbFull, wsFull, "Unique Leads");
+        zip.file("1_Master_List_Refined.xlsx", XLSX.write(wbFull, {type:'buffer', bookType:'xlsx'}));
+
+        // 2. SMS CSV
+        const smsData = selected.filter(d => d.Phone && d.Phone.startsWith('614')).map(d => ({
+            Name: d.BusinessName, Mobile: d.Phone, Category: d.Category
+        }));
+        if(smsData.length) {
+            const wsSms = XLSX.utils.json_to_sheet(smsData);
+            zip.file("2_Mobile_Numbers_Only.csv", XLSX.write({SheetNames:["S"], Sheets:{S:wsSms}}, {type:'buffer', bookType:'csv'}));
+        }
+
+        // 3. Email TXT List
+        const emails = selected.map(d => d.Email1).filter(e => e && e.includes('@'));
+        if(emails.length) zip.file("3_Clean_Email_List.txt", emails.join('\n'));
+
+        const content = await zip.generateAsync({type:"blob"});
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(content);
+        link.download = `Refined_Full_Collection_${currentJobId}.zip`;
+        link.click();
     }
 
     return {
         init,
-        toggle: (id) => { const item = masterData.find(d => d._id === id); if (item) item._checked = !item._checked; }
+        toggle: (id) => { 
+            const item = masterData.find(d => d._id === id); 
+            if (item) {
+                item._checked = !item._checked; 
+                debouncedSave();
+            }
+        }
     };
 })();
 document.addEventListener('DOMContentLoaded', () => window.rtrlApp.review.init());

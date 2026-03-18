@@ -190,3 +190,16 @@
     visibility: visible;
     opacity: 1;
 }
+
+.save-indicator {
+    font-size: 0.75rem;
+    color: #64748b;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-right: auto;
+    padding-left: 2rem;
+    opacity: 0;
+    transition: opacity 0.3s;
+}
+.save-indicator.visible { opacity: 1; }
