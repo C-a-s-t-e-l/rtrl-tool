@@ -203,3 +203,21 @@
     transition: opacity 0.3s;
 }
 .save-indicator.visible { opacity: 1; }
+
+.review-footer {
+    padding: 1.5rem 2rem;
+    background: #fff;
+    border-top: 1px solid #e2e8f0;
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 1rem;
+}
+
+.review-controls {
+    display: flex;
+    align-items: center;
+    gap: 1.25rem;
+    flex-grow: 1;
+    max-width: 700px;
+}
