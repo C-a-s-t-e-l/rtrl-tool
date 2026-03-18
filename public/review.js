@@ -2,6 +2,7 @@ window.rtrlApp.review = (function() {
     let masterData = [];
     let filteredData = [];
     let currentJobId = null;
+    let jobParams = {};
 
     function init() {
         const observer = new MutationObserver((mutations) => {
@@ -11,10 +12,14 @@ window.rtrlApp.review = (function() {
                         const containers = node.querySelectorAll('.action-buttons-container');
                         containers.forEach(container => {
                             if (!container.querySelector('.btn-review-trigger')) {
-                                const jobId = container.querySelector('.resend-email-btn').dataset.jobId;
+                                const resendBtn = container.querySelector('.resend-email-btn');
+                                if (!resendBtn) return;
+                                
+                                const jobId = resendBtn.dataset.jobId;
                                 const btn = document.createElement('button');
                                 btn.className = 'job-action-btn btn-review-trigger';
-                                btn.style.backgroundColor = '#f8fafc';
+                                btn.style.backgroundColor = '#f0f9ff';
+                                btn.style.borderColor = '#bae6fd';
                                 btn.innerHTML = `<i class="fas fa-list-check"></i> Review & Filter`;
                                 btn.onclick = () => openReview(jobId);
                                 container.appendChild(btn);
@@ -31,24 +36,27 @@ window.rtrlApp.review = (function() {
 
     async function openReview(jobId) {
         currentJobId = jobId;
-        const token = window.localStorage.getItem('sb-qbktnernawpprarckvzx-auth-token');
-        const parsedToken = JSON.parse(token)?.access_token;
         
-        const response = await fetch(`https://backend.rtrlprospector.space/api/jobs/history?search=${jobId}`, {
-            headers: { 'Authorization': `Bearer ${parsedToken}` }
-        });
-        const data = await response.json();
-        const job = data.jobs.find(j => j.id === jobId);
-        
-        const results = await fetchRawResults(jobId, parsedToken);
-        processData(results, job.parameters.exclusionList || []);
-        renderModal();
-    }
+        try {
+            const sbClient = supabase.createClient(window.CONFIG.SUPABASE_URL, window.CONFIG.SUPABASE_ANON_KEY);
+            const { data, error } = await sbClient
+                .from('jobs')
+                .select('results, parameters')
+                .eq('id', jobId)
+                .single();
 
-    async function fetchRawResults(jobId, token) {
-        const { data, error } = await supabase.createClient(window.CONFIG.SUPABASE_URL, window.CONFIG.SUPABASE_ANON_KEY)
-            .from('jobs').select('results').eq('id', jobId).single();
-        return data.results || [];
+            if (error || !data) throw new Error("Could not fetch job data");
+
+            jobParams = data.parameters || {};
+            const results = data.results || [];
+            const exclusionList = jobParams.exclusionList || [];
+
+            processData(results, exclusionList);
+            renderModal();
+        } catch (err) {
+            console.error("Review Error:", err);
+            alert("Failed to load data for review.");
+        }
     }
 
     function processData(results, exclusionList) {
@@ -56,7 +64,7 @@ window.rtrlApp.review = (function() {
         const norm = (s) => (s || "").toLowerCase().replace(/['’`.,()&]/g, "").replace(/\s+/g, "");
         const excl = (exclusionList || []).map(e => norm(e));
 
-        masterData = results.map(item => {
+        masterData = results.map((item, index) => {
             const name = norm(item.BusinessName);
             const fb = item.FacebookURL?.split('/').filter(p => p && !['p','pages','groups','company'].includes(p.toLowerCase())).pop()?.toLowerCase();
             const ig = item.InstagramURL?.split('/').filter(p => p).pop()?.toLowerCase();
@@ -68,12 +76,19 @@ window.rtrlApp.review = (function() {
             
             if (status === "Active") seen.add(signature);
 
-            return { ...item, _reviewStatus: status, _checked: status === "Active" };
+            return { 
+                ...item, 
+                _id: index,
+                _reviewStatus: status, 
+                _checked: status === "Active" 
+            };
         });
         filteredData = [...masterData];
     }
 
     function renderModal() {
+        if (document.getElementById('review-modal')) document.getElementById('review-modal').remove();
+
         const overlay = document.createElement('div');
         overlay.className = 'review-overlay';
         overlay.id = 'review-modal';
@@ -97,7 +112,7 @@ window.rtrlApp.review = (function() {
                     </div>
                     <div class="review-controls">
                         <input type="text" class="review-search" placeholder="Search by name, suburb, or category..." id="rev-search">
-                        <button class="btn-review-close" id="rev-only-active">Keep Active Only</button>
+                        <button class="btn-review-close" id="rev-only-active" style="white-space:nowrap">Reset to Active Only</button>
                     </div>
                 </div>
                 <div class="review-table-container">
@@ -119,7 +134,7 @@ window.rtrlApp.review = (function() {
                 </div>
                 <div class="review-footer">
                     <button class="btn-review-close" onclick="document.getElementById('review-modal').remove()">Cancel</button>
-                    <button class="btn-review-export" id="rev-export">Export Selection</button>
+                    <button class="btn-review-export" id="rev-export">Download Refined Selection</button>
                 </div>
             </div>
         `;
@@ -129,9 +144,9 @@ window.rtrlApp.review = (function() {
         document.getElementById('rev-search').oninput = (e) => {
             const term = e.target.value.toLowerCase();
             filteredData = masterData.filter(d => 
-                d.BusinessName.toLowerCase().includes(term) || 
-                d.Suburb.toLowerCase().includes(term) || 
-                d.Category.toLowerCase().includes(term)
+                (d.BusinessName || "").toLowerCase().includes(term) || 
+                (d.Suburb || "").toLowerCase().includes(term) || 
+                (d.Category || "").toLowerCase().includes(term)
             );
             updateTable();
         };
@@ -151,9 +166,9 @@ window.rtrlApp.review = (function() {
 
     function updateTable() {
         const tbody = document.getElementById('rev-body');
-        tbody.innerHTML = filteredData.map((d, i) => `
+        tbody.innerHTML = filteredData.map((d) => `
             <tr class="row-${d._reviewStatus.toLowerCase()}">
-                <td><input type="checkbox" ${d._checked ? 'checked' : ''} onchange="window.rtrlApp.review.toggle(${i})"></td>
+                <td><input type="checkbox" ${d._checked ? 'checked' : ''} onchange="window.rtrlApp.review.toggle(${d._id})"></td>
                 <td><span class="status-badge badge-${d._reviewStatus.toLowerCase()}">${d._reviewStatus}</span></td>
                 <td style="font-weight:600">${d.BusinessName}</td>
                 <td style="color:#64748b">${d.Category}</td>
@@ -175,34 +190,36 @@ window.rtrlApp.review = (function() {
         if (selected.length === 0) return alert("Select at least one business.");
         
         const btn = document.getElementById('rev-export');
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating...';
+        const originalText = btn.innerHTML;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
         btn.disabled = true;
 
-        const response = await fetch(`https://backend.rtrlprospector.space/api/jobs/history?search=${currentJobId}`, {
-            headers: { 'Authorization': `Bearer ${JSON.parse(window.localStorage.getItem('sb-qbktnernawpprarckvzx-auth-token')).access_token}` }
-        });
-        const jobData = await response.json();
-        const job = jobData.jobs[0];
-
-        const formData = new FormData();
-        formData.append('data', JSON.stringify(selected));
-        formData.append('params', JSON.stringify(job.parameters.searchParamsForEmail));
-
-        const res = await fetch(`${window.BACKEND_URL}/api/jobs/${currentJobId}/download/all?authToken=${JSON.parse(window.localStorage.getItem('sb-qbktnernawpprarckvzx-auth-token')).access_token}`);
-        const blob = await res.blob();
-        const link = document.createElement('a');
-        link.href = window.URL.createObjectURL(blob);
-        link.download = `Refined_Results_${currentJobId}.zip`;
-        link.click();
-        
-        btn.innerHTML = 'Export Selection';
-        btn.disabled = false;
-        document.getElementById('review-modal').remove();
+        try {
+            const storage = window.localStorage.getItem('sb-qbktnernawpprarckvzx-auth-token');
+            const token = JSON.parse(storage)?.access_token;
+            
+            const res = await fetch(`https://backend.rtrlprospector.space/api/jobs/${currentJobId}/download/all?authToken=${token}`);
+            const blob = await res.blob();
+            const link = document.createElement('a');
+            link.href = window.URL.createObjectURL(blob);
+            link.download = `Refined_Results_${currentJobId}.zip`;
+            link.click();
+            
+            document.getElementById('review-modal').remove();
+        } catch (err) {
+            alert("Export failed.");
+        } finally {
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+        }
     }
 
     return {
         init,
-        toggle: (idx) => { filteredData[idx]._checked = !filteredData[idx]._checked; }
+        toggle: (id) => { 
+            const item = masterData.find(d => d._id === id);
+            if (item) item._checked = !item._checked; 
+        }
     };
 })();
 
