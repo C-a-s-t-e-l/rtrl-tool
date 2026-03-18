@@ -39,18 +39,12 @@ window.rtrlApp.review = (function() {
         try {
             const sbClient = supabase.createClient(window.CONFIG.SUPABASE_URL, window.CONFIG.SUPABASE_ANON_KEY);
             const { data, error } = await sbClient
-                .from('jobs')
-                .select('results, parameters')
-                .eq('id', jobId)
-                .single();
+                .from('jobs').select('results, parameters').eq('id', jobId).single();
 
             if (error || !data) throw new Error("Could not fetch job data");
 
             jobParams = data.parameters || {};
-            const results = data.results || [];
-            const exclusionList = jobParams.exclusionList || [];
-
-            processData(results, exclusionList);
+            processData(data.results || [], jobParams.exclusionList || []);
             renderModal();
         } catch (err) {
             console.error("Review Error:", err);
@@ -70,20 +64,11 @@ window.rtrlApp.review = (function() {
             const signature = fb && ig ? `SOC:${fb}_${ig}` : `NAME:${name.substring(0,15)}`;
             
             let status = "Active";
-            if (excl.some(ex => name.includes(ex))) {
-                status = "Excluded";
-            } else if (seen.has(signature)) {
-                status = "Duplicate";
-            }
-            
+            if (excl.some(ex => name.includes(ex))) status = "Excluded";
+            else if (seen.has(signature)) status = "Duplicate";
             if (status === "Active") seen.add(signature);
 
-            return { 
-                ...item, 
-                _id: index,
-                _reviewStatus: status, 
-                _checked: status === "Active" 
-            };
+            return { ...item, _id: index, _reviewStatus: status, _checked: status === "Active" };
         });
         filteredData = [...masterData];
     }
@@ -91,144 +76,118 @@ window.rtrlApp.review = (function() {
     function renderModal() {
         if (document.getElementById('review-modal')) document.getElementById('review-modal').remove();
 
-        const overlay = document.createElement('div');
-        overlay.className = 'review-overlay';
-        overlay.id = 'review-modal';
-        
+        const s = jobParams.searchParamsForEmail || {};
+        const title = `${s.customCategory || s.primaryCategory || "Search"} in ${s.area || "Area"}${jobParams.radiusKm ? ` (${jobParams.radiusKm}km)` : ""}`;
         const counts = {
             active: masterData.filter(d => d._reviewStatus === 'Active').length,
             dup: masterData.filter(d => d._reviewStatus === 'Duplicate').length,
             excl: masterData.filter(d => d._reviewStatus === 'Excluded').length
         };
 
-        const s = jobParams.searchParamsForEmail || {};
-        const cat = s.customCategory || s.primaryCategory || "General Search";
-        const loc = s.area || "Selected Area";
-        const rad = jobParams.radiusKm ? ` (${jobParams.radiusKm}km Radius)` : "";
-        const detailedTitle = `${cat} in ${loc}${rad}`;
-
+        const overlay = document.createElement('div');
+        overlay.className = 'review-overlay';
+        overlay.id = 'review-modal';
         overlay.innerHTML = `
             <div class="review-window">
                 <div class="review-header">
-                    <div style="flex: 1">
-                        <h3 style="margin:0; font-size: 1.1rem; color: #1e293b;">${detailedTitle}</h3>
+                    <div style="flex: 1"><h3 style="margin:0; font-size: 1.1rem; color: #1e293b;">${title}</h3>
                         <div class="review-summary" style="margin-top:8px">
-                            <span class="sum-pill sum-active">${counts.active} Unique Leads</span>
-                            <span class="sum-pill sum-dup">${counts.dup} Flagged Duplicates</span>
+                            <span class="sum-pill sum-active">${counts.active} Unique</span>
+                            <span class="sum-pill sum-dup">${counts.dup} Duplicates</span>
                             <span class="sum-pill sum-excl">${counts.excl} Excluded</span>
                         </div>
                     </div>
                     <div class="review-controls">
-                        <input type="text" class="review-search" placeholder="Quick filter by name, address or category..." id="rev-search">
-                        <button class="btn-review-close" id="rev-only-active" style="white-space:nowrap; background: #fff; border: 1px solid #cbd5e1;">Reset to Active Only</button>
+                        <input type="text" class="review-search" placeholder="Quick filter..." id="rev-search">
+                        <button class="btn-review-close" id="rev-only-active" style="white-space:nowrap; background:#fff; border:1px solid #cbd5e1;">Reset to Active Only</button>
                     </div>
                 </div>
                 <div class="review-table-container">
                     <table class="review-table">
-                        <thead>
-                            <tr>
-                                <th style="width: 40px"><input type="checkbox" id="rev-master-check" checked></th>
-                                <th style="width: 100px">Status</th>
-                                <th style="width: 250px">Business Name</th>
-                                <th style="width: 150px">Category</th>
-                                <th style="width: 300px">Street Address</th>
-                                <th style="width: 120px">Phone</th>
-                                <th style="width: 150px">Email</th>
-                                <th style="width: 80px">Links</th>
-                            </tr>
-                        </thead>
+                        <thead><tr><th><input type="checkbox" id="rev-master-check" checked></th><th>Status</th><th>Name</th><th>Category</th><th>Address</th><th>Phone</th><th>Email</th><th>Links</th></tr></thead>
                         <tbody id="rev-body"></tbody>
                     </table>
                 </div>
                 <div class="review-footer">
                     <button class="btn-review-close" onclick="document.getElementById('review-modal').remove()">Cancel</button>
-                    <button class="btn-review-export" id="rev-export">Download Refined Selection (.zip)</button>
+                    
+                    <div class="tooltip-wrapper">
+                        <button class="btn-review-export" style="background:#10b981" id="rev-export-xlsx">Download Refined Excel</button>
+                        <span class="tooltip-text">Saves a complete Excel file containing all data for your selected leads.</span>
+                    </div>
+
+                    <div class="tooltip-wrapper">
+                        <button class="btn-review-export" id="rev-export-csv">Download Refined CSV</button>
+                        <span class="tooltip-text">Saves a lightweight CSV file of selected leads, perfect for dialers or SMS tools.</span>
+                    </div>
                 </div>
-            </div>
-        `;
+            </div>`;
         document.body.appendChild(overlay);
         updateTable();
 
         document.getElementById('rev-search').oninput = (e) => {
             const term = e.target.value.toLowerCase();
-            filteredData = masterData.filter(d => 
-                (d.BusinessName || "").toLowerCase().includes(term) || 
-                (d.StreetAddress || "").toLowerCase().includes(term) || 
-                (d.Category || "").toLowerCase().includes(term)
-            );
+            filteredData = masterData.filter(d => (d.BusinessName||"").toLowerCase().includes(term) || (d.StreetAddress||"").toLowerCase().includes(term) || (d.Category||"").toLowerCase().includes(term));
             updateTable();
         };
-
-        document.getElementById('rev-master-check').onclick = (e) => {
-            filteredData.forEach(d => d._checked = e.target.checked);
-            updateTable();
-        };
-
-        document.getElementById('rev-only-active').onclick = () => {
-            masterData.forEach(d => d._checked = d._reviewStatus === 'Active');
-            updateTable();
-        };
-
-        document.getElementById('rev-export').onclick = handleExport;
+        document.getElementById('rev-master-check').onclick = (e) => { filteredData.forEach(d => d._checked = e.target.checked); updateTable(); };
+        document.getElementById('rev-only-active').onclick = () => { masterData.forEach(d => d._checked = d._reviewStatus === 'Active'); updateTable(); };
+        
+        document.getElementById('rev-export-xlsx').onclick = () => handleExport('xlsx');
+        document.getElementById('rev-export-csv').onclick = () => handleExport('csv');
     }
 
     function updateTable() {
-        const tbody = document.getElementById('rev-body');
-        tbody.innerHTML = filteredData.map((d) => `
+        document.getElementById('rev-body').innerHTML = filteredData.map((d) => `
             <tr class="row-${d._reviewStatus.toLowerCase()}">
                 <td><input type="checkbox" ${d._checked ? 'checked' : ''} onchange="window.rtrlApp.review.toggle(${d._id})"></td>
                 <td><span class="status-badge badge-${d._reviewStatus.toLowerCase()}">${d._reviewStatus}</span></td>
-                <td style="font-weight:600; color: #1e293b;">${d.BusinessName}</td>
-                <td style="color:#64748b; font-size: 0.8rem;">${d.Category}</td>
-                <td style="font-size: 0.8rem; color: #475569;">${d.StreetAddress || 'N/A'}</td>
+                <td style="font-weight:600; color:#1e293b;">${d.BusinessName}</td>
+                <td style="color:#64748b; font-size:0.8rem;">${d.Category}</td>
+                <td style="font-size:0.8rem; color:#475569;">${d.StreetAddress || 'N/A'}</td>
                 <td>${d.Phone || ''}</td>
-                <td title="${d.Email1}">${d.Email1 ? d.Email1.substring(0,15)+'...' : ''}</td>
-                <td>
-                    <div style="display:flex;gap:10px">
-                        ${d.Website ? `<a href="${d.Website}" target="_blank" style="color: #3b82f6"><i class="fas fa-external-link-alt"></i></a>` : ''}
-                        ${d.FacebookURL ? `<a href="${d.FacebookURL}" target="_blank" style="color:#1877f2"><i class="fab fa-facebook"></i></a>` : ''}
-                    </div>
-                </td>
-            </tr>
-        `).join('');
+                <td title="${d.Email1}">${d.Email1 ? d.Email1.substring(0,12)+'...' : ''}</td>
+                <td><div style="display:flex;gap:10px">
+                    ${d.Website ? `<a href="${d.Website}" target="_blank" style="color:#3b82f6"><i class="fas fa-external-link-alt"></i></a>` : ''}
+                    ${d.FacebookURL ? `<a href="${d.FacebookURL}" target="_blank" style="color:#1877f2"><i class="fab fa-facebook"></i></a>` : ''}
+                </div></td>
+            </tr>`).join('');
     }
 
-    async function handleExport() {
+    function handleExport(type) {
         const selected = masterData.filter(d => d._checked);
         if (selected.length === 0) return alert("Select at least one business.");
-        
-        const btn = document.getElementById('rev-export');
-        const originalText = btn.innerHTML;
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
-        btn.disabled = true;
 
-        try {
-            const storage = window.localStorage.getItem('sb-qbktnernawpprarckvzx-auth-token');
-            const token = JSON.parse(storage)?.access_token;
-            
-            const res = await fetch(`https://backend.rtrlprospector.space/api/jobs/${currentJobId}/download/all?authToken=${token}`);
-            const blob = await res.blob();
-            const link = document.createElement('a');
-            link.href = window.URL.createObjectURL(blob);
-            link.download = `Refined_Results_${currentJobId}.zip`;
-            link.click();
-            
-            document.getElementById('review-modal').remove();
-        } catch (err) {
-            alert("Export failed.");
-        } finally {
-            btn.innerHTML = originalText;
-            btn.disabled = false;
-        }
+        const cleanData = selected.map(d => ({
+            BusinessName: d.BusinessName,
+            Category: d.Category,
+            Suburb: d.Suburb,
+            StreetAddress: d.StreetAddress,
+            Website: d.Website,
+            Phone: d.Phone,
+            Email1: d.Email1,
+            Email2: d.Email2,
+            Email3: d.Email3,
+            Facebook: d.FacebookURL,
+            Instagram: d.InstagramURL,
+            Rating: d.StarRating,
+            Reviews: d.ReviewCount
+        }));
+
+        const ws = XLSX.utils.json_to_sheet(cleanData);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Refined Leads");
+
+        const fileName = `Refined_Leads_${currentJobId}.${type}`;
+        if (type === 'xlsx') XLSX.writeFile(wb, fileName);
+        else XLSX.writeFile(wb, fileName, { bookType: 'csv' });
+        
+        document.getElementById('review-modal').remove();
     }
 
     return {
         init,
-        toggle: (id) => { 
-            const item = masterData.find(d => d._id === id);
-            if (item) item._checked = !item._checked; 
-        }
+        toggle: (id) => { const item = masterData.find(d => d._id === id); if (item) item._checked = !item._checked; }
     };
 })();
-
 document.addEventListener('DOMContentLoaded', () => window.rtrlApp.review.init());
