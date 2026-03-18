@@ -36,7 +36,6 @@ window.rtrlApp.review = (function() {
 
     async function openReview(jobId) {
         currentJobId = jobId;
-        
         try {
             const sbClient = supabase.createClient(window.CONFIG.SUPABASE_URL, window.CONFIG.SUPABASE_ANON_KEY);
             const { data, error } = await sbClient
@@ -71,8 +70,11 @@ window.rtrlApp.review = (function() {
             const signature = fb && ig ? `SOC:${fb}_${ig}` : `NAME:${name.substring(0,15)}`;
             
             let status = "Active";
-            if (excl.some(ex => name.includes(ex))) status = "Excluded";
-            else if (seen.has(signature)) status = "Duplicate";
+            if (excl.some(ex => name.includes(ex))) {
+                status = "Excluded";
+            } else if (seen.has(signature)) {
+                status = "Duplicate";
+            }
             
             if (status === "Active") seen.add(signature);
 
@@ -99,34 +101,40 @@ window.rtrlApp.review = (function() {
             excl: masterData.filter(d => d._reviewStatus === 'Excluded').length
         };
 
+        const s = jobParams.searchParamsForEmail || {};
+        const cat = s.customCategory || s.primaryCategory || "General Search";
+        const loc = s.area || "Selected Area";
+        const rad = jobParams.radiusKm ? ` (${jobParams.radiusKm}km Radius)` : "";
+        const detailedTitle = `${cat} in ${loc}${rad}`;
+
         overlay.innerHTML = `
             <div class="review-window">
                 <div class="review-header">
-                    <div>
-                        <h3 style="margin:0">Data Quality Review</h3>
+                    <div style="flex: 1">
+                        <h3 style="margin:0; font-size: 1.1rem; color: #1e293b;">${detailedTitle}</h3>
                         <div class="review-summary" style="margin-top:8px">
-                            <span class="sum-pill sum-active">${counts.active} Active</span>
-                            <span class="sum-pill sum-dup">${counts.dup} Duplicates</span>
+                            <span class="sum-pill sum-active">${counts.active} Unique Leads</span>
+                            <span class="sum-pill sum-dup">${counts.dup} Flagged Duplicates</span>
                             <span class="sum-pill sum-excl">${counts.excl} Excluded</span>
                         </div>
                     </div>
                     <div class="review-controls">
-                        <input type="text" class="review-search" placeholder="Search by name, suburb, or category..." id="rev-search">
-                        <button class="btn-review-close" id="rev-only-active" style="white-space:nowrap">Reset to Active Only</button>
+                        <input type="text" class="review-search" placeholder="Quick filter by name, address or category..." id="rev-search">
+                        <button class="btn-review-close" id="rev-only-active" style="white-space:nowrap; background: #fff; border: 1px solid #cbd5e1;">Reset to Active Only</button>
                     </div>
                 </div>
                 <div class="review-table-container">
                     <table class="review-table">
                         <thead>
                             <tr>
-                                <th><input type="checkbox" id="rev-master-check" checked></th>
-                                <th>Status</th>
-                                <th>Business Name</th>
-                                <th>Category</th>
-                                <th>Suburb</th>
-                                <th>Phone</th>
-                                <th>Email</th>
-                                <th>Links</th>
+                                <th style="width: 40px"><input type="checkbox" id="rev-master-check" checked></th>
+                                <th style="width: 100px">Status</th>
+                                <th style="width: 250px">Business Name</th>
+                                <th style="width: 150px">Category</th>
+                                <th style="width: 300px">Street Address</th>
+                                <th style="width: 120px">Phone</th>
+                                <th style="width: 150px">Email</th>
+                                <th style="width: 80px">Links</th>
                             </tr>
                         </thead>
                         <tbody id="rev-body"></tbody>
@@ -134,7 +142,7 @@ window.rtrlApp.review = (function() {
                 </div>
                 <div class="review-footer">
                     <button class="btn-review-close" onclick="document.getElementById('review-modal').remove()">Cancel</button>
-                    <button class="btn-review-export" id="rev-export">Download Refined Selection</button>
+                    <button class="btn-review-export" id="rev-export">Download Refined Selection (.zip)</button>
                 </div>
             </div>
         `;
@@ -145,7 +153,7 @@ window.rtrlApp.review = (function() {
             const term = e.target.value.toLowerCase();
             filteredData = masterData.filter(d => 
                 (d.BusinessName || "").toLowerCase().includes(term) || 
-                (d.Suburb || "").toLowerCase().includes(term) || 
+                (d.StreetAddress || "").toLowerCase().includes(term) || 
                 (d.Category || "").toLowerCase().includes(term)
             );
             updateTable();
@@ -170,14 +178,14 @@ window.rtrlApp.review = (function() {
             <tr class="row-${d._reviewStatus.toLowerCase()}">
                 <td><input type="checkbox" ${d._checked ? 'checked' : ''} onchange="window.rtrlApp.review.toggle(${d._id})"></td>
                 <td><span class="status-badge badge-${d._reviewStatus.toLowerCase()}">${d._reviewStatus}</span></td>
-                <td style="font-weight:600">${d.BusinessName}</td>
-                <td style="color:#64748b">${d.Category}</td>
-                <td>${d.Suburb}</td>
-                <td>${d.Phone}</td>
-                <td title="${d.Email1}">${d.Email1 ? d.Email1.substring(0,12)+'...' : ''}</td>
+                <td style="font-weight:600; color: #1e293b;">${d.BusinessName}</td>
+                <td style="color:#64748b; font-size: 0.8rem;">${d.Category}</td>
+                <td style="font-size: 0.8rem; color: #475569;">${d.StreetAddress || 'N/A'}</td>
+                <td>${d.Phone || ''}</td>
+                <td title="${d.Email1}">${d.Email1 ? d.Email1.substring(0,15)+'...' : ''}</td>
                 <td>
-                    <div style="display:flex;gap:8px">
-                        ${d.Website ? `<a href="${d.Website}" target="_blank"><i class="fas fa-external-link-alt"></i></a>` : ''}
+                    <div style="display:flex;gap:10px">
+                        ${d.Website ? `<a href="${d.Website}" target="_blank" style="color: #3b82f6"><i class="fas fa-external-link-alt"></i></a>` : ''}
                         ${d.FacebookURL ? `<a href="${d.FacebookURL}" target="_blank" style="color:#1877f2"><i class="fab fa-facebook"></i></a>` : ''}
                     </div>
                 </td>
