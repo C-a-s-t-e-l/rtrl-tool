@@ -53,7 +53,6 @@ window.rtrlApp.review = (function() {
         masterData = results.map((item, index) => {
             const name = norm(item.BusinessName);
             const signature = `NAME:${name.substring(0,15)}_${norm(item.StreetAddress)}`;
-            
             let status = "Active";
             if (excl.some(ex => name.includes(ex))) status = "Excluded";
             else if (seen.has(signature)) status = "Duplicate";
@@ -71,15 +70,12 @@ window.rtrlApp.review = (function() {
             indicator.innerHTML = '<i class="fas fa-sync fa-spin"></i> Saving changes...';
             indicator.classList.add('visible');
         }
-
         const resultsToSave = masterData.map(item => {
             const { _id, _reviewStatus, _checked, ...cleanItem } = item;
             return { ...cleanItem, _selected: _checked };
         });
-
         const sbClient = supabase.createClient(window.CONFIG.SUPABASE_URL, window.CONFIG.SUPABASE_ANON_KEY);
         await sbClient.from('jobs').update({ results: resultsToSave }).eq('id', currentJobId);
-
         setTimeout(() => {
             if (indicator) indicator.innerHTML = '<i class="fas fa-check"></i> Changes saved';
         }, 500);
@@ -100,7 +96,6 @@ window.rtrlApp.review = (function() {
         if (document.getElementById('review-modal')) document.getElementById('review-modal').remove();
         const s = jobParams.searchParamsForEmail || {};
         const title = `${s.customCategory || s.primaryCategory || "Search"} in ${s.area || "Area"}${jobParams.radiusKm ? ` (${jobParams.radiusKm}km Radius)` : ""}`;
-
         const counts = {
             active: masterData.filter(d => d._reviewStatus === 'Active').length,
             dup: masterData.filter(d => d._reviewStatus === 'Duplicate').length,
@@ -116,7 +111,7 @@ window.rtrlApp.review = (function() {
                     <div style="flex: 1">
                         <h3 style="margin:0; font-size: 1.1rem; color: #1e293b;">${title}</h3>
                         <div class="review-summary">
-                            <span id="rev-selection-count" class="sum-pill sum-active" style="background:#e0f2fe; color:#0369a1; border: 1px solid #bae6fd;">0 SELECTED FOR EXPORT</span>
+                            <span id="rev-selection-count" class="sum-pill sum-active" style="background:#e0f2fe; color:#0369a1; border: 1px solid #bae6fd;">0 SELECTED</span>
                             <span class="sum-pill sum-active">${counts.active} Unique</span>
                             <span class="sum-pill sum-dup">${counts.dup} Duplicates</span>
                             <span class="sum-pill sum-excl">${counts.excl} Excluded</span>
@@ -147,15 +142,13 @@ window.rtrlApp.review = (function() {
                 <div class="review-footer">
                     <div id="rev-save-indicator" class="save-indicator"></div>
                     <button class="btn-review-close" onclick="document.getElementById('review-modal').remove()">Close Workspace</button>
-                    
                     <div class="tooltip-wrapper">
                         <button class="btn-review-export" style="background:#10b981" id="rev-export-xlsx">Refined Masterlist (.xlsx)</button>
-                        <span class="tooltip-text">Downloads a high-detail Excel file of your checked leads.</span>
+                        <span class="tooltip-text">Downloads a high-detail Excel file matching the 'Full_DuplicatesRemoved' format.</span>
                     </div>
-
                     <div class="tooltip-wrapper">
                         <button class="btn-review-export" id="rev-export-zip">Refined Full File (.zip)</button>
-                        <span class="tooltip-text">Generates a ZIP containing SMS lists, Email lists, and split files based on your selection.</span>
+                        <span class="tooltip-text">Generates a ZIP containing the cleaned Masterlist, SMS CSV, and Email list.</span>
                     </div>
                 </div>
             </div>`;
@@ -185,47 +178,100 @@ window.rtrlApp.review = (function() {
                 <td style="font-size:0.8rem; color:#3b82f6" title="${d.Email1}">${d.Email1 ? d.Email1.substring(0,18)+'...' : ''}</td>
                 <td style="font-size:0.85rem">${d.Phone || ''}</td>
                 <td><div style="display:flex; gap:12px; font-size: 1rem">
-                    ${d.Website ? `<a href="${d.Website}" target="_blank" style="color:#64748b" title="Website"><i class="fas fa-link"></i></a>` : ''}
-                    ${d.FacebookURL ? `<a href="${d.FacebookURL}" target="_blank" style="color:#1877f2" title="Facebook"><i class="fab fa-facebook"></i></a>` : ''}
-                    ${d.InstagramURL ? `<a href="${d.InstagramURL}" target="_blank" style="color:#e4405f" title="Instagram"><i class="fab fa-instagram"></i></a>` : ''}
+                    ${d.Website ? `<a href="${d.Website}" target="_blank" style="color:#64748b"><i class="fas fa-link"></i></a>` : ''}
+                    ${d.FacebookURL ? `<a href="${d.FacebookURL}" target="_blank" style="color:#1877f2"><i class="fab fa-facebook"></i></a>` : ''}
+                    ${d.InstagramURL ? `<a href="${d.InstagramURL}" target="_blank" style="color:#e4405f"><i class="fab fa-instagram"></i></a>` : ''}
                 </div></td>
             </tr>`).join('');
+    }
+
+    const createLink = (url) => {
+        if (!url || typeof url !== 'string' || !url.trim()) return '';
+        if (url.length > 250) return url;
+        return { f: `HYPERLINK("${url}", "${url}")`, v: url, t: 's' };
+    };
+
+    function mapToMaster(selected) {
+        return selected.map(item => ({
+            "BusinessName": item.BusinessName,
+            "Category": item.Category,
+            "Suburb/Area": item.Suburb,
+            "StreetAddress": item.StreetAddress,
+            "Website": createLink(item.Website),
+            "OwnerName": item.OwnerName,
+            "Email 1": item.Email1,
+            "Email 2": item.Email2,
+            "Email 3": item.Email3,
+            "Phone": item.Phone,
+            "InstagramURL": createLink(item.InstagramURL),
+            "FacebookURL": createLink(item.FacebookURL),
+            "GoogleMapsURL": createLink(item.GoogleMapsURL),
+            "StarRating": item.StarRating,
+            "ReviewCount": item.ReviewCount
+        }));
     }
 
     function exportMasterXLSX() {
         const selected = masterData.filter(d => d._checked);
         if (!selected.length) return alert("Select leads first.");
-        const ws = XLSX.utils.json_to_sheet(selected.map(({_id, _reviewStatus, _checked, ...rest}) => rest));
+        const formatted = mapToMaster(selected);
+        const ws = XLSX.utils.json_to_sheet(formatted);
         const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "Master List");
-        XLSX.writeFile(wb, `Refined_Masterlist_${currentJobId}.xlsx`);
+        XLSX.utils.book_append_sheet(wb, ws, "Business List (Unique)");
+        XLSX.writeFile(wb, `Refined_Full_DuplicatesRemoved_${currentJobId}.xlsx`);
     }
 
     async function exportRefinedZip() {
         const selected = masterData.filter(d => d._checked);
         if (!selected.length) return alert("Select leads first.");
         const zip = new JSZip();
-        
-        const wsFull = XLSX.utils.json_to_sheet(selected.map(({_id, _reviewStatus, _checked, ...rest}) => rest));
+
+        // 1. Refined Master
+        const formattedMaster = mapToMaster(selected);
+        const wsFull = XLSX.utils.json_to_sheet(formattedMaster);
         const wbFull = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wbFull, wsFull, "Leads");
-        zip.file("1_Master_List_Refined.xlsx", XLSX.write(wbFull, {type:'buffer', bookType:'xlsx'}));
+        XLSX.utils.book_append_sheet(wbFull, wsFull, "Business List (Unique)");
+        zip.file(`Refined_Full_DuplicatesRemoved_${currentJobId}.xlsx`, XLSX.write(wbFull, {type:'buffer', bookType:'xlsx'}));
 
-        const smsData = selected.filter(d => d.Phone && d.Phone.startsWith('614')).map(d => ({
-            Name: d.BusinessName, Mobile: d.Phone, Category: d.Category
-        }));
-        if(smsData.length) {
-            const wsSms = XLSX.utils.json_to_sheet(smsData);
-            zip.file("2_Mobile_Numbers_Only.csv", XLSX.write({SheetNames:["S"], Sheets:{S:wsSms}}, {type:'buffer', bookType:'csv'}));
-        }
+        // 2. Refined SMS CSV
+        const smsData = selected.filter(b => b.Phone && b.Phone.startsWith("614")).map(b => {
+            let firstName = "", lastName = "";
+            if (b.OwnerName && b.OwnerName.trim() !== "") {
+                const parts = b.OwnerName.trim().split(" ");
+                firstName = parts.shift();
+                lastName = parts.join(" ");
+            }
+            return {
+                FirstName: firstName, LastName: lastName, Organization: b.BusinessName || "",
+                Email: b.Email1 || "", FaxNumber: "", MobileNumber: b.Phone || "",
+                CustomField1: b.Category || "", CustomField2: b.Suburb || "",
+                CustomField3: "", CustomField4: "", Unsubscribed: ""
+            };
+        });
+        const wsSms = XLSX.utils.json_to_sheet(smsData, { header: ["FirstName", "LastName", "Organization", "Email", "FaxNumber", "MobileNumber", "CustomField1", "CustomField2", "CustomField3", "CustomField4", "Unsubscribed"] });
+        zip.file(`Refined_Mobile_Numbers_Only_${currentJobId}.csv`, XLSX.write({SheetNames:["S"], Sheets:{S:wsSms}}, {type:'buffer', bookType:'csv'}));
 
-        const emails = selected.map(d => d.Email1).filter(e => e && e.includes('@'));
-        if(emails.length) zip.file("3_Clean_Email_List.txt", emails.join('\n'));
+        // 3. Refined Contacts CSV
+        const contactsData = selected.filter(d => d.Email1 || d.Email2 || d.Email3).map(d => {
+            let state = '';
+            if (d.StreetAddress) {
+                const match = d.StreetAddress.match(/\b([A-Z]{2,3})\b(?= \d{4,})/);
+                state = match ? match[1] : '';
+            }
+            return {
+                "Company": d.BusinessName || '', "Address_Suburb": d.Suburb || '', "Address_State": state,
+                "Notes": `Refined_Search_${currentJobId}`, "Category": d.Category || '',
+                "email_1": d.Email1 || '', "email_2": d.Email2 || '', "email_3": d.Email3 || '',
+                "facebook": d.FacebookURL || '', "instagram": d.InstagramURL || '', "linkedin": '',
+            };
+        });
+        const wsContacts = XLSX.utils.json_to_sheet(contactsData, { header: ["Company", "Address_Suburb", "Address_State", "Notes", "Category", "facebook", "instagram", "linkedin", "email_1", "email_2", "email_3"] });
+        zip.file(`Refined_Full_DuplicatesRemoved_Emails_${currentJobId}.csv`, XLSX.write({SheetNames:["C"], Sheets:{C:wsContacts}}, {type:'buffer', bookType:'csv'}));
 
         const content = await zip.generateAsync({type:"blob"});
         const link = document.createElement('a');
         link.href = URL.createObjectURL(content);
-        link.download = `Refined_Full_File_${currentJobId}.zip`;
+        link.download = `Refined_Full_Collection_${currentJobId}.zip`;
         link.click();
     }
 
