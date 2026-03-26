@@ -5,7 +5,7 @@ window.rtrlApp.review = (function() {
     let jobParams = {};
     let saveTimeout = null;
     let currentSort = { key: 'BusinessName', dir: 'asc' };
-    let activeFilters = { search: '', contact: 'all', rating: 0, hasWebsite: false };
+    let activeFilters = { search: '', contact: 'all', rating: 0, ownerType: 'all' };
 
     function init() {
         const observer = new MutationObserver((mutations) => {
@@ -71,8 +71,19 @@ window.rtrlApp.review = (function() {
         if (activeFilters.contact === 'mobile') data = data.filter(d => (d.Phone || "").startsWith('614') || (d.Phone || "").startsWith('04'));
         else if (activeFilters.contact === 'email') data = data.filter(d => d.Email1);
         else if (activeFilters.contact === 'both') data = data.filter(d => d.Email1 && ((d.Phone || "").startsWith('614') || (d.Phone || "").startsWith('04')));
+        
         if (activeFilters.rating > 0) data = data.filter(d => parseFloat(d.StarRating || 0) >= activeFilters.rating);
-        if (activeFilters.hasWebsite) data = data.filter(d => d.Website);
+        
+        if (activeFilters.ownerType !== 'all') {
+            data = data.filter(d => {
+                const name = (d.OwnerName || "").toLowerCase();
+                if (activeFilters.ownerType === 'private') return name === 'private owner' || !name;
+                const isEntity = name.includes('pty') || name.includes('ltd') || name.includes('inc') || name.includes('corp');
+                if (activeFilters.ownerType === 'entity') return isEntity && name !== 'private owner';
+                if (activeFilters.ownerType === 'human') return !isEntity && name !== 'private owner' && name.length > 2;
+                return true;
+            });
+        }
 
         const k = currentSort.key;
         const d = currentSort.dir === 'asc' ? 1 : -1;
@@ -103,38 +114,40 @@ window.rtrlApp.review = (function() {
         overlay.innerHTML = `
             <div class="review-window">
                 <div class="review-header">
-                    <div style="flex:1"><h3 style="margin:0; font-size:1.1rem; color:#1e293b;">${s.customCategory || s.primaryCategory || "Search"} in ${s.area || "Area"}${jobParams.radiusKm ? ` (${jobParams.radiusKm}km)` : ""}</h3>
-                        <div class="review-summary">
-                            <span id="rev-sel-count" class="sum-pill" style="background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd;">0 SELECTED</span>
-                            <span class="sum-pill sum-active">${masterData.filter(d=>d._reviewStatus==='Active').length} Unique</span>
-                            <span class="sum-pill sum-dup">${masterData.filter(d=>d._reviewStatus==='Duplicate').length} Dups</span>
-                            <span class="sum-pill sum-excl">${masterData.filter(d=>d._reviewStatus==='Excluded').length} Excl</span>
-                        </div>
+                    <div class="header-left-group">
+                        <span id="rev-sel-count" class="sum-pill" style="background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd;">0 SELECTED</span>
+                        <span class="sum-pill sum-active">${masterData.filter(d=>d._reviewStatus==='Active').length} Unique</span>
+                        <span class="sum-pill sum-dup">${masterData.filter(d=>d._reviewStatus==='Duplicate').length} Dups</span>
+                        <span class="sum-pill sum-excl">${masterData.filter(d=>d._reviewStatus==='Excluded').length} Excl</span>
                     </div>
-                    <div class="review-controls" style="display:flex; gap:10px;">
-                        <input type="text" class="review-search" placeholder="Search by name, category, address..." id="rev-search" value="${activeFilters.search}">
-                        <button class="btn-review-close" id="rev-only-active" style="white-space:nowrap; padding:0 20px;">Reset to Active Only</button>
-                    </div>
+                    <input type="text" class="review-search" placeholder="Search by name, category, address..." id="rev-search" value="${activeFilters.search}">
+                    <button class="btn-review-close" id="rev-only-active" style="white-space:nowrap; padding:8px 20px;">Reset to Active Only</button>
                 </div>
                 <div class="review-toolbar">
                     <div class="tool-row">
-                        <span style="font-size:0.7rem; font-weight:700; color:#94a3b8; text-transform:uppercase;">Contact:</span>
+                        <span class="filter-label">Contact:</span>
                         <button class="filter-pill ${activeFilters.contact==='all'?'active':''}" data-type="contact" data-val="all">All</button>
-                        <button class="filter-pill ${activeFilters.contact==='mobile'?'active':''}" data-type="contact" data-val="mobile">Mobiles Only</button>
-                        <button class="filter-pill ${activeFilters.contact==='email'?'active':''}" data-type="contact" data-val="email">Emails Only</button>
+                        <button class="filter-pill ${activeFilters.contact==='mobile'?'active':''}" data-type="contact" data-val="mobile">Mobiles</button>
+                        <button class="filter-pill ${activeFilters.contact==='email'?'active':''}" data-type="contact" data-val="email">Emails</button>
                         <button class="filter-pill ${activeFilters.contact==='both'?'active':''}" data-type="contact" data-val="both">Email + Mobile</button>
-                        <div style="width:1px; height:20px; background:#e2e8f0; margin:0 10px;"></div>
-                        <span style="font-size:0.7rem; font-weight:700; color:#94a3b8; text-transform:uppercase;">Rating:</span>
-                        <button class="filter-pill ${activeFilters.rating===4.5?'active':''}" data-type="rating" data-val="4.5">4.5+ ★</button>
-                        <button class="filter-pill ${activeFilters.rating===4.0?'active':''}" data-type="rating" data-val="4">4.0+ ★</button>
-                        <button class="filter-pill ${activeFilters.rating===3.0?'active':''}" data-type="rating" data-val="3">3.0+ ★</button>
-                    </div>
-                    <div class="tool-row" style="margin-top:5px; justify-content: space-between;">
-                        <div style="display:flex; gap:10px; align-items:center;">
-                            <button class="filter-pill ${activeFilters.hasWebsite?'active':''}" data-type="web" data-val="toggle">Has Website</button>
-                            <button class="btn-review-close" id="rev-check-visible" style="font-size:0.7rem; height:28px; padding:0 12px; background:#f8fafc;">Check All Visible</button>
-                        </div>
-                        <span id="rev-visible-count" style="font-size:0.75rem; color:#94a3b8; font-weight:500;"></span>
+                        
+                        <div style="width:1px; height:16px; background:#e2e8f0; margin:0 5px;"></div>
+                        
+                        <span class="filter-label">Min Rating:</span>
+                        <select class="filter-select" id="rev-filter-rating">
+                            <option value="0">Any Rating</option>
+                            ${[4.5, 4, 3.5, 3, 2.5, 2, 1.5, 1, 0.5].map(v => `<option value="${v}" ${activeFilters.rating===v?'selected':''}>${v}+ Stars</option>`).join('')}
+                        </select>
+
+                        <div style="width:1px; height:16px; background:#e2e8f0; margin:0 5px;"></div>
+
+                        <span class="filter-label">Owner Info:</span>
+                        <select class="filter-select" id="rev-filter-owner">
+                            <option value="all">Any Record</option>
+                            <option value="human">Human Name Found</option>
+                            <option value="entity">Legal Entity/Company</option>
+                            <option value="private">Private/Missing</option>
+                        </select>
                     </div>
                 </div>
                 <div class="review-table-container">
@@ -142,12 +155,12 @@ window.rtrlApp.review = (function() {
                         <thead><tr>
                             <th style="width:40px">#</th>
                             <th style="width:40px"><input type="checkbox" id="rev-master-check"></th>
-                            <th style="width:100px" data-sort="_reviewStatus">Status</th>
-                            <th style="width:200px" data-sort="BusinessName">Name</th>
-                            <th style="width:130px" data-sort="Category">Category</th>
-                            <th style="width:220px" data-sort="StreetAddress">Address</th>
-                            <th style="width:100px" data-sort="StarRating">Rating</th>
-                            <th style="width:120px">Phone</th>
+                            <th style="width:90px" data-sort="_reviewStatus">Status <i class="fas fa-sort"></i></th>
+                            <th style="width:200px" data-sort="BusinessName">Name <i class="fas fa-sort"></i></th>
+                            <th style="width:180px" data-sort="OwnerName">Owner/Decision Maker <i class="fas fa-sort"></i></th>
+                            <th style="width:220px">Address</th>
+                            <th style="width:90px" data-sort="StarRating">Rating <i class="fas fa-sort"></i></th>
+                            <th style="width:110px">Phone</th>
                             <th style="width:80px">Links</th>
                         </tr></thead>
                         <tbody id="rev-body"></tbody>
@@ -164,15 +177,13 @@ window.rtrlApp.review = (function() {
         refreshUI();
 
         document.getElementById('rev-search').oninput = (e) => { activeFilters.search = e.target.value; refreshUI(); };
-        document.querySelectorAll('.filter-pill').forEach(btn => {
-            btn.onclick = () => {
-                const { type, val } = btn.dataset;
-                if (type === 'contact') activeFilters.contact = val;
-                else if (type === 'rating') activeFilters.rating = activeFilters.rating == val ? 0 : parseFloat(val);
-                else if (type === 'web') activeFilters.hasWebsite = !activeFilters.hasWebsite;
-                refreshUI();
-            };
+        document.getElementById('rev-filter-rating').onchange = (e) => { activeFilters.rating = parseFloat(e.target.value); refreshUI(); };
+        document.getElementById('rev-filter-owner').onchange = (e) => { activeFilters.ownerType = e.target.value; refreshUI(); };
+        
+        document.querySelectorAll('.filter-pill[data-type="contact"]').forEach(btn => {
+            btn.onclick = () => { activeFilters.contact = btn.dataset.val; refreshUI(); };
         });
+
         document.querySelectorAll('.review-table th[data-sort]').forEach(th => {
             th.onclick = () => {
                 const key = th.dataset.sort;
@@ -181,9 +192,20 @@ window.rtrlApp.review = (function() {
                 refreshUI();
             };
         });
-        document.getElementById('rev-master-check').onclick = (e) => { filteredData.forEach(d => d._checked = e.target.checked); updateRowsOnly(); debouncedSave(); };
-        document.getElementById('rev-only-active').onclick = () => { masterData.forEach(d => d._checked = d._reviewStatus === 'Active'); activeFilters = {search:'', contact:'all', rating:0, hasWebsite:false}; refreshUI(); debouncedSave(); };
-        document.getElementById('rev-check-visible').onclick = () => { filteredData.forEach(d => d._checked = true); updateRowsOnly(); debouncedSave(); };
+
+        document.getElementById('rev-master-check').onclick = (e) => { 
+            filteredData.forEach(d => d._checked = e.target.checked); 
+            updateRowsOnly(); 
+            debouncedSave(); 
+        };
+
+        document.getElementById('rev-only-active').onclick = () => { 
+            masterData.forEach(d => d._checked = d._reviewStatus === 'Active'); 
+            activeFilters = {search:'', contact:'all', rating:0, ownerType:'all'}; 
+            refreshUI(); 
+            debouncedSave(); 
+        };
+        
         document.getElementById('rev-xlsx').onclick = exportMaster;
         document.getElementById('rev-zip').onclick = exportZip;
     }
@@ -195,15 +217,19 @@ window.rtrlApp.review = (function() {
     }
 
     function renderToolbarState() {
-        document.querySelectorAll('.filter-pill').forEach(btn => {
-            const { type, val } = btn.dataset;
-            let active = false;
-            if (type === 'contact') active = activeFilters.contact === val;
-            else if (type === 'rating') active = activeFilters.rating == val;
-            else if (type === 'web') active = activeFilters.hasWebsite;
-            btn.classList.toggle('active', active);
+        document.querySelectorAll('.filter-pill[data-type="contact"]').forEach(btn => {
+            btn.classList.toggle('active', activeFilters.contact === btn.dataset.val);
         });
-        document.getElementById('rev-visible-count').textContent = `Showing ${filteredData.length} of ${masterData.length} leads`;
+        
+        document.querySelectorAll('.review-table th[data-sort]').forEach(th => {
+            th.classList.toggle('sort-active', th.dataset.sort === currentSort.key);
+            const icon = th.querySelector('i');
+            if (th.dataset.sort === currentSort.key) {
+                icon.className = currentSort.dir === 'asc' ? 'fas fa-sort-up' : 'fas fa-sort-down';
+            } else {
+                icon.className = 'fas fa-sort';
+            }
+        });
     }
 
     function updateRowsOnly() {
@@ -215,8 +241,8 @@ window.rtrlApp.review = (function() {
                 <td><input type="checkbox" ${d._checked ? 'checked' : ''} onchange="window.rtrlApp.review.toggle(${d._id})"></td>
                 <td><span class="status-badge badge-${d._reviewStatus.toLowerCase()}">${d._reviewStatus}</span></td>
                 <td style="font-weight:600; color:#1e293b">${d.BusinessName}</td>
-                <td style="color:#64748b; font-size:0.75rem">${d.Category}</td>
-                <td style="font-size:0.75rem; color:#475569">${d.StreetAddress || ''}</td>
+                <td style="font-weight:500; color:#475569">${d.OwnerName || ''}</td>
+                <td style="font-size:0.75rem; color:#64748b">${d.StreetAddress || ''}</td>
                 <td style="font-weight:600">${d.StarRating ? d.StarRating + ' ★' : ''}</td>
                 <td style="font-size:0.85rem">${d.Phone || ''}</td>
                 <td><div style="display:flex; gap:10px; font-size:0.9rem">
