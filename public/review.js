@@ -180,7 +180,11 @@ window.rtrlApp.review = (function () {
     if (document.getElementById("review-modal"))
       document.getElementById("review-modal").remove();
     const s = jobParams.searchParamsForEmail || {};
-    const title = `${s.customCategory || s.primaryCategory || "Search"} in ${s.area || "Area"}${jobParams.radiusKm ? ` (${jobParams.radiusKm}km Radius)` : ""}`;
+    const title =
+      `${s.customCategory || s.primaryCategory || "Search"} in ${s.area || "Area"}${jobParams.radiusKm ? ` (${jobParams.radiusKm}km Radius)` : ""}`.replace(
+        /"/g,
+        "",
+      );
     const overlay = document.createElement("div");
     overlay.className = "review-overlay";
     overlay.id = "review-modal";
@@ -234,17 +238,17 @@ window.rtrlApp.review = (function () {
                         <thead><tr>
                             <th style="width:50px">#</th>
                             <th style="width:50px"><input type="checkbox" id="rev-master-check"></th>
-                            <th style="width:110px" data-sort="_reviewStatus">Status <i class="fas fa-sort"></i></th>
-                            <th style="width:250px" data-sort="BusinessName">Business Name <i class="fas fa-sort"></i></th>
-                            <th style="width:180px" data-sort="OwnerName">Owner <i class="fas fa-sort"></i></th>
-                            <th style="width:160px" data-sort="Category">Category <i class="fas fa-sort"></i></th>
-                            <th style="width:140px" data-sort="Suburb">Suburb <i class="fas fa-sort"></i></th>
+                            <th style="width:110px" data-sort="_reviewStatus"><div class="header-content">Status <i class="fas fa-sort"></i></div></th>
+                            <th style="width:250px" data-sort="BusinessName"><div class="header-content">Business Name <i class="fas fa-sort"></i></div></th>
+                            <th style="width:180px" data-sort="OwnerName"><div class="header-content">Owner <i class="fas fa-sort"></i></div></th>
+                            <th style="width:160px" data-sort="Category"><div class="header-content">Category <i class="fas fa-sort"></i></div></th>
+                            <th style="width:140px" data-sort="Suburb"><div class="header-content">Suburb <i class="fas fa-sort"></i></div></th>
                             <th style="width:300px">Street Address</th>
                             <th style="width:180px">Email 1</th>
                             <th style="width:180px">Email 2</th>
                             <th style="width:120px">Phone</th>
-                            <th style="width:100px" data-sort="StarRating">Rating <i class="fas fa-sort"></i></th>
-                            <th style="width:100px" data-sort="ReviewCount">Reviews <i class="fas fa-sort"></i></th>
+                            <th style="width:100px" data-sort="StarRating"><div class="header-content">Rating <i class="fas fa-sort"></i></div></th>
+                            <th style="width:100px" data-sort="ReviewCount"><div class="header-content">Reviews <i class="fas fa-sort"></i></div></th>
                             <th style="width:120px">Links</th>
                         </tr></thead>
                         <tbody id="rev-body"></tbody>
