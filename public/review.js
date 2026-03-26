@@ -66,7 +66,7 @@ window.rtrlApp.review = (function() {
         let data = [...masterData];
         if (activeFilters.search) {
             const s = activeFilters.search.toLowerCase();
-            data = data.filter(d => (d.BusinessName||"").toLowerCase().includes(s) || (d.StreetAddress||"").toLowerCase().includes(s) || (d.Category||"").toLowerCase().includes(s));
+            data = data.filter(d => (d.BusinessName||"").toLowerCase().includes(s) || (d.StreetAddress||"").toLowerCase().includes(s) || (d.Category||"").toLowerCase().includes(s) || (d.Suburb||"").toLowerCase().includes(s));
         }
         if (activeFilters.contact === 'mobile') data = data.filter(d => (d.Phone || "").startsWith('614') || (d.Phone || "").startsWith('04'));
         else if (activeFilters.contact === 'email') data = data.filter(d => d.Email1);
@@ -94,7 +94,7 @@ window.rtrlApp.review = (function() {
 
     async function saveProgress() {
         const ind = document.getElementById('rev-save-indicator');
-        if (ind) { ind.innerHTML = '<i class="fas fa-sync fa-spin"></i> Saving selection...'; ind.classList.add('visible'); }
+        if (ind) { ind.innerHTML = '<i class="fas fa-sync fa-spin"></i> Saving changes...'; ind.classList.add('visible'); }
         const res = masterData.map(item => { const { _id, _reviewStatus, _checked, ...clean } = item; return { ...clean, _selected: _checked }; });
         const sbClient = supabase.createClient(window.CONFIG.SUPABASE_URL, window.CONFIG.SUPABASE_ANON_KEY);
         await sbClient.from('jobs').update({ results: res }).eq('id', currentJobId);
@@ -119,11 +119,11 @@ window.rtrlApp.review = (function() {
                         <div class="review-summary">
                             <span id="rev-sel-count" class="sum-pill" style="background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd;">0 SELECTED</span>
                             <span class="sum-pill sum-active">${masterData.filter(d=>d._reviewStatus==='Active').length} Unique</span>
-                            <span class="sum-pill sum-dup">${masterData.filter(d=>d._reviewStatus==='Duplicate').length} Dups</span>
-                            <span class="sum-pill sum-excl">${masterData.filter(d=>d._reviewStatus==='Excluded').length} Excl</span>
+                            <span class="sum-pill sum-dup">${masterData.filter(d=>d._reviewStatus==='Duplicate').length} Duplicates</span>
+                            <span class="sum-pill sum-excl">${masterData.filter(d=>d._reviewStatus==='Excluded').length} Excluded</span>
                         </div>
                         <div class="review-search-wrapper">
-                            <input type="text" class="review-search" placeholder="Search/Filter by name, category, address..." id="rev-search" value="${activeFilters.search}">
+                            <input type="text" class="review-search" placeholder="Search/Filter by name, category, suburb..." id="rev-search" value="${activeFilters.search}">
                             <button class="btn-review-close" id="rev-only-active" style="white-space:nowrap; padding:8px 20px;">Reset to Active Only</button>
                         </div>
                     </div>
@@ -132,9 +132,9 @@ window.rtrlApp.review = (function() {
                     <div class="filter-group-inline">
                         <span class="filter-label">Contact:</span>
                         <button class="filter-pill ${activeFilters.contact==='all'?'active':''}" data-type="contact" data-val="all">All</button>
-                        <button class="filter-pill ${activeFilters.contact==='mobile'?'active':''}" data-type="contact" data-val="mobile">Mobiles</button>
-                        <button class="filter-pill ${activeFilters.contact==='email'?'active':''}" data-type="contact" data-val="email">Emails</button>
-                        <button class="filter-pill ${activeFilters.contact==='both'?'active':''}" data-type="contact" data-val="both">Both</button>
+                        <button class="filter-pill ${activeFilters.contact==='mobile'?'active':''}" data-type="contact" data-val="mobile">Mobiles Only</button>
+                        <button class="filter-pill ${activeFilters.contact==='email'?'active':''}" data-type="contact" data-val="email">Emails Only</button>
+                        <button class="filter-pill ${activeFilters.contact==='both'?'active':''}" data-type="contact" data-val="both">Mobiles + Emails</button>
                     </div>
                     <div style="width:1px; height:20px; background:#e2e8f0;"></div>
                     <div class="filter-group-inline">
@@ -162,12 +162,14 @@ window.rtrlApp.review = (function() {
                             <th style="width:40px">#</th>
                             <th style="width:40px"><input type="checkbox" id="rev-master-check"></th>
                             <th style="width:90px" data-sort="_reviewStatus">Status <i class="fas fa-sort"></i></th>
-                            <th style="width:200px" data-sort="BusinessName">Name <i class="fas fa-sort"></i></th>
-                            <th style="width:180px" data-sort="OwnerName">Owner/Decision Maker <i class="fas fa-sort"></i></th>
-                            <th style="width:220px">Address</th>
-                            <th style="width:90px" data-sort="StarRating">Rating <i class="fas fa-sort"></i></th>
-                            <th style="width:110px">Phone</th>
-                            <th style="width:80px">Links</th>
+                            <th style="width:180px" data-sort="BusinessName">Name <i class="fas fa-sort"></i></th>
+                            <th style="width:150px" data-sort="OwnerName">Owner <i class="fas fa-sort"></i></th>
+                            <th style="width:120px" data-sort="Category">Category <i class="fas fa-sort"></i></th>
+                            <th style="width:120px" data-sort="Suburb">Suburb <i class="fas fa-sort"></i></th>
+                            <th style="width:200px">Street Address</th>
+                            <th style="width:80px" data-sort="StarRating">Rating <i class="fas fa-sort"></i></th>
+                            <th style="width:100px">Phone</th>
+                            <th style="width:70px">Links</th>
                         </tr></thead>
                         <tbody id="rev-body"></tbody>
                     </table>
@@ -177,11 +179,11 @@ window.rtrlApp.review = (function() {
                     <button class="btn-review-close" onclick="document.getElementById('review-modal').remove()">Close Workspace</button>
                     <div class="tooltip-wrapper">
                         <button class="btn-review-export" style="background:#10b981" id="rev-xlsx">Refined Masterlist (.xlsx)</button>
-                        <span class="tooltip-text"><b>Master Spreadsheet</b>Downloads a high-detail Excel file containing every column and detail for the leads you have checked.</span>
+                        <span class="tooltip-text"><b>High-Detail Masterlist</b>Downloads an Excel file containing all available columns (Emails, Ratings, Links, etc) for your checked leads.</span>
                     </div>
                     <div class="tooltip-wrapper">
                         <button class="btn-review-export" id="rev-zip">Refined Full File (.zip)</button>
-                        <span class="tooltip-text"><b>Full Lead Package</b>Generates a ZIP folder containing multiple files (SMS list, Email list, and Master list) containing only your checked leads.</span>
+                        <span class="tooltip-text"><b>Complete Data Package</b>Generates a ZIP folder containing the cleaned Masterlist, a dedicated Mobile-Only CSV, and a dedicated Email-Only CSV.</span>
                     </div>
                 </div>
             </div>`;
@@ -216,6 +218,8 @@ window.rtrlApp.review = (function() {
                 <td><span class="status-badge badge-${d._reviewStatus.toLowerCase()}">${d._reviewStatus}</span></td>
                 <td style="font-weight:600; color:#1e293b">${d.BusinessName}</td>
                 <td style="font-weight:500; color:#475569">${d.OwnerName || ''}</td>
+                <td style="color:#64748b; font-size:0.75rem">${d.Category}</td>
+                <td style="font-weight:500">${d.Suburb || ''}</td>
                 <td style="font-size:0.75rem; color:#64748b">${d.StreetAddress || ''}</td>
                 <td style="font-weight:600">${d.StarRating ? d.StarRating + ' ★' : ''}</td>
                 <td style="font-size:0.85rem">${d.Phone || ''}</td>
