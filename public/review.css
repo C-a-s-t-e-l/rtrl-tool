@@ -78,7 +78,7 @@
 .review-search {
     width: 100%;
     max-width: 400px;
-    padding: 10px 16px;
+    padding: 8px 16px;
     border: 1px solid #cbd5e1;
     border-radius: 8px;
     outline: none;
@@ -91,14 +91,13 @@
 }
 
 .review-toolbar {
-    padding: 1.25rem 2rem;
+    padding: 0.75rem 2rem;
     background: #fff;
     border-bottom: 1px solid #f1f5f9;
     display: flex;
     align-items: center;
     gap: 25px;
-    flex-wrap: nowrap;
-    overflow-x: auto;
+    flex-wrap: wrap;
 }
 
 .filter-group-inline {
