@@ -4,6 +4,8 @@ window.rtrlApp.review = (function() {
     let currentJobId = null;
     let jobParams = {};
     let saveTimeout = null;
+    let currentSort = { key: 'BusinessName', dir: 'asc' };
+    let activeFilters = { search: '', contact: 'all', rating: 0, hasWebsite: false };
 
     function init() {
         const observer = new MutationObserver((mutations) => {
@@ -15,12 +17,11 @@ window.rtrlApp.review = (function() {
                             if (!container.querySelector('.btn-review-trigger')) {
                                 const resendBtn = container.querySelector('.resend-email-btn');
                                 if (!resendBtn) return;
-                                const jobId = resendBtn.dataset.jobId;
                                 const btn = document.createElement('button');
                                 btn.className = 'job-action-btn btn-review-trigger';
                                 btn.style.backgroundColor = '#f0f9ff';
                                 btn.innerHTML = `<i class="fas fa-list-check"></i> Review & Filter`;
-                                btn.onclick = () => openReview(jobId);
+                                btn.onclick = () => openReview(resendBtn.dataset.jobId);
                                 container.appendChild(btn);
                             }
                         });
@@ -38,7 +39,6 @@ window.rtrlApp.review = (function() {
             const sbClient = supabase.createClient(window.CONFIG.SUPABASE_URL, window.CONFIG.SUPABASE_ANON_KEY);
             const { data, error } = await sbClient.from('jobs').select('results, parameters').eq('id', jobId).single();
             if (error || !data) throw new Error("Fetch failed");
-
             jobParams = data.parameters || {};
             processData(data.results || [], jobParams.exclusionList || []);
             renderModal();
@@ -49,242 +49,220 @@ window.rtrlApp.review = (function() {
         const seen = new Set();
         const norm = (s) => (s || "").toLowerCase().replace(/['’`.,()&]/g, "").replace(/\s+/g, "");
         const excl = (exclusionList || []).map(e => norm(e));
-
         masterData = results.map((item, index) => {
             const name = norm(item.BusinessName);
-            const signature = `NAME:${name.substring(0,15)}_${norm(item.StreetAddress)}`;
+            const sig = `NAME:${name.substring(0,15)}_${norm(item.StreetAddress)}`;
             let status = "Active";
             if (excl.some(ex => name.includes(ex))) status = "Excluded";
-            else if (seen.has(signature)) status = "Duplicate";
-            if (status === "Active") seen.add(signature);
-
-            const isChecked = (item._selected !== undefined) ? item._selected : (status === "Active");
-            return { ...item, _id: index, _reviewStatus: status, _checked: isChecked };
+            else if (seen.has(sig)) status = "Duplicate";
+            if (status === "Active") seen.add(sig);
+            return { ...item, _id: index, _reviewStatus: status, _checked: item._selected !== undefined ? item._selected : (status === "Active") };
         });
-        filteredData = [...masterData];
+        masterData.sort((a, b) => (a.BusinessName || "").localeCompare(b.BusinessName || ""));
+        applyFiltersAndSort();
+    }
+
+    function applyFiltersAndSort() {
+        let data = [...masterData];
+        if (activeFilters.search) {
+            const s = activeFilters.search.toLowerCase();
+            data = data.filter(d => (d.BusinessName||"").toLowerCase().includes(s) || (d.StreetAddress||"").toLowerCase().includes(s) || (d.Category||"").toLowerCase().includes(s));
+        }
+        if (activeFilters.contact === 'mobile') data = data.filter(d => (d.Phone || "").startsWith('614') || (d.Phone || "").startsWith('04'));
+        else if (activeFilters.contact === 'email') data = data.filter(d => d.Email1);
+        else if (activeFilters.contact === 'both') data = data.filter(d => d.Email1 && ((d.Phone || "").startsWith('614') || (d.Phone || "").startsWith('04')));
+        if (activeFilters.rating > 0) data = data.filter(d => parseFloat(d.StarRating || 0) >= activeFilters.rating);
+        if (activeFilters.hasWebsite) data = data.filter(d => d.Website);
+
+        const k = currentSort.key;
+        const d = currentSort.dir === 'asc' ? 1 : -1;
+        data.sort((a, b) => {
+            let valA = a[k] || '', valB = b[k] || '';
+            if (k === 'StarRating' || k === 'ReviewCount') { valA = parseFloat(valA) || 0; valB = parseFloat(valB) || 0; }
+            return valA > valB ? (1 * d) : valA < valB ? (-1 * d) : 0;
+        });
+        filteredData = data;
     }
 
     async function saveProgress() {
-        const indicator = document.getElementById('rev-save-indicator');
-        if (indicator) {
-            indicator.innerHTML = '<i class="fas fa-sync fa-spin"></i> Saving changes...';
-            indicator.classList.add('visible');
-        }
-        const resultsToSave = masterData.map(item => {
-            const { _id, _reviewStatus, _checked, ...cleanItem } = item;
-            return { ...cleanItem, _selected: _checked };
-        });
+        const ind = document.getElementById('rev-save-indicator');
+        if (ind) { ind.innerHTML = '<i class="fas fa-sync fa-spin"></i> Saving changes...'; ind.classList.add('visible'); }
+        const res = masterData.map(item => { const { _id, _reviewStatus, _checked, ...clean } = item; return { ...clean, _selected: _checked }; });
         const sbClient = supabase.createClient(window.CONFIG.SUPABASE_URL, window.CONFIG.SUPABASE_ANON_KEY);
-        await sbClient.from('jobs').update({ results: resultsToSave }).eq('id', currentJobId);
-        setTimeout(() => {
-            if (indicator) indicator.innerHTML = '<i class="fas fa-check"></i> Changes saved';
-        }, 500);
+        await sbClient.from('jobs').update({ results: res }).eq('id', currentJobId);
+        setTimeout(() => { if (ind) ind.innerHTML = '<i class="fas fa-check"></i> Changes saved'; }, 500);
     }
 
-    function debouncedSave() {
-        clearTimeout(saveTimeout);
-        saveTimeout = setTimeout(saveProgress, 1200);
-    }
-
-    function updateCounters() {
-        const selectedCount = masterData.filter(d => d._checked).length;
-        const el = document.getElementById('rev-selection-count');
-        if (el) el.textContent = `${selectedCount} SELECTED FOR EXPORT`;
-    }
+    function debouncedSave() { clearTimeout(saveTimeout); saveTimeout = setTimeout(saveProgress, 1200); }
 
     function renderModal() {
         if (document.getElementById('review-modal')) document.getElementById('review-modal').remove();
         const s = jobParams.searchParamsForEmail || {};
-        const title = `${s.customCategory || s.primaryCategory || "Search"} in ${s.area || "Area"}${jobParams.radiusKm ? ` (${jobParams.radiusKm}km Radius)` : ""}`;
-        const counts = {
-            active: masterData.filter(d => d._reviewStatus === 'Active').length,
-            dup: masterData.filter(d => d._reviewStatus === 'Duplicate').length,
-            excl: masterData.filter(d => d._reviewStatus === 'Excluded').length
-        };
-
         const overlay = document.createElement('div');
-        overlay.className = 'review-overlay';
-        overlay.id = 'review-modal';
+        overlay.className = 'review-overlay'; overlay.id = 'review-modal';
         overlay.innerHTML = `
             <div class="review-window">
                 <div class="review-header">
-                    <div style="flex: 1">
-                        <h3 style="margin:0; font-size: 1.1rem; color: #1e293b;">${title}</h3>
+                    <div style="flex:1"><h3 style="margin:0; font-size:1.1rem; color:#1e293b;">${s.customCategory || s.primaryCategory || "Search"} in ${s.area || "Area"}${jobParams.radiusKm ? ` (${jobParams.radiusKm}km)` : ""}</h3>
                         <div class="review-summary">
-                            <span id="rev-selection-count" class="sum-pill sum-active" style="background:#e0f2fe; color:#0369a1; border: 1px solid #bae6fd;">0 SELECTED</span>
-                            <span class="sum-pill sum-active">${counts.active} Unique</span>
-                            <span class="sum-pill sum-dup">${counts.dup} Duplicates</span>
-                            <span class="sum-pill sum-excl">${counts.excl} Excluded</span>
+                            <span id="rev-sel-count" class="sum-pill" style="background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd;">0 SELECTED</span>
+                            <span class="sum-pill sum-active">${masterData.filter(d=>d._reviewStatus==='Active').length} Unique</span>
+                            <span class="sum-pill sum-dup">${masterData.filter(d=>d._reviewStatus==='Duplicate').length} Dups</span>
+                            <span class="sum-pill sum-excl">${masterData.filter(d=>d._reviewStatus==='Excluded').length} Excl</span>
                         </div>
                     </div>
-                    <div class="review-controls">
-                        <input type="text" class="review-search" placeholder="Search/Filter by name, address or category..." id="rev-search">
-                        <button class="btn-review-close" id="rev-only-active" style="background:#fff; border:1px solid #cbd5e1; white-space: nowrap; padding: 10px 25px;">Reset to Active Only</button>
+                    <div class="review-controls" style="display:flex; gap:10px;">
+                        <input type="text" class="review-search" placeholder="Search by name, category, address..." id="rev-search" value="${activeFilters.search}">
+                        <button class="btn-review-close" id="rev-only-active" style="white-space:nowrap; padding:0 20px;">Reset to Active Only</button>
+                    </div>
+                </div>
+                <div class="review-toolbar">
+                    <div class="tool-row">
+                        <span style="font-size:0.7rem; font-weight:700; color:#94a3b8; text-transform:uppercase;">Contact:</span>
+                        <button class="filter-pill ${activeFilters.contact==='all'?'active':''}" data-type="contact" data-val="all">All</button>
+                        <button class="filter-pill ${activeFilters.contact==='mobile'?'active':''}" data-type="contact" data-val="mobile">Mobiles Only</button>
+                        <button class="filter-pill ${activeFilters.contact==='email'?'active':''}" data-type="contact" data-val="email">Emails Only</button>
+                        <button class="filter-pill ${activeFilters.contact==='both'?'active':''}" data-type="contact" data-val="both">Email + Mobile</button>
+                        <div style="width:1px; height:20px; background:#e2e8f0; margin:0 10px;"></div>
+                        <span style="font-size:0.7rem; font-weight:700; color:#94a3b8; text-transform:uppercase;">Rating:</span>
+                        <button class="filter-pill ${activeFilters.rating===4.5?'active':''}" data-type="rating" data-val="4.5">4.5+ ★</button>
+                        <button class="filter-pill ${activeFilters.rating===4.0?'active':''}" data-type="rating" data-val="4">4.0+ ★</button>
+                        <button class="filter-pill ${activeFilters.rating===3.0?'active':''}" data-type="rating" data-val="3">3.0+ ★</button>
+                    </div>
+                    <div class="tool-row" style="margin-top:5px; justify-content: space-between;">
+                        <div style="display:flex; gap:10px; align-items:center;">
+                            <button class="filter-pill ${activeFilters.hasWebsite?'active':''}" data-type="web" data-val="toggle">Has Website</button>
+                            <button class="btn-review-close" id="rev-check-visible" style="font-size:0.7rem; height:28px; padding:0 12px; background:#f8fafc;">Check All Visible</button>
+                        </div>
+                        <span id="rev-visible-count" style="font-size:0.75rem; color:#94a3b8; font-weight:500;"></span>
                     </div>
                 </div>
                 <div class="review-table-container">
                     <table class="review-table">
-                        <thead>
-                            <tr>
-                                <th style="width:40px"><input type="checkbox" id="rev-master-check"></th>
-                                <th style="width:100px">Status</th>
-                                <th style="width:220px">Business Name</th>
-                                <th style="width:140px">Category</th>
-                                <th style="width:250px">Address</th>
-                                <th style="width:150px">Email</th>
-                                <th style="width:120px">Phone</th>
-                                <th style="width:100px">Links</th>
-                            </tr>
-                        </thead>
+                        <thead><tr>
+                            <th style="width:40px">#</th>
+                            <th style="width:40px"><input type="checkbox" id="rev-master-check"></th>
+                            <th style="width:100px" data-sort="_reviewStatus">Status</th>
+                            <th style="width:200px" data-sort="BusinessName">Name</th>
+                            <th style="width:130px" data-sort="Category">Category</th>
+                            <th style="width:220px" data-sort="StreetAddress">Address</th>
+                            <th style="width:100px" data-sort="StarRating">Rating</th>
+                            <th style="width:120px">Phone</th>
+                            <th style="width:80px">Links</th>
+                        </tr></thead>
                         <tbody id="rev-body"></tbody>
                     </table>
                 </div>
                 <div class="review-footer">
                     <div id="rev-save-indicator" class="save-indicator"></div>
                     <button class="btn-review-close" onclick="document.getElementById('review-modal').remove()">Close Workspace</button>
-                    <div class="tooltip-wrapper">
-                        <button class="btn-review-export" style="background:#10b981" id="rev-export-xlsx">Refined Masterlist (.xlsx)</button>
-                        <span class="tooltip-text">Downloads a high-detail Excel file matching the 'Full_DuplicatesRemoved' format.</span>
-                    </div>
-                    <div class="tooltip-wrapper">
-                        <button class="btn-review-export" id="rev-export-zip">Refined Full File (.zip)</button>
-                        <span class="tooltip-text">Generates a ZIP containing the cleaned Masterlist, SMS CSV, and Email list.</span>
-                    </div>
+                    <div class="tooltip-wrapper"><button class="btn-review-export" style="background:#10b981" id="rev-xlsx">Refined Masterlist (.xlsx)</button><span class="tooltip-text">Full details of checked leads.</span></div>
+                    <div class="tooltip-wrapper"><button class="btn-review-export" id="rev-zip">Refined Full File (.zip)</button><span class="tooltip-text">Cleaned SMS and Email collection.</span></div>
                 </div>
             </div>`;
         document.body.appendChild(overlay);
-        updateTable();
-        updateCounters();
+        refreshUI();
 
-        document.getElementById('rev-search').oninput = (e) => {
-            const term = e.target.value.toLowerCase();
-            filteredData = masterData.filter(d => (d.BusinessName||"").toLowerCase().includes(term) || (d.StreetAddress||"").toLowerCase().includes(term) || (d.Category||"").toLowerCase().includes(term));
-            updateTable();
-        };
-        document.getElementById('rev-master-check').onclick = (e) => { filteredData.forEach(d => d._checked = e.target.checked); updateTable(); updateCounters(); debouncedSave(); };
-        document.getElementById('rev-only-active').onclick = () => { masterData.forEach(d => d._checked = d._reviewStatus === 'Active'); updateTable(); updateCounters(); debouncedSave(); };
-        document.getElementById('rev-export-xlsx').onclick = () => exportMasterXLSX();
-        document.getElementById('rev-export-zip').onclick = () => exportRefinedZip();
+        document.getElementById('rev-search').oninput = (e) => { activeFilters.search = e.target.value; refreshUI(); };
+        document.querySelectorAll('.filter-pill').forEach(btn => {
+            btn.onclick = () => {
+                const { type, val } = btn.dataset;
+                if (type === 'contact') activeFilters.contact = val;
+                else if (type === 'rating') activeFilters.rating = activeFilters.rating == val ? 0 : parseFloat(val);
+                else if (type === 'web') activeFilters.hasWebsite = !activeFilters.hasWebsite;
+                refreshUI();
+            };
+        });
+        document.querySelectorAll('.review-table th[data-sort]').forEach(th => {
+            th.onclick = () => {
+                const key = th.dataset.sort;
+                currentSort.dir = (currentSort.key === key && currentSort.dir === 'asc') ? 'desc' : 'asc';
+                currentSort.key = key;
+                refreshUI();
+            };
+        });
+        document.getElementById('rev-master-check').onclick = (e) => { filteredData.forEach(d => d._checked = e.target.checked); updateRowsOnly(); debouncedSave(); };
+        document.getElementById('rev-only-active').onclick = () => { masterData.forEach(d => d._checked = d._reviewStatus === 'Active'); activeFilters = {search:'', contact:'all', rating:0, hasWebsite:false}; refreshUI(); debouncedSave(); };
+        document.getElementById('rev-check-visible').onclick = () => { filteredData.forEach(d => d._checked = true); updateRowsOnly(); debouncedSave(); };
+        document.getElementById('rev-xlsx').onclick = exportMaster;
+        document.getElementById('rev-zip').onclick = exportZip;
     }
 
-    function updateTable() {
-        document.getElementById('rev-body').innerHTML = filteredData.map((d) => `
+    function refreshUI() {
+        applyFiltersAndSort();
+        updateRowsOnly();
+        renderToolbarState();
+    }
+
+    function renderToolbarState() {
+        document.querySelectorAll('.filter-pill').forEach(btn => {
+            const { type, val } = btn.dataset;
+            let active = false;
+            if (type === 'contact') active = activeFilters.contact === val;
+            else if (type === 'rating') active = activeFilters.rating == val;
+            else if (type === 'web') active = activeFilters.hasWebsite;
+            btn.classList.toggle('active', active);
+        });
+        document.getElementById('rev-visible-count').textContent = `Showing ${filteredData.length} of ${masterData.length} leads`;
+    }
+
+    function updateRowsOnly() {
+        const count = masterData.filter(d => d._checked).length;
+        document.getElementById('rev-sel-count').textContent = `${count} SELECTED`;
+        document.getElementById('rev-body').innerHTML = filteredData.map((d, i) => `
             <tr class="row-${d._reviewStatus.toLowerCase()}">
+                <td style="color:#94a3b8; font-size:0.7rem">${i+1}</td>
                 <td><input type="checkbox" ${d._checked ? 'checked' : ''} onchange="window.rtrlApp.review.toggle(${d._id})"></td>
                 <td><span class="status-badge badge-${d._reviewStatus.toLowerCase()}">${d._reviewStatus}</span></td>
                 <td style="font-weight:600; color:#1e293b">${d.BusinessName}</td>
                 <td style="color:#64748b; font-size:0.75rem">${d.Category}</td>
                 <td style="font-size:0.75rem; color:#475569">${d.StreetAddress || ''}</td>
-                <td style="font-size:0.8rem; color:#3b82f6" title="${d.Email1}">${d.Email1 ? d.Email1.substring(0,18)+'...' : ''}</td>
+                <td style="font-weight:600">${d.StarRating ? d.StarRating + ' ★' : ''}</td>
                 <td style="font-size:0.85rem">${d.Phone || ''}</td>
-                <td><div style="display:flex; gap:12px; font-size: 1rem">
-                    ${d.Website ? `<a href="${d.Website}" target="_blank" style="color:#64748b"><i class="fas fa-link"></i></a>` : ''}
+                <td><div style="display:flex; gap:10px; font-size:0.9rem">
+                    ${d.Website ? `<a href="${d.Website}" target="_blank" style="color:#3b82f6"><i class="fas fa-link"></i></a>` : ''}
                     ${d.FacebookURL ? `<a href="${d.FacebookURL}" target="_blank" style="color:#1877f2"><i class="fab fa-facebook"></i></a>` : ''}
                     ${d.InstagramURL ? `<a href="${d.InstagramURL}" target="_blank" style="color:#e4405f"><i class="fab fa-instagram"></i></a>` : ''}
                 </div></td>
             </tr>`).join('');
     }
 
-    const createLink = (url) => {
-        if (!url || typeof url !== 'string' || !url.trim()) return '';
-        if (url.length > 250) return url;
-        return { f: `HYPERLINK("${url}", "${url}")`, v: url, t: 's' };
-    };
-
-    function mapToMaster(selected) {
-        return selected.map(item => ({
-            "BusinessName": item.BusinessName,
-            "Category": item.Category,
-            "Suburb/Area": item.Suburb,
-            "StreetAddress": item.StreetAddress,
-            "Website": createLink(item.Website),
-            "OwnerName": item.OwnerName,
-            "Email 1": item.Email1,
-            "Email 2": item.Email2,
-            "Email 3": item.Email3,
-            "Phone": item.Phone,
-            "InstagramURL": createLink(item.InstagramURL),
-            "FacebookURL": createLink(item.FacebookURL),
-            "GoogleMapsURL": createLink(item.GoogleMapsURL),
-            "StarRating": item.StarRating,
-            "ReviewCount": item.ReviewCount
+    const createLink = (u) => (!u || typeof u !== 'string' || !u.trim() || u.length > 250) ? u : { f: `HYPERLINK("${u}", "${u}")`, v: u, t: 's' };
+    function mapToMaster(sel) {
+        return sel.map(i => ({
+            "BusinessName": i.BusinessName, "Category": i.Category, "Suburb/Area": i.Suburb, "StreetAddress": i.StreetAddress, "Website": createLink(i.Website),
+            "OwnerName": i.OwnerName, "Email 1": i.Email1, "Email 2": i.Email2, "Email 3": i.Email3, "Phone": i.Phone, "InstagramURL": createLink(i.InstagramURL),
+            "FacebookURL": createLink(i.FacebookURL), "GoogleMapsURL": createLink(i.GoogleMapsURL), "StarRating": i.StarRating, "ReviewCount": i.ReviewCount
         }));
     }
 
-    function exportMasterXLSX() {
-        const selected = masterData.filter(d => d._checked);
-        if (!selected.length) return alert("Select leads first.");
-        const formatted = mapToMaster(selected);
-        const ws = XLSX.utils.json_to_sheet(formatted);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "Business List (Unique)");
-        XLSX.writeFile(wb, `Refined_Full_DuplicatesRemoved_${currentJobId}.xlsx`);
+    function exportMaster() {
+        const sel = masterData.filter(d => d._checked); if (!sel.length) return alert("Select leads first.");
+        const ws = XLSX.utils.json_to_sheet(mapToMaster(sel)); const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Business List (Unique)"); XLSX.writeFile(wb, `Refined_Full_DuplicatesRemoved_${currentJobId}.xlsx`);
     }
 
-    async function exportRefinedZip() {
-        const selected = masterData.filter(d => d._checked);
-        if (!selected.length) return alert("Select leads first.");
+    async function exportZip() {
+        const sel = masterData.filter(d => d._checked); if (!sel.length) return alert("Select leads first.");
         const zip = new JSZip();
-
-        // 1. Refined Master
-        const formattedMaster = mapToMaster(selected);
-        const wsFull = XLSX.utils.json_to_sheet(formattedMaster);
-        const wbFull = XLSX.utils.book_new();
+        const wsFull = XLSX.utils.json_to_sheet(mapToMaster(sel)); const wbFull = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wbFull, wsFull, "Business List (Unique)");
         zip.file(`Refined_Full_DuplicatesRemoved_${currentJobId}.xlsx`, XLSX.write(wbFull, {type:'buffer', bookType:'xlsx'}));
-
-        // 2. Refined SMS CSV
-        const smsData = selected.filter(b => b.Phone && b.Phone.startsWith("614")).map(b => {
-            let firstName = "", lastName = "";
-            if (b.OwnerName && b.OwnerName.trim() !== "") {
-                const parts = b.OwnerName.trim().split(" ");
-                firstName = parts.shift();
-                lastName = parts.join(" ");
-            }
-            return {
-                FirstName: firstName, LastName: lastName, Organization: b.BusinessName || "",
-                Email: b.Email1 || "", FaxNumber: "", MobileNumber: b.Phone || "",
-                CustomField1: b.Category || "", CustomField2: b.Suburb || "",
-                CustomField3: "", CustomField4: "", Unsubscribed: ""
-            };
+        const sms = sel.filter(b => b.Phone && b.Phone.startsWith("614")).map(b => {
+            let fn = "", ln = ""; if (b.OwnerName && b.OwnerName.trim() !== "") { const p = b.OwnerName.trim().split(" "); fn = p.shift(); ln = p.join(" "); }
+            return { FirstName: fn, LastName: ln, Organization: b.BusinessName || "", Email: b.Email1 || "", FaxNumber: "", MobileNumber: b.Phone || "", CustomField1: b.Category || "", CustomField2: b.Suburb || "", CustomField3: "", CustomField4: "", Unsubscribed: "" };
         });
-        const wsSms = XLSX.utils.json_to_sheet(smsData, { header: ["FirstName", "LastName", "Organization", "Email", "FaxNumber", "MobileNumber", "CustomField1", "CustomField2", "CustomField3", "CustomField4", "Unsubscribed"] });
-        zip.file(`Refined_Mobile_Numbers_Only_${currentJobId}.csv`, XLSX.write({SheetNames:["S"], Sheets:{S:wsSms}}, {type:'buffer', bookType:'csv'}));
-
-        // 3. Refined Contacts CSV
-        const contactsData = selected.filter(d => d.Email1 || d.Email2 || d.Email3).map(d => {
-            let state = '';
-            if (d.StreetAddress) {
-                const match = d.StreetAddress.match(/\b([A-Z]{2,3})\b(?= \d{4,})/);
-                state = match ? match[1] : '';
-            }
-            return {
-                "Company": d.BusinessName || '', "Address_Suburb": d.Suburb || '', "Address_State": state,
-                "Notes": `Refined_Search_${currentJobId}`, "Category": d.Category || '',
-                "email_1": d.Email1 || '', "email_2": d.Email2 || '', "email_3": d.Email3 || '',
-                "facebook": d.FacebookURL || '', "instagram": d.InstagramURL || '', "linkedin": '',
-            };
+        const wsS = XLSX.utils.json_to_sheet(sms, { header: ["FirstName", "LastName", "Organization", "Email", "FaxNumber", "MobileNumber", "CustomField1", "CustomField2", "CustomField3", "CustomField4", "Unsubscribed"] });
+        zip.file(`Refined_Mobile_Numbers_Only_${currentJobId}.csv`, XLSX.write({SheetNames:["S"], Sheets:{S:wsS}}, {type:'buffer', bookType:'csv'}));
+        const con = sel.filter(d => d.Email1 || d.Email2 || d.Email3).map(d => {
+            let st = ''; if (d.StreetAddress) { const m = d.StreetAddress.match(/\b([A-Z]{2,3})\b(?= \d{4,})/); st = m ? m[1] : ''; }
+            return { "Company": d.BusinessName || '', "Address_Suburb": d.Suburb || '', "Address_State": st, "Notes": `Refined_Search_${currentJobId}`, "Category": d.Category || '', "email_1": d.Email1 || '', "email_2": d.Email2 || '', "email_3": d.Email3 || '', "facebook": d.FacebookURL || '', "instagram": d.InstagramURL || '', "linkedin": '', };
         });
-        const wsContacts = XLSX.utils.json_to_sheet(contactsData, { header: ["Company", "Address_Suburb", "Address_State", "Notes", "Category", "facebook", "instagram", "linkedin", "email_1", "email_2", "email_3"] });
-        zip.file(`Refined_Full_DuplicatesRemoved_Emails_${currentJobId}.csv`, XLSX.write({SheetNames:["C"], Sheets:{C:wsContacts}}, {type:'buffer', bookType:'csv'}));
-
-        const content = await zip.generateAsync({type:"blob"});
-        const link = document.createElement('a');
-        link.href = URL.createObjectURL(content);
-        link.download = `Refined_Full_Collection_${currentJobId}.zip`;
-        link.click();
+        const wsC = XLSX.utils.json_to_sheet(con, { header: ["Company", "Address_Suburb", "Address_State", "Notes", "Category", "facebook", "instagram", "linkedin", "email_1", "email_2", "email_3"] });
+        zip.file(`Refined_Full_DuplicatesRemoved_Emails_${currentJobId}.csv`, XLSX.write({SheetNames:["C"], Sheets:{C:wsC}}, {type:'buffer', bookType:'csv'}));
+        const blob = await zip.generateAsync({type:"blob"}); const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = `Refined_Full_Collection_${currentJobId}.zip`; link.click();
     }
 
-    return {
-        init,
-        toggle: (id) => { 
-            const item = masterData.find(d => d._id === id); 
-            if (item) {
-                item._checked = !item._checked; 
-                updateCounters();
-                debouncedSave();
-            }
-        }
-    };
+    return { init, toggle: (id) => { const item = masterData.find(d => d._id === id); if (item) { item._checked = !item._checked; updateRowsOnly(); debouncedSave(); } } };
 })();
 document.addEventListener('DOMContentLoaded', () => window.rtrlApp.review.init());
