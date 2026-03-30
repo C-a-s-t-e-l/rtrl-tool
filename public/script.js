@@ -1022,7 +1022,11 @@ card.querySelector('.zone-slider-input').oninput = (e) => {
         const ss = Array.from(elements.subCategoryCheckboxContainer.querySelectorAll("input:checked")).map((c) => c.value).filter((v) => v !== "select_all");
         const localToday = new Date();
         
-        const multiPoints = window.rtrlApp.state.anchors.map(a => ({ coords: `${a.lat},${a.lng}`, radius: a.radius }));
+        const multiPoints = window.rtrlApp.state.anchors.map(a => ({ 
+    coords: `${a.lat},${a.lng}`, 
+    radius: a.radius, 
+    name: a.name 
+}));
         
         const p = {
             country: elements.countryInput.value, businessNames: ns,
@@ -1169,7 +1173,8 @@ if (p.multiRadiusPoints && p.multiRadiusPoints.length > 0) {
       p.multiRadiusPoints.forEach((point, i) => {
           const co = point.coords.split(",");
           const latlng = { lat: parseFloat(co[0]), lng: parseFloat(co[1]) };
-          window.rtrlApp.addAnchor(latlng, `Zone ${i+1}`);
+          const zoneName = point.name || `Zone ${i+1}`; 
+          window.rtrlApp.addAnchor(latlng, zoneName);
           const last = window.rtrlApp.state.anchors[window.rtrlApp.state.anchors.length - 1];
           last.radius = point.radius;
           if (last.circle) last.circle.setRadius(point.radius * 1000);
