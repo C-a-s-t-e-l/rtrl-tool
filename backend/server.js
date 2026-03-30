@@ -1323,7 +1323,7 @@ async function getSearchQueriesForRadius(
     }
   }
 
-  const radiusVal = parseFloat(radius);
+  const radiusVal = parseFloat(radiusKm);
   // Grid Size: 1 for <= 2km, otherwise scale based on size
   const GRID_SIZE = radiusVal <= 2 ? 1 : Math.max(3, Math.ceil(radiusVal / 2));
   

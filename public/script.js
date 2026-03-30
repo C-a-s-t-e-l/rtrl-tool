@@ -166,18 +166,22 @@ document.addEventListener("DOMContentLoaded", () => {
       const now = new Date().toLocaleTimeString();
       logMessage(elements.logEl, `[${now}] Connected to server.`, "success");
       
-      if (currentUserSession) {
-          socket.emit("authenticate_socket", currentUserSession.access_token);
-          const savedJobId = localStorage.getItem("rtrl_active_job_id");
-          if (savedJobId) {
-            currentJobId = savedJobId;
+if (currentUserSession) {
+        socket.emit("authenticate_socket", currentUserSession.access_token);
+        
+        const savedJobId = localStorage.getItem("rtrl_active_job_id");
+        if (savedJobId) {
             socket.emit("subscribe_to_job", {
-              jobId: savedJobId,
-              authToken: currentUserSession.access_token,
+                jobId: savedJobId,
+                authToken: currentUserSession.access_token,
             });
-          }
-      }
-    });
+        } else {
+            updateDashboardUi("ready");
+            setUiState(false, elements);
+        }
+    }
+});
+
 
     socket.on("disconnect", () => {
       const now = new Date().toLocaleTimeString();
@@ -262,20 +266,24 @@ socket.on("job_state", (job) => {
   }
 });
 
-    socket.on("job_update", (data) => {
-      if (data.id === currentJobId || !currentJobId) {
-        if (data.status === "running") {
-          currentJobId = data.id;
-          localStorage.setItem("rtrl_active_job_id", data.id);
-          resetStatusUI();
-          updateDashboardUi("running");
-        } else if (data.status === "completed" || data.status === "failed") {
-          updateDashboardUi(data.status);
-          localStorage.removeItem("rtrl_active_job_id");
-          currentJobId = null;
+socket.on("job_update", (data) => {
+    console.log("Job status update received:", data); 
+    
+    if (data.status === "running") {
+        currentJobId = data.id;
+        localStorage.setItem("rtrl_active_job_id", data.id);
+        resetStatusUI();
+        updateDashboardUi("running");
+    } else if (data.status === "completed" || data.status === "failed") {
+        updateDashboardUi("ready"); 
+        localStorage.removeItem("rtrl_active_job_id");
+        currentJobId = null;
+        
+        if (window.rtrlApp.jobHistory) {
+            window.rtrlApp.jobHistory.fetchAndRenderJobs();
         }
-      }
-    });
+    }
+});
 
     socket.on("progress_update", (data) => {
       const card = document.getElementById("status-card");
