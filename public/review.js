@@ -12,6 +12,17 @@ window.rtrlApp.review = (function () {
     ownerType: "all",
   };
 
+    let sharedSbClient = null;
+  function getSbClient() {
+      if (!sharedSbClient) {
+          sharedSbClient = supabase.createClient(
+              window.CONFIG.SUPABASE_URL,
+              window.CONFIG.SUPABASE_ANON_KEY
+          );
+      }
+      return sharedSbClient;
+  }
+
   function init() {
     const observer = new MutationObserver((mutations) => {
       mutations.forEach((mutation) => {
@@ -43,10 +54,9 @@ window.rtrlApp.review = (function () {
   async function openReview(jobId) {
     currentJobId = jobId;
     try {
-      const sbClient = supabase.createClient(
-        window.CONFIG.SUPABASE_URL,
-        window.CONFIG.SUPABASE_ANON_KEY,
-      );
+
+      const sbClient = getSbClient();
+
       const { data, error } = await sbClient
         .from("jobs")
         .select("results, parameters")
@@ -161,10 +171,9 @@ window.rtrlApp.review = (function () {
       const { _id, _reviewStatus, _checked, ...clean } = item;
       return { ...clean, _selected: _checked };
     });
-    const sbClient = supabase.createClient(
-      window.CONFIG.SUPABASE_URL,
-      window.CONFIG.SUPABASE_ANON_KEY,
-    );
+    
+    const sbClient = getSbClient();
+
     await sbClient.from("jobs").update({ results: res }).eq("id", currentJobId);
     setTimeout(() => {
       if (ind) ind.innerHTML = '<i class="fas fa-check"></i> Changes saved';

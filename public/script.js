@@ -764,20 +764,58 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
-    window.rtrlApp.addAnchor = function(latlng, name) {
-      const id = Date.now();
-      const defaultRadius = 3;
+    window.rtrlApp.savePinsToLocalStorage = () => {
+        const pins = window.rtrlApp.state.anchors.map(a => ({
+            id: a.id, lat: a.lat, lng: a.lng, radius: a.radius, name: a.name
+        }));
+        localStorage.setItem("rtrl_saved_zones", JSON.stringify(pins));
+    };
+
+    window.rtrlApp.loadPinsFromLocalStorage = () => {
+        const saved = localStorage.getItem("rtrl_saved_zones");
+        if (saved) {
+            try {
+                const pins = JSON.parse(saved);
+                if (pins.length > 0) {
+                    pins.forEach(p => {
+                        window.rtrlApp.addAnchor({lat: p.lat, lng: p.lng}, p.name, p.radius, p.id);
+                    });
+                    
+                    const radContainer = document.getElementById("radiusSearchContainer");
+                    if (radContainer && radContainer.classList.contains("collapsed")) {
+                        radContainer.classList.remove("collapsed");
+                        const icon = radContainer.previousElementSibling.querySelector(".toggle-icon");
+                        if (icon) icon.classList.add("open");
+                    }
+                    
+                    setTimeout(() => {
+                        if (window.rtrlApp.map && window.rtrlApp.state.anchors.length > 0) {
+                            const group = new L.featureGroup(window.rtrlApp.state.anchors.map(a => a.circle));
+                            window.rtrlApp.map.fitBounds(group.getBounds().pad(0.1));
+                        }
+                    }, 500);
+                }
+            } catch (e) {
+                console.error("Failed to parse saved zones", e);
+            }
+        }
+    };
+
+
+window.rtrlApp.addAnchor = function(latlng, name, savedRadius = 3, savedId = null) {
+      const id = savedId || Date.now();
+      const radius = savedRadius;
 
       const marker = L.marker(latlng, { draggable: true }).addTo(window.rtrlApp.map);
       const circle = L.circle(latlng, {
-          radius: defaultRadius * 1000,
+          radius: radius * 1000,
           color: "#3b82f6",
           weight: 2,
           fillColor: "#3b82f6",
           fillOpacity: 0.15
       }).addTo(window.rtrlApp.map);
 
-      const anchor = { id, marker, circle, radius: defaultRadius, name, lat: latlng.lat, lng: latlng.lng };
+      const anchor = { id, marker, circle, radius: radius, name, lat: latlng.lat, lng: latlng.lng };
       window.rtrlApp.state.anchors.push(anchor);
 
       marker.on('drag', (e) => {
@@ -801,15 +839,19 @@ document.addEventListener("DOMContentLoaded", () => {
                 if (locality) anchor.name = locality.long_name;
                 else anchor.name = results[0].formatted_address.split(',')[0];
                 renderZoneList();
+                window.rtrlApp.savePinsToLocalStorage(); 
              } catch(err) {}
+          } else {
+             window.rtrlApp.savePinsToLocalStorage(); 
           }
       });
 
       renderZoneList();
+      window.rtrlApp.savePinsToLocalStorage(); 
       
-      if(window.rtrlApp.state.anchors.length === 1) {
+      if(window.rtrlApp.state.anchors.length === 1 && !savedId) {
           window.rtrlApp.map.setView(latlng, 12);
-      } else {
+      } else if (!savedId) {
           const group = new L.featureGroup(window.rtrlApp.state.anchors.map(a => a.circle));
           window.rtrlApp.map.fitBounds(group.getBounds().pad(0.1));
       }
@@ -837,11 +879,15 @@ document.addEventListener("DOMContentLoaded", () => {
               </div>
           `;
 
-          card.querySelector('.zone-slider-input').oninput = (e) => {
+card.querySelector('.zone-slider-input').oninput = (e) => {
               const val = parseInt(e.target.value);
               a.radius = val;
               a.circle.setRadius(val * 1000);
               card.querySelector('.zone-radius-display').textContent = val + "km";
+          };
+
+          card.querySelector('.zone-slider-input').onchange = () => {
+              window.rtrlApp.savePinsToLocalStorage(); 
           };
 
           card.querySelector('.zone-delete-btn').onclick = () => {
@@ -850,6 +896,7 @@ document.addEventListener("DOMContentLoaded", () => {
               window.rtrlApp.state.anchors = window.rtrlApp.state.anchors.filter(x => x.id !== a.id);
               renderZoneList();
               updateMapPreviewText();
+              window.rtrlApp.savePinsToLocalStorage(); 
           };
           list.appendChild(card);
       });
@@ -959,7 +1006,21 @@ document.addEventListener("DOMContentLoaded", () => {
 
         if (ns.length === 0) p.count = elements.findAllBusinessesCheckbox.checked || !elements.countInput.value.trim() ? -1 : parseInt(elements.countInput.value, 10);
 
-        const areaKey = multiPoints.length > 0 ? `${multiPoints.length} Zones` : (window.rtrlApp.postalCodes.length > 0 ? window.rtrlApp.postalCodes.join("_") : elements.locationInput.value.split(",")[0]);
+let areaKey = "";
+if (window.rtrlApp.state.anchors.length > 0) {
+    const names = window.rtrlApp.state.anchors.map(a => a.name.split(',')[0].trim());
+    if (names.length === 1) {
+        areaKey = names[0];
+    } else if (names.length === 2) {
+        areaKey = `${names[0]} and ${names[1]}`;
+    } else {
+        areaKey = `${names[0]} and ${names.length - 1} others`;
+    }
+} else if (window.rtrlApp.postalCodes.length > 0) {
+    areaKey = window.rtrlApp.postalCodes.join("_");
+} else {
+    areaKey = elements.locationInput.value.split(",")[0];
+}
 
         p.searchParamsForEmail = {
             primaryCategory: elements.primaryCategorySelect.value,
@@ -975,10 +1036,17 @@ document.addEventListener("DOMContentLoaded", () => {
             ...p,
         });
 
-        const originalText = elements.startButton.innerHTML;
+const originalText = elements.startButton.innerHTML;
         elements.startButton.innerHTML = '<i class="fas fa-check"></i> Added to Queue!';
         elements.startButton.style.backgroundColor = "#10b981";
-        setTimeout(() => { elements.startButton.innerHTML = originalText; elements.startButton.style.backgroundColor = ""; }, 2000);
+        
+        setTimeout(() => {
+            elements.startButton.innerHTML = originalText;
+            elements.startButton.style.backgroundColor = "";
+            
+            window.rtrlApp.setRadiusInputsState(true);
+            localStorage.removeItem("rtrl_saved_zones");
+        }, 2000);
     };
 
     function initializeApp() {
@@ -996,6 +1064,9 @@ document.addEventListener("DOMContentLoaded", () => {
       }
       loadGoogleMaps();
     }
+
+    window.rtrlApp.loadPinsFromLocalStorage();
+
     initializeApp();
   }
   initializeMainApp();
@@ -1042,7 +1113,7 @@ document.addEventListener("DOMContentLoaded", () => {
       });
     }
     
-    if (p.multiRadiusPoints && p.multiRadiusPoints.length > 0) {
+if (p.multiRadiusPoints && p.multiRadiusPoints.length > 0) {
       p.multiRadiusPoints.forEach((point, i) => {
           const co = point.coords.split(",");
           const latlng = { lat: parseFloat(co[0]), lng: parseFloat(co[1]) };
@@ -1055,6 +1126,21 @@ document.addEventListener("DOMContentLoaded", () => {
       if(radContainer) radContainer.classList.remove("collapsed");
       const txt = document.getElementById('map-preview-text');
       if (txt) txt.textContent = `${window.rtrlApp.state.anchors.length} active search zone(s) defined.`;
+      
+    } else if (p.radiusKm && p.anchorPoint) {
+      const co = p.anchorPoint.split(",");
+      if (co.length === 2) {
+          const latlng = { lat: parseFloat(co[0]), lng: parseFloat(co[1]) };
+          window.rtrlApp.addAnchor(latlng, p.searchParamsForEmail?.area || "Legacy Zone");
+          const last = window.rtrlApp.state.anchors[window.rtrlApp.state.anchors.length - 1];
+          last.radius = p.radiusKm;
+          if (last.circle) last.circle.setRadius(p.radiusKm * 1000);
+          
+          const radContainer = document.getElementById("radiusSearchContainer");
+          if(radContainer) radContainer.classList.remove("collapsed");
+          const txt = document.getElementById('map-preview-text');
+          if (txt) txt.textContent = `1 active search zone(s) defined.`;
+      }
     } else {
       if(el.location) el.location.value = p.location || "";
       if (p.postalCode) p.postalCode.forEach((pc) => window.rtrlApp.validateAndAddTag(pc));

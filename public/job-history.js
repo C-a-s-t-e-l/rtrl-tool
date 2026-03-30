@@ -104,16 +104,24 @@ window.rtrlApp.jobHistory = (function () {
         const date = new Date(created_at).toLocaleString();
         const totalResults = result_count || 0;
 
-        let searchType = "Suburb/Area Search";
+let searchType = "Suburb/Area Search";
         let locationDetail = s.area || p.location || "N/A";
 
-        if (p.radiusKm) {
+        if (p.multiRadiusPoints && p.multiRadiusPoints.length > 0) {
+            searchType = p.multiRadiusPoints.length === 1 ? "Radius Search" : "Multi-Zone Search";
+            const radii = p.multiRadiusPoints.map(pt => pt.radius);
+            const avgRadius = Math.round(radii.reduce((a, b) => a + b, 0) / radii.length);
+            locationDetail = `${s.area} (~${avgRadius}km avg radius)`;
+        } 
+        else if (p.radiusKm) {
             searchType = "Radius Search";
             locationDetail = `${p.radiusKm} km radius around ${s.area || 'selected point'}`;
-        } else if (p.postalCode && p.postalCode.length > 0) {
+        } 
+        else if (p.postalCode && p.postalCode.length > 0) {
             searchType = "Postcode Search";
             locationDetail = `Postcodes: ${p.postalCode.join(", ")}`;
-        } else if (p.businessNames && p.businessNames.length > 0) {
+        } 
+        else if (p.businessNames && p.businessNames.length > 0) {
             searchType = "Specific Name Search";
             locationDetail = `${p.businessNames.length} individual business names`;
         }
