@@ -1,4 +1,7 @@
 document.addEventListener("DOMContentLoaded", () => {
+let isSubscribed = false;
+
+
   const BACKEND_URL = "https://backend.rtrlprospector.space";
   const SUPABASE_URL = window.CONFIG.SUPABASE_URL;
   const SUPABASE_ANON_KEY = window.CONFIG.SUPABASE_ANON_KEY;
@@ -163,6 +166,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     socket.on("connect", () => {
+      if (isSubscribed) return;
       const now = new Date().toLocaleTimeString();
       logMessage(elements.logEl, `[${now}] Connected to server.`, "success");
       
@@ -180,10 +184,12 @@ if (currentUserSession) {
             setUiState(false, elements);
         }
     }
+    isSubscribed = true;
 });
 
 
     socket.on("disconnect", () => {
+      isSubscribed = false;
       const now = new Date().toLocaleTimeString();
       logMessage(elements.logEl, `[${now}] Connection lost. Reconnecting...`, "error");
     });
@@ -249,21 +255,28 @@ socket.on("user_job_transition", ({ jobId, status }) => {
     });
 
 socket.on("job_state", (job) => {
-  currentJobId = job.id;
-  localStorage.setItem("rtrl_active_job_id", job.id);
+    if (currentJobId !== job.id) {
+        currentJobId = job.id;
+        resetStatusUI(); 
+    }
+    
+    localStorage.setItem("rtrl_active_job_id", job.id);
 
-  if (job.status === "running") {
-    socket.emit("subscribe_to_job", { jobId: job.id, authToken: currentUserSession.access_token });
-    resetStatusUI();
-    updateDashboardUi("running");
-    setUiState(true, elements); 
-  } else if (job.status === "queued") {
-    updateDashboardUi("ready");
-    setUiState(false, elements);
-  } else if (job.status === "completed" || job.status === "failed") {
-    updateDashboardUi(job.status);
-    setUiState(false, elements);
-  }
+    if (job.status === "running") {
+        socket.emit("subscribe_to_job", { jobId: job.id, authToken: currentUserSession.access_token });
+        updateDashboardUi("running");
+        setUiState(true, elements); 
+    } 
+    else if (job.status === "queued") {
+        updateDashboardUi("ready");
+        setUiState(false, elements);
+    } 
+    else if (job.status === "completed" || job.status === "failed") {
+        updateDashboardUi(job.status);
+        setUiState(false, elements);
+        localStorage.removeItem("rtrl_active_job_id");
+        currentJobId = null;
+    }
 });
 
 socket.on("job_update", (data) => {
@@ -274,16 +287,19 @@ socket.on("job_update", (data) => {
         localStorage.setItem("rtrl_active_job_id", data.id);
         resetStatusUI();
         updateDashboardUi("running");
+        setUiState(true, elements); 
     } else if (data.status === "completed" || data.status === "failed") {
         updateDashboardUi("ready"); 
         localStorage.removeItem("rtrl_active_job_id");
         currentJobId = null;
+        setUiState(false, elements); 
         
         if (window.rtrlApp.jobHistory) {
             window.rtrlApp.jobHistory.fetchAndRenderJobs();
         }
     }
 });
+
 
     socket.on("progress_update", (data) => {
       const card = document.getElementById("status-card");
