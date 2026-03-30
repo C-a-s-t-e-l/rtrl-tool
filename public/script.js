@@ -846,11 +846,11 @@ window.rtrlApp.loadPinsFromLocalStorage = () => {
 
 window.rtrlApp.addAnchor = function(latlng, name, savedRadius = 3, savedId = null) {
       const id = savedId || Date.now();
-      const radius = savedRadius;
+      const radius = parseFloat(savedRadius); 
 
       const marker = L.marker(latlng, { draggable: true }).addTo(window.rtrlApp.map);
       const circle = L.circle(latlng, {
-          radius: radius * 1000,
+          radius: radius * 1000, 
           color: "#3b82f6",
           weight: 2,
           fillColor: "#3b82f6",
@@ -1127,23 +1127,36 @@ if (window.rtrlApp.state.anchors.length > 0) {
   }
   initializeMainApp();
 
-  window.rtrlApp.cloneJobIntoForm = (p) => {
+window.rtrlApp.cloneJobIntoForm = (p) => {
     const el = {
-      primaryCat: document.getElementById("primaryCategorySelect"), customCat: document.getElementById("customCategoryInput"),
-      location: document.getElementById("locationInput"), country: document.getElementById("countryInput"), count: document.getElementById("count"),
-      findAll: document.getElementById("findAllBusinesses"), names: document.getElementById("businessNamesInput"), aiToggle: document.getElementById("useAiToggle"),
+      primaryCat: document.getElementById("primaryCategorySelect"), 
+      customCat: document.getElementById("customCategoryInput"),
+      location: document.getElementById("locationInput"), 
+      country: document.getElementById("countryInput"), 
+      count: document.getElementById("count"),
+      findAll: document.getElementById("findAllBusinesses"), 
+      names: document.getElementById("businessNamesInput"), 
+      aiToggle: document.getElementById("useAiToggle"),
     };
+
+    if (window.rtrlApp.state.anchors && window.rtrlApp.state.anchors.length > 0) {
+        window.rtrlApp.state.anchors.forEach(a => {
+            if (a.marker) window.rtrlApp.map.removeLayer(a.marker);
+            if (a.circle) window.rtrlApp.map.removeLayer(a.circle);
+        });
+    }
+    
+    window.rtrlApp.state.anchors = [];
+    window.rtrlApp.postalCodes = [];
+    window.rtrlApp.customKeywords = [];
+    localStorage.removeItem("rtrl_saved_zones");
+
     if(el.location) el.location.value = "";
     if(el.names) el.names.value = "";
-    window.rtrlApp.postalCodes.length = 0;
-    window.rtrlApp.customKeywords.length = 0;
-    
-    window.rtrlApp.state.anchors.forEach(a => {
-        if(window.rtrlApp.map) { window.rtrlApp.map.removeLayer(a.marker); window.rtrlApp.map.removeLayer(a.circle); }
-    });
-    window.rtrlApp.state.anchors = [];
     document.querySelectorAll(".tag").forEach((t) => t.remove());
     
+    renderZoneList(); 
+    updateMapPreviewText();
     if (el.aiToggle) el.aiToggle.checked = p.useAiEnrichment !== false;
     if (el.country) el.country.value = p.country || "Australia";
     
@@ -1163,47 +1176,55 @@ if (window.rtrlApp.state.anchors.length > 0) {
       p.categoriesToLoop.forEach((kw) => {
         window.rtrlApp.customKeywords.push(kw);
         const t = document.createElement("span");
-        t.className = "tag"; t.innerHTML = `<span>${kw}</span> <span class="tag-close-btn" data-value="${kw}">&times;</span>`;
+        t.className = "tag"; 
+        t.innerHTML = `<span>${kw}</span> <span class="tag-close-btn" data-value="${kw}">&times;</span>`;
         const kwContainer = document.getElementById("customKeywordContainer");
         if(kwContainer && el.customCat) kwContainer.insertBefore(t, el.customCat);
       });
     }
     
-if (p.multiRadiusPoints && p.multiRadiusPoints.length > 0) {
+    if (p.multiRadiusPoints && p.multiRadiusPoints.length > 0) {
       p.multiRadiusPoints.forEach((point, i) => {
           const co = point.coords.split(",");
           const latlng = { lat: parseFloat(co[0]), lng: parseFloat(co[1]) };
+          
           const zoneName = point.name || `Zone ${i+1}`; 
-          window.rtrlApp.addAnchor(latlng, zoneName);
-          const last = window.rtrlApp.state.anchors[window.rtrlApp.state.anchors.length - 1];
-          last.radius = point.radius;
-          if (last.circle) last.circle.setRadius(point.radius * 1000);
+          
+          window.rtrlApp.addAnchor(latlng, zoneName, point.radius);
       });
+      
       const radContainer = document.getElementById("radiusSearchContainer");
-      if(radContainer) radContainer.classList.remove("collapsed");
-      const txt = document.getElementById('map-preview-text');
-      if (txt) txt.textContent = `${window.rtrlApp.state.anchors.length} active search zone(s) defined.`;
+      if(radContainer) {
+          radContainer.classList.remove("collapsed");
+          const icon = radContainer.previousElementSibling.querySelector(".toggle-icon");
+          if (icon) icon.classList.add("open");
+      }
       
     } else if (p.radiusKm && p.anchorPoint) {
       const co = p.anchorPoint.split(",");
       if (co.length === 2) {
           const latlng = { lat: parseFloat(co[0]), lng: parseFloat(co[1]) };
-          window.rtrlApp.addAnchor(latlng, p.searchParamsForEmail?.area || "Legacy Zone");
-          const last = window.rtrlApp.state.anchors[window.rtrlApp.state.anchors.length - 1];
-          last.radius = p.radiusKm;
-          if (last.circle) last.circle.setRadius(p.radiusKm * 1000);
+          const zoneName = p.searchParamsForEmail?.area || "Search Area";
+          
+          window.rtrlApp.addAnchor(latlng, zoneName, p.radiusKm);
           
           const radContainer = document.getElementById("radiusSearchContainer");
           if(radContainer) radContainer.classList.remove("collapsed");
-          const txt = document.getElementById('map-preview-text');
-          if (txt) txt.textContent = `1 active search zone(s) defined.`;
       }
     } else {
       if(el.location) el.location.value = p.location || "";
       if (p.postalCode) p.postalCode.forEach((pc) => window.rtrlApp.validateAndAddTag(pc));
       const locContainer = document.getElementById("locationSearchContainer");
-      if(locContainer) locContainer.classList.remove("collapsed");
+      if(locContainer) {
+          locContainer.classList.remove("collapsed");
+          const icon = locContainer.previousElementSibling.querySelector(".toggle-icon");
+          if (icon) icon.classList.add("open");
+      }
     }
+
+    renderZoneList();
+    updateMapPreviewText();
+    
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 });
