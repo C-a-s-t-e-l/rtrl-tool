@@ -379,6 +379,18 @@ if (browser) await browser.close();
 
     const { uniqueBusinesses, duplicates } = deduplicateBusinesses(allProcessedBusinesses);
 
+    // Send one final progress update to lock in the numbers on the UI
+io.to(jobId).emit("progress_update", { 
+    phase: 'completed', 
+    processed: allProcessedBusinesses.length, 
+    discovered: masterUrlMap.size, 
+    added: allProcessedBusinesses.length, 
+    target: finalCount, 
+    enriched: allProcessedBusinesses.filter(b => b.OwnerName && b.OwnerName !== "Private Owner").length,
+    aiProcessed: allProcessedBusinesses.length,
+    aiTarget: masterUrlMap.size
+});
+
     if (userEmail && uniqueBusinesses.length > 0) {
         const emailParams = { 
             ...searchParamsForEmail, 

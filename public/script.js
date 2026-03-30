@@ -231,28 +231,18 @@ if (currentUserSession) {
     });
 
 socket.on("user_job_transition", ({ jobId, status }) => {
-        const now = new Date().toLocaleTimeString();
-        logMessage(elements.logEl, `[${now}] Job status changed: ${status}`, "info");
+    if (status === "running") {
+        currentJobId = jobId;
+        localStorage.setItem("rtrl_active_job_id", jobId);
         
-        if (status === "running") {
-            currentJobId = jobId;
-            localStorage.setItem("rtrl_active_job_id", jobId);
-            
-            socket.emit("subscribe_to_job", { jobId, authToken: currentUserSession.access_token });
-            
-            resetStatusUI();
-            updateDashboardUi("running");
-            setUiState(true, elements); 
-            
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-            if (window.rtrlApp.jobHistory) window.rtrlApp.jobHistory.fetchAndRenderJobs();
-        } 
-        else if (status === "completed" || status === "failed") {
-            updateDashboardUi(status);
-            setUiState(false, elements); 
-            if (window.rtrlApp.jobHistory) window.rtrlApp.jobHistory.fetchAndRenderJobs();
-        }
-    });
+        socket.emit("subscribe_to_job", { jobId, authToken: currentUserSession.access_token });
+        
+        resetStatusUI();
+        updateDashboardUi("running");
+        
+        if (window.rtrlApp.jobHistory) window.rtrlApp.jobHistory.fetchAndRenderJobs();
+    }
+});
 
 socket.on("job_state", (job) => {
     if (currentJobId !== job.id) {
@@ -280,8 +270,6 @@ socket.on("job_state", (job) => {
 });
 
 socket.on("job_update", (data) => {
-    console.log("Job status update received:", data); 
-    
     if (data.status === "running") {
         currentJobId = data.id;
         localStorage.setItem("rtrl_active_job_id", data.id);
@@ -289,7 +277,7 @@ socket.on("job_update", (data) => {
         updateDashboardUi("running");
         setUiState(true, elements); 
     } else if (data.status === "completed" || data.status === "failed") {
-        updateDashboardUi("ready"); 
+        updateDashboardUi(data.status); 
         localStorage.removeItem("rtrl_active_job_id");
         currentJobId = null;
         setUiState(false, elements); 
@@ -341,7 +329,15 @@ socket.on("job_update", (data) => {
 
     socket.on("job_log", (msg) => logMessage(elements.logEl, msg, "info"));
     socket.on("job_error", ({ error }) => logMessage(elements.logEl, `Error: ${error}`, "error"));
-    socket.on("business_found", () => refreshUsageTracker());
+    socket.on("business_found", (business) => {
+    refreshUsageTracker();
+    
+    const countEl = document.getElementById(`job-count-${currentJobId}`);
+    if (countEl) {
+        let currentCount = parseInt(countEl.textContent.replace(/\D/g, "")) || 0;
+        countEl.innerHTML = `<i class="fas fa-database"></i> ${currentCount + 1} Results Found`;
+    }
+});
     socket.on("user_profile_updated", () => refreshUsageTracker());
 
     function resetStatusUI() {
@@ -1087,15 +1083,10 @@ if (window.rtrlApp.state.anchors.length > 0) {
             elements.startButton.style.backgroundColor = "";
             elements.startButton.disabled = false; 
 
-            window.rtrlApp.setRadiusInputsState(true); 
-            elements.btnOpenMapWorkspace.disabled = false; 
-            
             elements.locationInput.value = "";
             elements.businessNamesInput.value = "";
             window.rtrlApp.postalCodes = [];
             document.querySelectorAll(".tag").forEach(t => t.remove());
-
-            localStorage.removeItem("rtrl_saved_zones");
         }, 2000);
     };
 
