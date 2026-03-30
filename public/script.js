@@ -401,12 +401,14 @@ document.addEventListener("DOMContentLoaded", () => {
             }
           }
         }, 150);
-      } else {
+} else {
         elements.mapModal.style.display = 'none';
         elements.smallMapContainer.appendChild(elements.mapElement);
+        
         setTimeout(() => {
           if (window.rtrlApp.map) {
-            window.rtrlApp.map.invalidateSize();
+            window.rtrlApp.map.invalidateSize(true); 
+            
             if (window.rtrlApp.state.anchors.length > 0) {
               const group = new L.featureGroup(window.rtrlApp.state.anchors.map(a => a.circle));
               window.rtrlApp.map.fitBounds(group.getBounds().pad(0.1));
@@ -415,7 +417,7 @@ document.addEventListener("DOMContentLoaded", () => {
             }
           }
           updateMapPreviewText();
-        }, 150);
+        }, 200); 
       }
     }
 
@@ -771,7 +773,7 @@ document.addEventListener("DOMContentLoaded", () => {
         localStorage.setItem("rtrl_saved_zones", JSON.stringify(pins));
     };
 
-    window.rtrlApp.loadPinsFromLocalStorage = () => {
+window.rtrlApp.loadPinsFromLocalStorage = () => {
         const saved = localStorage.getItem("rtrl_saved_zones");
         if (saved) {
             try {
@@ -789,11 +791,15 @@ document.addEventListener("DOMContentLoaded", () => {
                     }
                     
                     setTimeout(() => {
-                        if (window.rtrlApp.map && window.rtrlApp.state.anchors.length > 0) {
-                            const group = new L.featureGroup(window.rtrlApp.state.anchors.map(a => a.circle));
-                            window.rtrlApp.map.fitBounds(group.getBounds().pad(0.1));
+                        if (window.rtrlApp.map) {
+                            window.rtrlApp.map.invalidateSize(true); 
+                            
+                            if (window.rtrlApp.state.anchors.length > 0) {
+                                const group = new L.featureGroup(window.rtrlApp.state.anchors.map(a => a.circle));
+                                window.rtrlApp.map.fitBounds(group.getBounds().pad(0.1));
+                            }
                         }
-                    }, 500);
+                    }, 600); 
                 }
             } catch (e) {
                 console.error("Failed to parse saved zones", e);
