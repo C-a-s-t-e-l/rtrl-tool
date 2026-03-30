@@ -127,10 +127,8 @@ const updateJobStatus = async (jobId, status) => {
       jobQueue = jobQueue.filter(j => j.id !== jobId);
   }
 
-  // Notify the specific Job Room
   io.to(jobId).emit("job_update", { id: jobId, status });
   
-  // 2. Notify the User's Room so their dashboard switches focus automatically
   if (job) {
     io.to(job.user_id).emit("user_job_transition", { jobId, status });
   }
@@ -274,32 +272,31 @@ const runScrapeJob = async (jobId) => {
                 const discovered = new Set();
                 await collectGoogleMapsUrlsContinuously(collectionPage, finalQ, jobId, discovered, country);
                 
-                discovered.forEach(url => {
-                    if (!masterUrlMap.has(url)) {
-                        // --- START GEO-FENCING LOGIC ---
-                        const businessCoords = extractCoordinatesFromUrl(url);
-                        
-                        if (businessCoords) {
-                            // Check against Multi-Zones
-                            if (parameters.multiRadiusPoints && parameters.multiRadiusPoints.length > 0) {
-                                const isInsideAnyZone = parameters.multiRadiusPoints.some(point => {
-                                    const [pLat, pLng] = point.coords.split(',').map(Number);
-                                    const dist = calculateDistance(pLat, pLng, businessCoords.lat, businessCoords.lng);
-                                    return dist <= (parseFloat(point.radius) + 0.3); // Added 300m buffer for edge cases
-                                });
-                                if (!isInsideAnyZone) return; // Skip "Google Bleed"
-                            } 
-                            // Check against Legacy Single Radius
-                            else if (radiusKm && anchorPoint && filterCenterLat) {
-                                const dist = calculateDistance(filterCenterLat, filterCenterLng, businessCoords.lat, businessCoords.lng);
-                                if (dist > (parseFloat(radiusKm) + 0.3)) return; // Skip
-                            }
-                        }
-                        // --- END GEO-FENCING LOGIC ---
-
-                        masterUrlMap.set(url, item);
-                    }
+discovered.forEach(url => {
+    if (!masterUrlMap.has(url)) {
+        const businessCoords = extractCoordinatesFromUrl(url);
+        
+        if (businessCoords) {
+            let isInsideAnyZone = false;
+            if (parameters.multiRadiusPoints && parameters.multiRadiusPoints.length > 0) {
+                isInsideAnyZone = parameters.multiRadiusPoints.some(point => {
+                    const [pLat, pLng] = point.coords.split(',').map(Number);
+                    const dist = calculateDistance(pLat, pLng, businessCoords.lat, businessCoords.lng);
+                    return dist <= (parseFloat(point.radius) + 0.5); 
                 });
+            } else if (radiusKm && anchorPoint && filterCenterLat) {
+                const dist = calculateDistance(filterCenterLat, filterCenterLng, businessCoords.lat, businessCoords.lng);
+                isInsideAnyZone = dist <= (parseFloat(radiusKm) + 0.5);
+            } else {
+                isInsideAnyZone = true;
+            }
+            
+            if (!isInsideAnyZone) return; 
+        }
+        masterUrlMap.set(url, item);
+    }
+});
+
                 
                 io.to(jobId).emit("progress_update", { phase: 'discovery', discovered: masterUrlMap.size, processed: 0, added: allProcessedBusinesses.length });
             }
@@ -1325,37 +1322,32 @@ async function getSearchQueriesForRadius(
       return [];
     }
   }
-  const GRID_SIZE = radiusKm <= 2 ? 1 : Math.max(3, Math.ceil(radiusKm / 2));
-  await addLog(
-    jobId,
-    `   -> Generating a ${GRID_SIZE}x${GRID_SIZE} grid to cover the ${radiusKm}km radius.`
-  );
-  const latOffset = radiusKm / 111.0;
-  const lngOffset = radiusKm / (111.0 * Math.cos(degToRad(centerLat)));
+
+  const radiusVal = parseFloat(radius);
+  // Grid Size: 1 for <= 2km, otherwise scale based on size
+  const GRID_SIZE = radiusVal <= 2 ? 1 : Math.max(3, Math.ceil(radiusVal / 2));
+  
+  const latOffset = radiusVal / 111.0;
+  const lngOffset = radiusVal / (111.0 * Math.cos(degToRad(centerLat)));
+  
   const minLat = centerLat - latOffset;
   const maxLat = centerLat + latOffset;
   const minLng = centerLng - lngOffset;
   const maxLng = centerLng + lngOffset;
+
   for (let i = 0; i < GRID_SIZE; i++) {
     for (let j = 0; j < GRID_SIZE; j++) {
-      const pointLat = minLat + (maxLat - minLat) * (i / (GRID_SIZE - 1));
-      const pointLng = minLng + (maxLng - minLng) * (j / (GRID_SIZE - 1));
-      if (
-        calculateDistance(centerLat, centerLng, pointLat, pointLng) <=
-        radiusKm * 1.05
-      ) {
-        searchQueries.push(
-          `near ${pointLat.toFixed(6)},${pointLng.toFixed(6)}`
-        );
+      const pointLat = GRID_SIZE === 1 ? centerLat : (minLat + (maxLat - minLat) * (i / (GRID_SIZE - 1)));
+      const pointLng = GRID_SIZE === 1 ? centerLng : (minLng + (maxLng - minLng) * (j / (GRID_SIZE - 1)));
+      
+      if (calculateDistance(centerLat, centerLng, pointLat, pointLng) <= (radiusVal * 1.05)) {
+        searchQueries.push(`near ${pointLat.toFixed(6)},${pointLng.toFixed(6)}`);
       }
     }
   }
-  await addLog(
-    jobId,
-    `   -> Generated ${searchQueries.length} valid search points within the radius.`
-  );
   return searchQueries;
 }
+
 async function getSearchQueriesForLocation(
   searchQuery,
   areaQuery,

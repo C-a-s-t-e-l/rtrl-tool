@@ -220,40 +220,47 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 
-    socket.on("user_job_transition", ({ jobId, status }) => {
+socket.on("user_job_transition", ({ jobId, status }) => {
+        const now = new Date().toLocaleTimeString();
+        logMessage(elements.logEl, `[${now}] Job status changed: ${status}`, "info");
+        
         if (status === "running") {
-            const now = new Date().toLocaleTimeString();
-            logMessage(elements.logEl, `[${now}] Worker picked up Job ${jobId.substring(0,8)}...`, "info");
             currentJobId = jobId;
             localStorage.setItem("rtrl_active_job_id", jobId);
+            
             socket.emit("subscribe_to_job", { jobId, authToken: currentUserSession.access_token });
             
             resetStatusUI();
             updateDashboardUi("running");
-            window.scrollTo({ top: 0, behavior: 'smooth' });
+            setUiState(true, elements); 
             
+            window.scrollTo({ top: 0, behavior: 'smooth' });
             if (window.rtrlApp.jobHistory) window.rtrlApp.jobHistory.fetchAndRenderJobs();
-        } else if (status === "completed" || status === "failed") {
+        } 
+        else if (status === "completed" || status === "failed") {
+            updateDashboardUi(status);
+            setUiState(false, elements); 
             if (window.rtrlApp.jobHistory) window.rtrlApp.jobHistory.fetchAndRenderJobs();
         }
     });
 
 socket.on("job_state", (job) => {
-      currentJobId = job.id;
-      localStorage.setItem("rtrl_active_job_id", job.id);
+  currentJobId = job.id;
+  localStorage.setItem("rtrl_active_job_id", job.id);
 
-      if (job.status === "running") {
-        resetStatusUI();
-        updateDashboardUi("running");
-        setUiState(true, elements); 
-      } else if (job.status === "queued") {
-        updateDashboardUi("ready"); 
-        setUiState(false, elements);
-      } else if (job.status === "completed" || job.status === "failed") {
-        updateDashboardUi(job.status);
-        setUiState(false, elements);
-      }
-    });
+  if (job.status === "running") {
+    socket.emit("subscribe_to_job", { jobId: job.id, authToken: currentUserSession.access_token });
+    resetStatusUI();
+    updateDashboardUi("running");
+    setUiState(true, elements); 
+  } else if (job.status === "queued") {
+    updateDashboardUi("ready");
+    setUiState(false, elements);
+  } else if (job.status === "completed" || job.status === "failed") {
+    updateDashboardUi(job.status);
+    setUiState(false, elements);
+  }
+});
 
     socket.on("job_update", (data) => {
       if (data.id === currentJobId || !currentJobId) {

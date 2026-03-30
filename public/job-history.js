@@ -190,7 +190,7 @@ let searchType = "Suburb/Area Search";
 
                 <div class="job-meta">
                     <span><i class="fas fa-calendar-alt"></i> ${date}</span>
-                    <span id="job-count-${id}"><i class="fas fa-database"></i> ${totalResults} Results Found</span>
+                    <span id="job-count-${id}"><i class="fas fa-database"></i> ${(job.results ? job.results.length : result_count) || 0} Results Found</span>
                     <span><i class="fas fa-fingerprint"></i> ID: ${id}</span>
                 </div>
 
