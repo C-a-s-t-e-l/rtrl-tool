@@ -246,45 +246,68 @@ const runScrapeJob = async (jobId) => {
     const finalCount = businessNames && businessNames.length > 0 ? -1 : parameters.count || -1;
 
 // --- PHASE 1: DISCOVERY ---
-if (masterUrlMap.size === 0 || allProcessedBusinesses.length < finalCount || finalCount === -1) {
-    for (const item of searchItems) {
-        browser = await launchBrowser(`[Phase 1] Searching Maps for: "${item}"`);
-        let collectionPage = await browser.newPage();
-        
-        let locationQueries = [];
-        
-        if (parameters.multiRadiusPoints && parameters.multiRadiusPoints.length > 0) {
-            for (const point of parameters.multiRadiusPoints) {
-                const radiusQueries = await getSearchQueriesForRadius(point.coords, point.radius, country, GOOGLE_MAPS_API_KEY, jobId);
-                locationQueries.push(...radiusQueries);
-            }
-        } else if (anchorPoint && radiusKm) {
-            locationQueries = await getSearchQueriesForRadius(anchorPoint, radiusKm, country, GOOGLE_MAPS_API_KEY, jobId);
-        } else {
-            let searchAreas = postalCode && postalCode.length > 0 ? postalCode : [location];
-            for (const areaQuery of searchAreas) {
-                const base = isIndividualSearch ? `${item}, ${areaQuery}, ${country}` : `${item} in ${areaQuery}, ${country}`;
-                locationQueries.push(...await getSearchQueriesForLocation(base, areaQuery, country, jobId, isIndividualSearch));
-            }
-        }
-
-        for (const query of locationQueries) {
-            const finalQ = isIndividualSearch || query.startsWith("near ") ? `${item} ${query}` : query;
-            const discovered = new Set();
-            await collectGoogleMapsUrlsContinuously(collectionPage, finalQ, jobId, discovered, country);
+    if (masterUrlMap.size === 0 || allProcessedBusinesses.length < finalCount || finalCount === -1) {
+        for (const item of searchItems) {
+            browser = await launchBrowser(`[Phase 1] Searching Maps for: "${item}"`);
+            let collectionPage = await browser.newPage();
             
-            discovered.forEach(url => {
-                if (!masterUrlMap.has(url)) {
-                    masterUrlMap.set(url, item);
+            let locationQueries = [];
+            
+            // Generate search points for Multi-Zone or Legacy Radius
+            if (parameters.multiRadiusPoints && parameters.multiRadiusPoints.length > 0) {
+                for (const point of parameters.multiRadiusPoints) {
+                    const radiusQueries = await getSearchQueriesForRadius(point.coords, point.radius, country, GOOGLE_MAPS_API_KEY, jobId);
+                    locationQueries.push(...radiusQueries);
                 }
-            });
-            
-            io.to(jobId).emit("progress_update", { phase: 'discovery', discovered: masterUrlMap.size, processed: 0, added: allProcessedBusinesses.length });
+            } else if (anchorPoint && radiusKm) {
+                locationQueries = await getSearchQueriesForRadius(anchorPoint, radiusKm, country, GOOGLE_MAPS_API_KEY, jobId);
+            } else {
+                let searchAreas = postalCode && postalCode.length > 0 ? postalCode : [location];
+                for (const areaQuery of searchAreas) {
+                    const base = isIndividualSearch ? `${item}, ${areaQuery}, ${country}` : `${item} in ${areaQuery}, ${country}`;
+                    locationQueries.push(...await getSearchQueriesForLocation(base, areaQuery, country, jobId, isIndividualSearch));
+                }
+            }
+
+            for (const query of locationQueries) {
+                const finalQ = isIndividualSearch || query.startsWith("near ") ? `${item} ${query}` : query;
+                const discovered = new Set();
+                await collectGoogleMapsUrlsContinuously(collectionPage, finalQ, jobId, discovered, country);
+                
+                discovered.forEach(url => {
+                    if (!masterUrlMap.has(url)) {
+                        // --- START GEO-FENCING LOGIC ---
+                        const businessCoords = extractCoordinatesFromUrl(url);
+                        
+                        if (businessCoords) {
+                            // Check against Multi-Zones
+                            if (parameters.multiRadiusPoints && parameters.multiRadiusPoints.length > 0) {
+                                const isInsideAnyZone = parameters.multiRadiusPoints.some(point => {
+                                    const [pLat, pLng] = point.coords.split(',').map(Number);
+                                    const dist = calculateDistance(pLat, pLng, businessCoords.lat, businessCoords.lng);
+                                    return dist <= (parseFloat(point.radius) + 0.3); // Added 300m buffer for edge cases
+                                });
+                                if (!isInsideAnyZone) return; // Skip "Google Bleed"
+                            } 
+                            // Check against Legacy Single Radius
+                            else if (radiusKm && anchorPoint && filterCenterLat) {
+                                const dist = calculateDistance(filterCenterLat, filterCenterLng, businessCoords.lat, businessCoords.lng);
+                                if (dist > (parseFloat(radiusKm) + 0.3)) return; // Skip
+                            }
+                        }
+                        // --- END GEO-FENCING LOGIC ---
+
+                        masterUrlMap.set(url, item);
+                    }
+                });
+                
+                io.to(jobId).emit("progress_update", { phase: 'discovery', discovered: masterUrlMap.size, processed: 0, added: allProcessedBusinesses.length });
+            }
+            if (browser) { await browser.close(); browser = null; }
         }
-        if (browser) { await browser.close(); browser = null; }
+        // Save the filtered URLs to Supabase so we don't lose progress
+        await supabase.from("jobs").update({ collected_urls: Array.from(masterUrlMap, ([url, cat]) => ({ url, category: cat })) }).eq("id", jobId);
     }
-    await supabase.from("jobs").update({ collected_urls: Array.from(masterUrlMap, ([url, cat]) => ({ url, category: cat })) }).eq("id", jobId);
-}
 
     // --- GRACEFUL CHECK: Did we find anything? ---
     if (masterUrlMap.size === 0) {
@@ -1302,7 +1325,7 @@ async function getSearchQueriesForRadius(
       return [];
     }
   }
-  const GRID_SIZE = Math.max(3, Math.ceil(radiusKm / 2));
+  const GRID_SIZE = radiusKm <= 2 ? 1 : Math.max(3, Math.ceil(radiusKm / 2));
   await addLog(
     jobId,
     `   -> Generating a ${GRID_SIZE}x${GRID_SIZE} grid to cover the ${radiusKm}km radius.`

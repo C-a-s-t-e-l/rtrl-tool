@@ -238,17 +238,20 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 
-    socket.on("job_state", (job) => {
+socket.on("job_state", (job) => {
+      currentJobId = job.id;
+      localStorage.setItem("rtrl_active_job_id", job.id);
+
       if (job.status === "running") {
-        currentJobId = job.id;
-        localStorage.setItem("rtrl_active_job_id", job.id);
         resetStatusUI();
         updateDashboardUi("running");
+        setUiState(true, elements); 
       } else if (job.status === "queued") {
-        currentJobId = job.id;
-        localStorage.setItem("rtrl_active_job_id", job.id);
+        updateDashboardUi("ready"); 
+        setUiState(false, elements);
       } else if (job.status === "completed" || job.status === "failed") {
         updateDashboardUi(job.status);
+        setUiState(false, elements);
       }
     });
 
@@ -705,8 +708,9 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     };
 
-    window.rtrlApp.setRadiusInputsState = (d) => {
+window.rtrlApp.setRadiusInputsState = (d) => {
       if (elements.btnOpenMapWorkspace) elements.btnOpenMapWorkspace.disabled = d;
+      
       if (d) {
         window.rtrlApp.state.anchors.forEach(a => {
             if(window.rtrlApp.map) {
@@ -1042,15 +1046,24 @@ if (window.rtrlApp.state.anchors.length > 0) {
             ...p,
         });
 
-const originalText = elements.startButton.innerHTML;
+        const originalText = elements.startButton.innerHTML;
         elements.startButton.innerHTML = '<i class="fas fa-check"></i> Added to Queue!';
         elements.startButton.style.backgroundColor = "#10b981";
+        elements.startButton.disabled = true; 
         
         setTimeout(() => {
             elements.startButton.innerHTML = originalText;
             elements.startButton.style.backgroundColor = "";
+            elements.startButton.disabled = false; 
+
+            window.rtrlApp.setRadiusInputsState(true); 
+            elements.btnOpenMapWorkspace.disabled = false; 
             
-            window.rtrlApp.setRadiusInputsState(true);
+            elements.locationInput.value = "";
+            elements.businessNamesInput.value = "";
+            window.rtrlApp.postalCodes = [];
+            document.querySelectorAll(".tag").forEach(t => t.remove());
+
             localStorage.removeItem("rtrl_saved_zones");
         }, 2000);
     };

@@ -74,17 +74,11 @@ function setUiState(isResearching, elements) {
   const {
     startButton,
     primaryCategorySelect,
-    subCategoryCheckboxContainer,
     customCategoryInput,
     locationInput,
     postalCodeInput,
-    countryInput,
-    countInput,
-    findAllBusinessesCheckbox,
+    btnOpenMapWorkspace, 
     businessNamesInput,
-    userEmailInput,
-    anchorPointInput,
-    radiusSlider,
   } = elements;
 
   const disabled = isResearching;
@@ -101,21 +95,16 @@ function setUiState(isResearching, elements) {
     customCategoryInput,
     locationInput,
     postalCodeInput,
-    countryInput,
-    countInput,
-    findAllBusinessesCheckbox,
+    btnOpenMapWorkspace, 
     businessNamesInput,
-    userEmailInput,
-    anchorPointInput,
-    radiusSlider,
   ];
 
   inputs.forEach((input) => {
     if (input) input.disabled = disabled;
   });
 
-  if (subCategoryCheckboxContainer) {
-    subCategoryCheckboxContainer
+  if (elements.subCategoryCheckboxContainer) {
+    elements.subCategoryCheckboxContainer
       .querySelectorAll("input")
       .forEach((cb) => (cb.disabled = disabled));
   }
