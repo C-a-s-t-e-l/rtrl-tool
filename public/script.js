@@ -950,6 +950,9 @@ card.querySelector('.zone-slider-input').oninput = (e) => {
       if (txt) txt.textContent = `${window.rtrlApp.state.anchors.length} active search zone(s) defined.`;
     }
 
+    window.rtrlApp.renderZoneList = renderZoneList;
+    window.rtrlApp.updateMapPreviewText = updateMapPreviewText;
+
     if (elements.workspaceSearchInput) {
         elements.workspaceSearchInput.addEventListener('input', () => {
             clearTimeout(window.rtrlApp.timers.workspace);
@@ -1129,14 +1132,14 @@ if (window.rtrlApp.state.anchors.length > 0) {
 
 window.rtrlApp.cloneJobIntoForm = (p) => {
     const el = {
-      primaryCat: document.getElementById("primaryCategorySelect"), 
-      customCat: document.getElementById("customCategoryInput"),
-      location: document.getElementById("locationInput"), 
-      country: document.getElementById("countryInput"), 
-      count: document.getElementById("count"),
-      findAll: document.getElementById("findAllBusinesses"), 
-      names: document.getElementById("businessNamesInput"), 
-      aiToggle: document.getElementById("useAiToggle"),
+        primaryCat: document.getElementById("primaryCategorySelect"), 
+        customCat: document.getElementById("customCategoryInput"),
+        location: document.getElementById("locationInput"), 
+        country: document.getElementById("countryInput"), 
+        count: document.getElementById("count"),
+        findAll: document.getElementById("findAllBusinesses"), 
+        names: document.getElementById("businessNamesInput"), 
+        aiToggle: document.getElementById("useAiToggle"),
     };
 
     if (window.rtrlApp.state.anchors && window.rtrlApp.state.anchors.length > 0) {
@@ -1155,76 +1158,72 @@ window.rtrlApp.cloneJobIntoForm = (p) => {
     if(el.names) el.names.value = "";
     document.querySelectorAll(".tag").forEach((t) => t.remove());
     
-    renderZoneList(); 
-    updateMapPreviewText();
+    if (window.rtrlApp.renderZoneList) window.rtrlApp.renderZoneList(); 
+    if (window.rtrlApp.updateMapPreviewText) window.rtrlApp.updateMapPreviewText();
+
     if (el.aiToggle) el.aiToggle.checked = p.useAiEnrichment !== false;
     if (el.country) el.country.value = p.country || "Australia";
     
     if (p.count === -1) {
-      if(el.findAll) el.findAll.checked = true;
-      if(el.count) { el.count.value = ""; el.count.disabled = true; }
+        if(el.findAll) el.findAll.checked = true;
+        if(el.count) { el.count.value = ""; el.count.disabled = true; }
     } else {
-      if(el.findAll) el.findAll.checked = false;
-      if(el.count) { el.count.value = p.count || ""; el.count.disabled = false; }
+        if(el.findAll) el.findAll.checked = false;
+        if(el.count) { el.count.value = p.count || ""; el.count.disabled = false; }
     }
     
     if (p.businessNames?.length > 0) {
-      if(el.names) el.names.value = p.businessNames.join("\n");
-      const indContainer = document.getElementById("individualSearchContainer");
-      if(indContainer) indContainer.classList.remove("collapsed");
+        if(el.names) el.names.value = p.businessNames.join("\n");
+        const indContainer = document.getElementById("individualSearchContainer");
+        if(indContainer) indContainer.classList.remove("collapsed");
     } else if (p.categoriesToLoop) {
-      p.categoriesToLoop.forEach((kw) => {
-        window.rtrlApp.customKeywords.push(kw);
-        const t = document.createElement("span");
-        t.className = "tag"; 
-        t.innerHTML = `<span>${kw}</span> <span class="tag-close-btn" data-value="${kw}">&times;</span>`;
-        const kwContainer = document.getElementById("customKeywordContainer");
-        if(kwContainer && el.customCat) kwContainer.insertBefore(t, el.customCat);
-      });
+        p.categoriesToLoop.forEach((kw) => {
+            window.rtrlApp.customKeywords.push(kw);
+            const t = document.createElement("span");
+            t.className = "tag"; 
+            t.innerHTML = `<span>${kw}</span> <span class="tag-close-btn" data-value="${kw}">&times;</span>`;
+            const kwContainer = document.getElementById("customKeywordContainer");
+            if(kwContainer && el.customCat) kwContainer.insertBefore(t, el.customCat);
+        });
     }
     
     if (p.multiRadiusPoints && p.multiRadiusPoints.length > 0) {
-      p.multiRadiusPoints.forEach((point, i) => {
-          const co = point.coords.split(",");
-          const latlng = { lat: parseFloat(co[0]), lng: parseFloat(co[1]) };
-          
-          const zoneName = point.name || `Zone ${i+1}`; 
-          
-          window.rtrlApp.addAnchor(latlng, zoneName, point.radius);
-      });
-      
-      const radContainer = document.getElementById("radiusSearchContainer");
-      if(radContainer) {
-          radContainer.classList.remove("collapsed");
-          const icon = radContainer.previousElementSibling.querySelector(".toggle-icon");
-          if (icon) icon.classList.add("open");
-      }
-      
+        p.multiRadiusPoints.forEach((point, i) => {
+            const co = point.coords.split(",");
+            const latlng = { lat: parseFloat(co[0]), lng: parseFloat(co[1]) };
+            const zoneName = point.name || `Zone ${i+1}`; 
+            window.rtrlApp.addAnchor(latlng, zoneName, point.radius);
+        });
+        
+        const radContainer = document.getElementById("radiusSearchContainer");
+        if(radContainer) {
+            radContainer.classList.remove("collapsed");
+            const icon = radContainer.previousElementSibling.querySelector(".toggle-icon");
+            if (icon) icon.classList.add("open");
+        }
+        
     } else if (p.radiusKm && p.anchorPoint) {
-      const co = p.anchorPoint.split(",");
-      if (co.length === 2) {
-          const latlng = { lat: parseFloat(co[0]), lng: parseFloat(co[1]) };
-          const zoneName = p.searchParamsForEmail?.area || "Search Area";
-          
-          window.rtrlApp.addAnchor(latlng, zoneName, p.radiusKm);
-          
-          const radContainer = document.getElementById("radiusSearchContainer");
-          if(radContainer) radContainer.classList.remove("collapsed");
-      }
+        const co = p.anchorPoint.split(",");
+        if (co.length === 2) {
+            const latlng = { lat: parseFloat(co[0]), lng: parseFloat(co[1]) };
+            window.rtrlApp.addAnchor(latlng, p.searchParamsForEmail?.area || "Search Area", p.radiusKm);
+            const radContainer = document.getElementById("radiusSearchContainer");
+            if(radContainer) radContainer.classList.remove("collapsed");
+        }
     } else {
-      if(el.location) el.location.value = p.location || "";
-      if (p.postalCode) p.postalCode.forEach((pc) => window.rtrlApp.validateAndAddTag(pc));
-      const locContainer = document.getElementById("locationSearchContainer");
-      if(locContainer) {
-          locContainer.classList.remove("collapsed");
-          const icon = locContainer.previousElementSibling.querySelector(".toggle-icon");
-          if (icon) icon.classList.add("open");
-      }
+        if(el.location) el.location.value = p.location || "";
+        if (p.postalCode) p.postalCode.forEach((pc) => window.rtrlApp.validateAndAddTag(pc));
+        const locContainer = document.getElementById("locationSearchContainer");
+        if(locContainer) {
+            locContainer.classList.remove("collapsed");
+            const icon = locContainer.previousElementSibling.querySelector(".toggle-icon");
+            if (icon) icon.classList.add("open");
+        }
     }
 
-    renderZoneList();
-    updateMapPreviewText();
+    if (window.rtrlApp.renderZoneList) window.rtrlApp.renderZoneList();
+    if (window.rtrlApp.updateMapPreviewText) window.rtrlApp.updateMapPreviewText();
     
     window.scrollTo({ top: 0, behavior: "smooth" });
-  };
+};
 });
