@@ -943,51 +943,58 @@ input:checked + .slider:before {
     box-shadow: 0 2px 4px rgba(0,0,0,0.02);
     transition: border-color 0.2s;
 }
-.zone-card:hover {
-    border-color: #3b82f6;
+.zone-card:hover { border-color: #3b82f6; }
+.zone-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.zone-card-title { font-size: 0.85rem; font-weight: 700; color: #1e293b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px; }
+.zone-delete-btn { background: none; border: none; color: #94a3b8; cursor: pointer; font-size: 0.9rem; padding: 4px; transition: color 0.2s; }
+.zone-delete-btn:hover { color: #ef4444; }
+.zone-slider-container { display: flex; align-items: center; gap: 12px; }
+.zone-radius-display { font-size: 0.8rem; font-weight: 800; color: #475569; min-width: 40px; }
+
+/* Custom Slider Styling */
+.zone-slider-input { 
+    -webkit-appearance: none;
+    appearance: none;
+    flex: 1; 
+    height: 6px; 
+    background: #e2e8f0;
+    border-radius: 4px;
+    outline: none;
+    cursor: pointer; 
 }
-.zone-card-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 10px;
-}
-.zone-card-title {
-    font-size: 0.85rem;
-    font-weight: 700;
-    color: #1e293b;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 200px;
-}
-.zone-delete-btn {
-    background: none;
-    border: none;
-    color: #94a3b8;
+.zone-slider-input::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #8b5cf6;
     cursor: pointer;
-    font-size: 0.9rem;
-    padding: 4px;
-    transition: color 0.2s;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    border: 2px solid #fff;
+    transition: transform 0.1s;
 }
-.zone-delete-btn:hover {
-    color: #ef4444;
+.zone-slider-input::-moz-range-thumb {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #8b5cf6;
+    cursor: pointer;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    border: 2px solid #fff;
+    transition: transform 0.1s;
 }
-.zone-slider-container {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-}
-.zone-slider-input {
-    flex: 1;
-    height: 6px;
-    accent-color: #8b5cf6;
-}
-.zone-radius-display {
-    font-size: 0.8rem;
-    font-weight: 800;
-    color: #475569;
-    min-width: 40px;
+.zone-slider-input::-webkit-slider-thumb:hover { transform: scale(1.1); }
+.zone-slider-input::-moz-range-thumb:hover { transform: scale(1.1); }
+
+/* Workspace Map Fixes */
+#map-workspace-modal .search-wrapper input {
+    background: #fff;
+    border: 1px solid #cbd5e1;
+    font-size: 0.85rem;
+    width: 100%;
+    padding: 8px 12px 8px 36px;
+    border-radius: 8px;
 }
 
 @keyframes wave-animation {

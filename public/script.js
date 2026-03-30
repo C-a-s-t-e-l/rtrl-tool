@@ -31,6 +31,7 @@ document.addEventListener("DOMContentLoaded", () => {
     setRadiusInputsState: () => {},
     setLocationInputsState: () => {},
     drawSearchCircle: () => {},
+    addAnchor: () => {}
   };
 
   function initializeMainApp() {
@@ -53,30 +54,22 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
       const limit = profile.daily_limit || 500;
-      const percentage = Math.min(
-        Math.round((displayUsage / limit) * 100),
-        100,
-      );
+      const percentage = Math.min(Math.round((displayUsage / limit) * 100), 100);
 
-      if (elements.dashUsageCurrent)
-        elements.dashUsageCurrent.textContent = displayUsage.toLocaleString();
-      if (elements.dashUsageLimit)
-        elements.dashUsageLimit.textContent = limit.toLocaleString();
+      if (elements.dashUsageCurrent) elements.dashUsageCurrent.textContent = displayUsage.toLocaleString();
+      if (elements.dashUsageLimit) elements.dashUsageLimit.textContent = limit.toLocaleString();
       if (elements.dashUsageFill) {
         elements.dashUsageFill.style.width = `${percentage}%`;
-        elements.dashUsageFill.style.backgroundColor =
-          percentage > 90 ? "#ef4444" : "#8b5cf6";
+        elements.dashUsageFill.style.backgroundColor = percentage > 90 ? "#ef4444" : "#8b5cf6";
       }
-      if (elements.dashUsagePercent)
-        elements.dashUsagePercent.textContent = `${percentage}% consumed`;
-
+      if (elements.dashUsagePercent) elements.dashUsagePercent.textContent = `${percentage}% consumed`;
+      
       const midnight = new Date();
       midnight.setHours(24, 0, 0, 0);
       const diffMs = midnight.getTime() - now.getTime();
       const hours = Math.floor(diffMs / (1000 * 60 * 60));
       const mins = Math.round((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-      if (elements.dashResetTimer)
-        elements.dashResetTimer.textContent = `Resets in ${hours}h ${mins}m`;
+      if (elements.dashResetTimer) elements.dashResetTimer.textContent = `Resets in ${hours}h ${mins}m`;
     }
 
     async function loadGoogleMaps() {
@@ -101,9 +94,7 @@ document.addEventListener("DOMContentLoaded", () => {
       useAiToggle: document.getElementById("useAiToggle"),
       primaryCategorySelect: document.getElementById("primaryCategorySelect"),
       subCategoryGroup: document.getElementById("subCategoryGroup"),
-      subCategoryCheckboxContainer: document.getElementById(
-        "subCategoryCheckboxContainer",
-      ),
+      subCategoryCheckboxContainer: document.getElementById("subCategoryCheckboxContainer"),
       customCategoryGroup: document.getElementById("customCategoryGroup"),
       customCategoryInput: document.getElementById("customCategoryInput"),
       customKeywordContainer: document.getElementById("customKeywordContainer"),
@@ -121,9 +112,7 @@ document.addEventListener("DOMContentLoaded", () => {
       logEl: document.getElementById("status-text"),
       postcodeListSelect: document.getElementById("postcodeListSelect"),
       savePostcodeListButton: document.getElementById("savePostcodeListButton"),
-      deletePostcodeListButton: document.getElementById(
-        "deletePostcodeListButton",
-      ),
+      deletePostcodeListButton: document.getElementById("deletePostcodeListButton"),
       categoryModifierInput: document.getElementById("categoryModifierInput"),
       loginOverlay: document.getElementById("login-overlay"),
       appContent: document.getElementById("app-content"),
@@ -143,8 +132,13 @@ document.addEventListener("DOMContentLoaded", () => {
       dashUsageCurrent: document.getElementById("dash-usage-current"),
       dashUsageLimit: document.getElementById("dash-usage-limit"),
       dashUsageFill: document.getElementById("dash-usage-fill"),
+      dashPlanBadge: document.getElementById("dash-plan-badge"),
       dashResetTimer: document.getElementById("reset-timer"),
       dashUsagePercent: document.getElementById("usage-percentage-label"),
+      dashUsageStatus: document.getElementById("usage-status-text"),
+      queueCard: document.getElementById("queue-card"),
+      queueListContainer: document.getElementById("queue-list-container"),
+      queueCountBadge: document.getElementById("queue-count-badge"),
       mapModal: document.getElementById("map-workspace-modal"),
       mapElement: document.getElementById("map"),
       bigMapContainer: document.getElementById("big-map-container"),
@@ -152,15 +146,11 @@ document.addEventListener("DOMContentLoaded", () => {
       workspaceSearchInput: document.getElementById("workspace-search-input"),
       workspaceSuggestions: document.getElementById("workspace-suggestions"),
       btnCloseMapWorkspace: document.getElementById("btn-close-map-workspace"),
-      btnOpenMapWorkspace: document.getElementById("btn-open-map-workspace"),
-      queueCard: document.getElementById("queue-card"),
-      queueListContainer: document.getElementById("queue-list-container"),
-      queueCountBadge: document.getElementById("queue-count-badge"),
+      btnOpenMapWorkspace: document.getElementById("btn-open-map-workspace")
     };
 
     if (elements.useAiToggle) {
-      elements.useAiToggle.checked =
-        localStorage.getItem("rtrl_use_ai_enrichment") !== "false";
+      elements.useAiToggle.checked = localStorage.getItem("rtrl_use_ai_enrichment") !== "false";
       elements.useAiToggle.addEventListener("change", (e) =>
         localStorage.setItem("rtrl_use_ai_enrichment", e.target.checked),
       );
@@ -176,40 +166,41 @@ document.addEventListener("DOMContentLoaded", () => {
     socket.on("connect", () => {
       const now = new Date().toLocaleTimeString();
       logMessage(elements.logEl, `[${now}] Connected to server.`, "success");
+      
       if (currentUserSession) {
-        socket.emit("authenticate_socket", currentUserSession.access_token);
-        const savedJobId = localStorage.getItem("rtrl_active_job_id");
-        if (savedJobId) {
-          currentJobId = savedJobId;
-          socket.emit("subscribe_to_job", {
-            jobId: savedJobId,
-            authToken: currentUserSession.access_token,
-          });
-        }
+          socket.emit("authenticate_socket", currentUserSession.access_token);
+          const savedJobId = localStorage.getItem("rtrl_active_job_id");
+          if (savedJobId) {
+            currentJobId = savedJobId;
+            socket.emit("subscribe_to_job", {
+              jobId: savedJobId,
+              authToken: currentUserSession.access_token,
+            });
+          }
       }
     });
 
     socket.on("disconnect", () => {
       const now = new Date().toLocaleTimeString();
-      logMessage(
-        elements.logEl,
-        `[${now}] Connection lost. Reconnecting...`,
-        "error",
-      );
+      logMessage(elements.logEl, `[${now}] Connection lost. Reconnecting...`, "error");
     });
 
     socket.on("user_queue_update", (myJobs) => {
       if (!elements.queueCard || !elements.queueListContainer) return;
+
       if (!myJobs || myJobs.length === 0) {
         elements.queueCard.style.display = "none";
+        if (elements.queueCountBadge) elements.queueCountBadge.textContent = "0 Jobs";
         return;
       }
+
       elements.queueCard.style.display = "block";
-      if (elements.queueCountBadge)
-        elements.queueCountBadge.textContent = `${myJobs.length} Job${myJobs.length !== 1 ? "s" : ""}`;
+      if (elements.queueCountBadge) {
+          elements.queueCountBadge.textContent = `${myJobs.length} Job${myJobs.length !== 1 ? 's' : ''}`;
+      }
+
       elements.queueListContainer.innerHTML = myJobs
-        .map(
-          (job) => `
+        .map((job) => `
         <div class="queue-item" style="display: flex; justify-content: space-between; align-items: center; background: #f8fafc; border: 1px solid #e2e8f0; padding: 12px; border-radius: 8px; margin-bottom: 8px; border-left: 4px solid #f59e0b;">
             <div style="display:flex; align-items:center; gap: 12px;">
                 <span class="queue-pos-badge" style="background: #fff7ed; color: #c2410c; border: 1px solid #ffedd5; font-weight: 800; padding: 4px 10px; border-radius: 6px; font-size: 0.75rem;">#${job.globalPosition}</span>
@@ -219,45 +210,40 @@ document.addEventListener("DOMContentLoaded", () => {
                 <span style="font-size: 0.7rem; color: #64748b; font-weight: 700; text-transform: uppercase;">Waiting</span>
                 <i class="fas fa-hourglass-half" style="color: #f59e0b; font-size: 0.8rem; animation: spin 2s linear infinite;"></i>
             </div>
-        </div>`,
-        )
-        .join("");
+        </div>`).join("");
     });
 
     socket.on("job_created", ({ jobId }) => {
-      const now = new Date().toLocaleTimeString();
-      logMessage(
-        elements.logEl,
-        `[${now}] Search added to waiting list.`,
-        "info",
-      );
-      if (window.rtrlApp.jobHistory)
-        window.rtrlApp.jobHistory.fetchAndRenderJobs();
+        const now = new Date().toLocaleTimeString();
+        logMessage(elements.logEl, `[${now}] Search added to waiting list.`, "info");
+        if (window.rtrlApp.jobHistory) {
+            window.rtrlApp.jobHistory.fetchAndRenderJobs();
+        }
     });
 
     socket.on("user_job_transition", ({ jobId, status }) => {
-      if (status === "running") {
-        const now = new Date().toLocaleTimeString();
-        logMessage(
-          elements.logEl,
-          `[${now}] Worker picked up Job ${jobId.substring(0, 8)}...`,
-          "info",
-        );
-        currentJobId = jobId;
-        localStorage.setItem("rtrl_active_job_id", jobId);
-        socket.emit("subscribe_to_job", {
-          jobId,
-          authToken: currentUserSession.access_token,
-        });
-        resetStatusUI();
-        updateDashboardUi("running");
-        window.scrollTo({ top: 0, behavior: "smooth" });
-        if (window.rtrlApp.jobHistory)
-          window.rtrlApp.jobHistory.fetchAndRenderJobs();
-      } else if (status === "completed" || status === "failed") {
-        if (window.rtrlApp.jobHistory)
-          window.rtrlApp.jobHistory.fetchAndRenderJobs();
-      }
+        if (status === "running") {
+            const now = new Date().toLocaleTimeString();
+            logMessage(elements.logEl, `[${now}] Worker picked up Job ${jobId.substring(0,8)}...`, "info");
+            
+            currentJobId = jobId;
+            localStorage.setItem("rtrl_active_job_id", jobId);
+            
+            socket.emit("subscribe_to_job", { jobId, authToken: currentUserSession.access_token });
+            
+            resetStatusUI();
+            updateDashboardUi("running");
+
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            
+            if (window.rtrlApp.jobHistory) {
+                window.rtrlApp.jobHistory.fetchAndRenderJobs();
+            }
+        } else if (status === "completed" || status === "failed") {
+            if (window.rtrlApp.jobHistory) {
+                window.rtrlApp.jobHistory.fetchAndRenderJobs();
+            }
+        }
     });
 
     socket.on("job_state", (job) => {
@@ -291,8 +277,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
     socket.on("progress_update", (data) => {
       const card = document.getElementById("status-card");
-      if (card && !card.classList.contains("state-working"))
-        updateDashboardUi("running");
+      if (card && !card.classList.contains("state-working")) {
+          updateDashboardUi("running");
+      }
       const {
         phase,
         processed,
@@ -442,35 +429,42 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function toggleMapWorkspace(open) {
       if (open) {
-        elements.mapModal.style.display = "flex";
+        elements.mapModal.style.display = 'flex';
         elements.bigMapContainer.appendChild(elements.mapElement);
-        if (window.rtrlApp.map) {
-          window.rtrlApp.map.invalidateSize();
-          if (window.rtrlApp.state.anchors.length > 0) {
-            const group = new L.featureGroup(
-              window.rtrlApp.state.anchors.map((a) => a.circle),
-            );
-            window.rtrlApp.map.fitBounds(group.getBounds().pad(0.1));
+        setTimeout(() => {
+          if (window.rtrlApp.map) {
+            window.rtrlApp.map.invalidateSize();
+            if (window.rtrlApp.state.anchors.length > 0) {
+              const group = new L.featureGroup(window.rtrlApp.state.anchors.map(a => a.circle));
+              window.rtrlApp.map.fitBounds(group.getBounds().pad(0.1));
+            }
           }
-        }
+        }, 50);
       } else {
-        elements.mapModal.style.display = "none";
+        elements.mapModal.style.display = 'none';
         elements.smallMapContainer.appendChild(elements.mapElement);
-        if (window.rtrlApp.map) window.rtrlApp.map.invalidateSize();
-        updateMapPreviewText();
+        setTimeout(() => {
+          if (window.rtrlApp.map) {
+            window.rtrlApp.map.invalidateSize();
+          }
+          updateMapPreviewText();
+        }, 50);
       }
     }
 
-    if (elements.btnOpenMapWorkspace)
-      elements.btnOpenMapWorkspace.onclick = (e) => {
-        e.preventDefault();
-        toggleMapWorkspace(true);
-      };
-    if (elements.btnCloseMapWorkspace)
-      elements.btnCloseMapWorkspace.onclick = (e) => {
-        e.preventDefault();
-        toggleMapWorkspace(false);
-      };
+    if (elements.btnOpenMapWorkspace) {
+        elements.btnOpenMapWorkspace.onclick = (e) => { 
+            e.preventDefault(); 
+            toggleMapWorkspace(true); 
+        };
+    }
+    
+    if (elements.btnCloseMapWorkspace) {
+        elements.btnCloseMapWorkspace.onclick = (e) => { 
+            e.preventDefault(); 
+            toggleMapWorkspace(false); 
+        };
+    }
 
     function setupPasswordToggle(toggleId, inputId) {
       const toggleBtn = document.getElementById(toggleId),
@@ -621,6 +615,8 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function setupPostcodeListHandlers() {
+      if (!elements.postcodeListSelect) return;
+      
       elements.postcodeListSelect.addEventListener("change", () => {
         const sl = savedPostcodeLists.find(
           (list) => list.id == elements.postcodeListSelect.value,
@@ -632,13 +628,16 @@ document.addEventListener("DOMContentLoaded", () => {
         if (sl) {
           sl.postcodes.forEach((pc) => window.rtrlApp.validateAndAddTag(pc));
           elements.deletePostcodeListButton.style.display = "inline-flex";
-        } else elements.deletePostcodeListButton.style.display = "none";
+        } else {
+          elements.deletePostcodeListButton.style.display = "none";
+        }
       });
       new MutationObserver(
         () =>
           (elements.savePostcodeListButton.disabled =
             elements.postalCodeContainer.querySelector(".tag") === null),
       ).observe(elements.postalCodeContainer, { childList: true });
+      
       elements.savePostcodeListButton.addEventListener("click", async () => {
         const listName = prompt("Name this list:", "");
         if (!listName || !currentUserSession) return;
@@ -655,6 +654,7 @@ document.addEventListener("DOMContentLoaded", () => {
         });
         if (response.status === 201) fetchPostcodeLists();
       });
+      
       elements.deletePostcodeListButton.addEventListener("click", async () => {
         if (
           elements.postcodeListSelect.value &&
@@ -888,20 +888,20 @@ document.addEventListener("DOMContentLoaded", () => {
 
     window.rtrlApp.handleAnchorPointSelection = async (item) => {
       const details = await new Promise((resolve, reject) => {
-        window.rtrlApp.state.googleMapsGeocoder.geocode(
-          { placeId: item.place_id },
-          (results, status) => {
+        window.rtrlApp.state.googleMapsGeocoder.geocode({ placeId: item.place_id }, (results, status) => {
             if (status === "OK" && results[0]) resolve(results[0]);
             else reject();
-          },
-        );
+        });
       });
       const { lat, lng } = details.geometry.location;
-      window.rtrlApp.addAnchor(
-        { lat: lat(), lng: lng() },
-        item.description.split(",")[0],
-      );
-      if (elements.mapModal.style.display !== "flex") toggleMapWorkspace(true);
+      window.rtrlApp.addAnchor({ lat: lat(), lng: lng() }, item.description.split(',')[0]);
+      
+      const wsInput = document.getElementById('workspace-search-input');
+      if (wsInput) wsInput.value = '';
+      
+      if (elements.mapModal && elements.mapModal.style.display !== 'flex') {
+          toggleMapWorkspace(true);
+      }
     };
 
     window.rtrlApp.handlePostalCodeSelection = async (item) => {
@@ -967,13 +967,15 @@ document.addEventListener("DOMContentLoaded", () => {
     };
 
     window.rtrlApp.setRadiusInputsState = (d) => {
-      elements.btnOpenMapWorkspace.disabled = d;
+      if (elements.btnOpenMapWorkspace) {
+          elements.btnOpenMapWorkspace.disabled = d;
+      }
       if (d) {
-        window.rtrlApp.state.anchors.forEach((a) => {
-          if (window.rtrlApp.map) {
-            window.rtrlApp.map.removeLayer(a.marker);
-            window.rtrlApp.map.removeLayer(a.circle);
-          }
+        window.rtrlApp.state.anchors.forEach(a => {
+            if(window.rtrlApp.map) {
+                window.rtrlApp.map.removeLayer(a.marker);
+                window.rtrlApp.map.removeLayer(a.circle);
+            }
         });
         window.rtrlApp.state.anchors = [];
         updateMapPreviewText();
@@ -1019,225 +1021,227 @@ document.addEventListener("DOMContentLoaded", () => {
     };
 
     if (document.getElementById("map")) {
-      window.rtrlApp.map = L.map("map").setView([-33.8688, 151.2093], 10);
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        attribution: "&copy; OpenStreetMap",
-      }).addTo(window.rtrlApp.map);
-      window.rtrlApp.map.on("click", function (e) {
-        if (elements.mapModal.style.display === "flex")
-          window.rtrlApp.addAnchor(
-            e.latlng,
-            `Zone ${window.rtrlApp.state.anchors.length + 1}`,
-          );
-      });
+        window.rtrlApp.map = L.map("map").setView([-33.8688, 151.2093], 10);
+        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+          attribution: "&copy; OpenStreetMap",
+        }).addTo(window.rtrlApp.map);
+
+        window.rtrlApp.map.on('click', function(e) {
+          if (elements.mapModal && elements.mapModal.style.display === 'flex') {
+            window.rtrlApp.addAnchor(e.latlng, `Zone ${window.rtrlApp.state.anchors.length + 1}`);
+          }
+        });
     }
 
-    window.rtrlApp.addAnchor = function (latlng, name) {
+    window.rtrlApp.addAnchor = function(latlng, name) {
       const id = Date.now();
-      const marker = L.marker(latlng, { draggable: true }).addTo(
-        window.rtrlApp.map,
-      );
+      const defaultRadius = 3;
+
+      const marker = L.marker(latlng, { draggable: true }).addTo(window.rtrlApp.map);
       const circle = L.circle(latlng, {
-        radius: 3000,
-        color: "#8b5cf6",
-        weight: 2,
-        fillColor: "#8b5cf6",
-        fillOpacity: 0.15,
+          radius: defaultRadius * 1000,
+          color: "#8b5cf6",
+          weight: 2,
+          fillColor: "#8b5cf6",
+          fillOpacity: 0.15
       }).addTo(window.rtrlApp.map);
-      const anchor = {
-        id,
-        marker,
-        circle,
-        radius: 3,
-        name,
-        lat: latlng.lat,
-        lng: latlng.lng,
-      };
+
+      const anchor = { id, marker, circle, radius: defaultRadius, name, lat: latlng.lat, lng: latlng.lng };
       window.rtrlApp.state.anchors.push(anchor);
-      marker.on("drag", (e) => {
-        const pos = e.target.getLatLng();
-        circle.setLatLng(pos);
-        anchor.lat = pos.lat;
-        anchor.lng = pos.lng;
+
+      marker.on('drag', (e) => {
+          const pos = e.target.getLatLng();
+          circle.setLatLng(pos);
+          anchor.lat = pos.lat;
+          anchor.lng = pos.lng;
       });
+
       renderZoneList();
+      
+      if(window.rtrlApp.state.anchors.length === 1) {
+          window.rtrlApp.map.setView(latlng, 12);
+      }
     };
 
     function renderZoneList() {
-      const list = document.getElementById("zone-list");
-      if (!list) return;
+      const list = document.getElementById('zone-list');
+      if(!list) return;
+      
       list.innerHTML = "";
-      window.rtrlApp.state.anchors.forEach((a) => {
-        const card = document.createElement("div");
-        card.className = "zone-card";
-        card.innerHTML = `<div class="zone-card-header"><span class="zone-card-title">${a.name}</span><button class="zone-delete-btn"><i class="fas fa-trash-alt"></i></button></div><div class="zone-slider-container"><input type="range" class="zone-slider-input" min="1" max="25" value="${a.radius}"><span class="zone-radius-display">${a.radius}km</span></div>`;
-        card.querySelector(".zone-slider-input").oninput = (e) => {
-          const val = parseInt(e.target.value);
-          a.radius = val;
-          a.circle.setRadius(val * 1000);
-          card.querySelector(".zone-radius-display").textContent = val + "km";
-        };
-        card.querySelector(".zone-delete-btn").onclick = () => {
-          window.rtrlApp.map.removeLayer(a.marker);
-          window.rtrlApp.map.removeLayer(a.circle);
-          window.rtrlApp.state.anchors = window.rtrlApp.state.anchors.filter(
-            (x) => x.id !== a.id,
-          );
-          renderZoneList();
-        };
-        list.appendChild(card);
+      window.rtrlApp.state.anchors.forEach(a => {
+          const card = document.createElement('div');
+          card.className = "zone-card";
+          card.innerHTML = `
+              <div class="zone-card-header">
+                  <span class="zone-card-title">${a.name}</span>
+                  <button class="zone-delete-btn"><i class="fas fa-trash-alt"></i></button>
+              </div>
+              <div class="zone-slider-container">
+                  <input type="range" class="zone-slider-input" min="1" max="25" value="${a.radius}">
+                  <span class="zone-radius-display">${a.radius}km</span>
+              </div>
+          `;
+
+          card.querySelector('.zone-slider-input').oninput = (e) => {
+              const val = parseInt(e.target.value);
+              a.radius = val;
+              a.circle.setRadius(val * 1000);
+              card.querySelector('.zone-radius-display').textContent = val + "km";
+          };
+
+          card.querySelector('.zone-delete-btn').onclick = () => {
+              window.rtrlApp.map.removeLayer(a.marker);
+              window.rtrlApp.map.removeLayer(a.circle);
+              window.rtrlApp.state.anchors = window.rtrlApp.state.anchors.filter(x => x.id !== a.id);
+              renderZoneList();
+          };
+          list.appendChild(card);
       });
     }
 
     function updateMapPreviewText() {
-      const txt = document.getElementById("map-preview-text");
-      if (txt)
-        txt.textContent = `${window.rtrlApp.state.anchors.length} active search zone(s) defined.`;
+      const txt = document.getElementById('map-preview-text');
+      if (txt) {
+          txt.textContent = `${window.rtrlApp.state.anchors.length} active search zone(s) defined.`;
+      }
     }
 
-    if (elements.workspaceSearchInput)
-      elements.workspaceSearchInput.addEventListener("input", () =>
-        window.rtrlApp.fetchPlaceSuggestions(
-          elements.workspaceSearchInput,
-          elements.workspaceSuggestions,
-          ["geocode"],
-          window.rtrlApp.handleAnchorPointSelection,
-        ),
-      );
+    if (elements.workspaceSearchInput) {
+        elements.workspaceSearchInput.addEventListener('input', () => {
+            window.rtrlApp.fetchPlaceSuggestions(
+                elements.workspaceSearchInput, 
+                elements.workspaceSuggestions, 
+                ["geocode"], 
+                window.rtrlApp.handleAnchorPointSelection
+            );
+        });
+    }
 
     window.rtrlApp.startResearch = () => {
-      if (!currentUserSession) return;
-      document.querySelectorAll(".collapsible-section").forEach((s) => {
-        s.style.borderColor = "";
-        s.style.boxShadow = "";
-      });
-      const errorModal = document.getElementById("alert-modal"),
-        errorText = document.getElementById("alert-modal-message");
-      const businessNames = elements.businessNamesInput.value.trim(),
-        hasCustomKeywords = window.rtrlApp.customKeywords.length > 0,
-        hasPrimaryCategory = elements.primaryCategorySelect.value !== "";
-      const hasBusinessDef =
-        businessNames || hasCustomKeywords || hasPrimaryCategory;
-      const hasLocationText = elements.locationInput.value.trim().length > 0,
-        hasPostcodes = window.rtrlApp.postalCodes.length > 0,
-        hasRadiusAnchors = window.rtrlApp.state.anchors.length > 0;
-      const hasLocationDef =
-        hasLocationText || hasPostcodes || hasRadiusAnchors;
-      const expandAndHighlight = (elementId) => {
-        const content = document.getElementById(elementId);
-        if (content && content.classList.contains("collapsed")) {
-          content.classList.remove("collapsed");
-          const icon =
-            content.previousElementSibling.querySelector(".toggle-icon");
-          if (icon) icon.classList.add("open");
+        if (!currentUserSession) return;
+
+        document.querySelectorAll(".collapsible-section").forEach(s => {
+            s.style.borderColor = "";
+            s.style.boxShadow = "";
+        });
+        
+        const errorModal = document.getElementById("alert-modal");
+        const errorText = document.getElementById("alert-modal-message");
+
+        const businessNames = elements.businessNamesInput.value.trim();
+        const hasCustomKeywords = window.rtrlApp.customKeywords.length > 0;
+        const hasPrimaryCategory = elements.primaryCategorySelect.value !== "";
+        const hasBusinessDef = businessNames || hasCustomKeywords || hasPrimaryCategory;
+
+        const hasLocationText = elements.locationInput.value.trim().length > 0;
+        const hasPostcodes = window.rtrlApp.postalCodes.length > 0;
+        const hasRadiusAnchors = window.rtrlApp.state.anchors.length > 0;
+        const hasLocationDef = hasLocationText || hasPostcodes || hasRadiusAnchors;
+
+        const expandAndHighlight = (elementId) => {
+            const content = document.getElementById(elementId);
+            if (content && content.classList.contains("collapsed")) {
+                content.classList.remove("collapsed");
+                const icon = content.previousElementSibling.querySelector(".toggle-icon");
+                if (icon) icon.classList.add("open");
+                
+                if (elementId === "radiusSearchContainer" && window.rtrlApp.map) {
+                    setTimeout(() => window.rtrlApp.map.invalidateSize(), 300);
+                }
+            }
+            const section = content.closest(".collapsible-section");
+            section.style.borderColor = "#ef4444";
+            section.style.boxShadow = "0 0 0 1px #ef4444";
+        };
+
+        if (!hasBusinessDef && !hasLocationDef) {
+            errorText.innerHTML = "You haven't defined <b>what</b> to search for or <b>where</b> to search. Please complete the highlighted sections.";
+            expandAndHighlight("bulkSearchContainer");
+            expandAndHighlight("locationSearchContainer");
+            expandAndHighlight("radiusSearchContainer");
+            errorModal.style.display = "flex";
+            return;
         }
-        const section = content.closest(".collapsible-section");
-        section.style.borderColor = "#ef4444";
-        section.style.boxShadow = "0 0 0 1px #ef4444";
-      };
-      if (!hasBusinessDef && !hasLocationDef) {
-        errorText.innerHTML =
-          "You haven't defined <b>what</b> to search for or <b>where</b> to search. Please complete the highlighted sections.";
-        expandAndHighlight("bulkSearchContainer");
-        expandAndHighlight("locationSearchContainer");
-        expandAndHighlight("radiusSearchContainer");
-        errorModal.style.display = "flex";
-        return;
-      }
-      if (!hasBusinessDef) {
-        errorText.innerHTML =
-          "Please specify a <b>Category</b> or enter <b>Business Names</b> so the system knows what to look for.";
-        expandAndHighlight("bulkSearchContainer");
-        expandAndHighlight("individualSearchContainer");
-        errorModal.style.display = "flex";
-        return;
-      }
-      if (!hasLocationDef) {
-        errorText.innerHTML =
-          "The system needs a <b>Location</b>. Please provide a Suburb or define a Search Radius.";
-        expandAndHighlight("locationSearchContainer");
-        expandAndHighlight("radiusSearchContainer");
-        errorModal.style.display = "flex";
-        return;
-      }
-      const ns = businessNames
-          .split("\n")
-          .map((n) => n.trim())
-          .filter(Boolean),
-        ss = Array.from(
-          elements.subCategoryCheckboxContainer.querySelectorAll(
-            "input:checked",
-          ),
-        )
-          .map((c) => c.value)
-          .filter((v) => v !== "select_all"),
-        localToday = new Date();
-      const multiPoints = window.rtrlApp.state.anchors.map((a) => ({
-        coords: `${a.lat},${a.lng}`,
-        radius: a.radius,
-      }));
-      const p = {
-        country: elements.countryInput.value,
-        businessNames: ns,
-        userEmail: elements.userEmailInput.value.trim(),
-        exclusionList: window.rtrlApp.exclusionFeature.getExclusionList(),
-        useAiEnrichment: elements.useAiToggle.checked,
-      };
-      if (multiPoints.length > 0) {
-        p.multiRadiusPoints = multiPoints;
-        p.anchorPoint = null;
-      } else {
-        p.location = elements.locationInput.value.trim();
-        p.postalCode = window.rtrlApp.postalCodes;
-      }
-      if (ns.length > 0) p.count = -1;
-      else if (window.rtrlApp.customKeywords.length > 0)
-        p.categoriesToLoop = window.rtrlApp.customKeywords;
-      else {
-        let b = ss.length > 0 ? ss : [elements.primaryCategorySelect.value];
-        p.categoriesToLoop = elements.categoryModifierInput.value.trim()
-          ? b.map(
-              (c) => `"${elements.categoryModifierInput.value.trim()}" ${c}`,
-            )
-          : b;
-      }
-      if (ns.length === 0)
-        p.count =
-          elements.findAllBusinessesCheckbox.checked ||
-          !elements.countInput.value.trim()
-            ? -1
-            : parseInt(elements.countInput.value, 10);
-      const areaKey =
-        multiPoints.length > 0
-          ? `${multiPoints.length} Search Zones`
-          : window.rtrlApp.postalCodes.length > 0
-            ? window.rtrlApp.postalCodes.join("_")
-            : elements.locationInput.value.split(",")[0];
-      p.searchParamsForEmail = {
-        primaryCategory: elements.primaryCategorySelect.value,
-        subCategory: ss.length > 1 ? "multiple_subcategories" : ss[0] || "",
-        subCategoryList: ss,
-        customCategory:
-          window.rtrlApp.customKeywords.length > 0
-            ? window.rtrlApp.customKeywords.join(", ")
-            : elements.categoryModifierInput.value,
-        area: areaKey,
-        postcodes: window.rtrlApp.postalCodes,
-        country: elements.countryInput.value,
-      };
-      socket.emit("start_scrape_job", {
-        authToken: currentUserSession.access_token,
-        clientLocalDate: `${localToday.getFullYear()}-${String(localToday.getMonth() + 1).padStart(2, "0")}-${String(localToday.getDate()).padStart(2, "0")}`,
-        ...p,
-      });
-      const originalText = elements.startButton.innerHTML;
-      elements.startButton.innerHTML =
-        '<i class="fas fa-check"></i> Added to Queue!';
-      elements.startButton.style.backgroundColor = "#10b981";
-      setTimeout(() => {
-        elements.startButton.innerHTML = originalText;
-        elements.startButton.style.backgroundColor = "";
-      }, 2000);
+
+        if (!hasBusinessDef) {
+            errorText.innerHTML = "Please specify a <b>Category</b> or enter <b>Business Names</b> so the system knows what to look for.";
+            expandAndHighlight("bulkSearchContainer");
+            expandAndHighlight("individualSearchContainer");
+            errorModal.style.display = "flex";
+            return;
+        }
+
+        if (!hasLocationDef) {
+            errorText.innerHTML = "The system needs a <b>Location</b>. Please provide a Suburb or define a Search Radius.";
+            expandAndHighlight("locationSearchContainer");
+            expandAndHighlight("radiusSearchContainer");
+            errorModal.style.display = "flex";
+            return;
+        }
+
+        const ns = businessNames.split("\n").map((n) => n.trim()).filter(Boolean);
+        const ss = Array.from(elements.subCategoryCheckboxContainer.querySelectorAll("input:checked")).map((c) => c.value).filter((v) => v !== "select_all");
+        const localToday = new Date();
+        
+        const multiPoints = window.rtrlApp.state.anchors.map(a => ({
+            coords: `${a.lat},${a.lng}`,
+            radius: a.radius
+        }));
+        
+        const p = {
+            country: elements.countryInput.value,
+            businessNames: ns,
+            userEmail: elements.userEmailInput.value.trim(),
+            exclusionList: window.rtrlApp.exclusionFeature.getExclusionList(),
+            useAiEnrichment: elements.useAiToggle.checked,
+        };
+
+        if (multiPoints.length > 0) {
+            p.multiRadiusPoints = multiPoints;
+            p.anchorPoint = null; 
+        } else {
+            p.location = elements.locationInput.value.trim();
+            p.postalCode = window.rtrlApp.postalCodes;
+        }
+
+        if (ns.length > 0) {
+            p.count = -1;
+        } else if (window.rtrlApp.customKeywords.length > 0) {
+            p.categoriesToLoop = window.rtrlApp.customKeywords;
+        } else {
+            let b = ss.length > 0 ? ss : [elements.primaryCategorySelect.value];
+            p.categoriesToLoop = elements.categoryModifierInput.value.trim() ? b.map((c) => `"${elements.categoryModifierInput.value.trim()}" ${c}`) : b;
+        }
+
+        if (ns.length === 0) {
+            p.count = elements.findAllBusinessesCheckbox.checked || !elements.countInput.value.trim() ? -1 : parseInt(elements.countInput.value, 10);
+        }
+
+        const areaKey = multiPoints.length > 0 ? `${multiPoints.length} Zones` : (window.rtrlApp.postalCodes.length > 0 ? window.rtrlApp.postalCodes.join("_") : elements.locationInput.value.split(",")[0]);
+
+        p.searchParamsForEmail = {
+            primaryCategory: elements.primaryCategorySelect.value,
+            subCategory: ss.length > 1 ? "multiple_subcategories" : ss[0] || "",
+            subCategoryList: ss,
+            customCategory: window.rtrlApp.customKeywords.length > 0 ? window.rtrlApp.customKeywords.join(", ") : elements.categoryModifierInput.value,
+            area: areaKey,
+            postcodes: window.rtrlApp.postalCodes,
+            country: elements.countryInput.value,
+        };
+
+        socket.emit("start_scrape_job", {
+            authToken: currentUserSession.access_token,
+            clientLocalDate: `${localToday.getFullYear()}-${String(localToday.getMonth() + 1).padStart(2, "0")}-${String(localToday.getDate()).padStart(2, "0")}`,
+            ...p,
+        });
+
+        const originalText = elements.startButton.innerHTML;
+        elements.startButton.innerHTML = '<i class="fas fa-check"></i> Added to Queue!';
+        elements.startButton.style.backgroundColor = "#10b981";
+        setTimeout(() => {
+            elements.startButton.innerHTML = originalText;
+            elements.startButton.style.backgroundColor = "";
+        }, 2000);
     };
 
     function initializeApp() {
@@ -1252,19 +1256,28 @@ document.addEventListener("DOMContentLoaded", () => {
         elements.userEmailInput.value = localStorage.getItem(
           "rtrl_last_used_email",
         );
-      populatePrimaryCategories(elements.primaryCategorySelect, categories, "");
+      
+      if (elements.primaryCategorySelect) {
+          populatePrimaryCategories(elements.primaryCategorySelect, categories, "");
+      }
+      
       setupPostcodeListHandlers();
-      setupEventListeners(
-        elements,
-        socket,
-        categories,
-        countries,
-        window.rtrlApp.postalCodes,
-        window.rtrlApp.customKeywords,
-        window.rtrlApp.map,
-      );
+      
+      if (typeof setupEventListeners === 'function') {
+          setupEventListeners(
+            elements,
+            socket,
+            categories,
+            countries,
+            window.rtrlApp.postalCodes,
+            window.rtrlApp.customKeywords,
+            window.rtrlApp.map,
+            window.rtrlApp.searchCircle,
+          );
+      }
       loadGoogleMaps();
     }
+
     initializeApp();
   }
 
@@ -1281,87 +1294,78 @@ document.addEventListener("DOMContentLoaded", () => {
       names: document.getElementById("businessNamesInput"),
       aiToggle: document.getElementById("useAiToggle"),
     };
-    el.location.value = "";
-    el.names.value = "";
+    
+    if(el.location) el.location.value = "";
+    if(el.names) el.names.value = "";
+    
     window.rtrlApp.postalCodes.length = 0;
     window.rtrlApp.customKeywords.length = 0;
-    window.rtrlApp.state.anchors.forEach((a) => {
-      if (window.rtrlApp.map) {
-        window.rtrlApp.map.removeLayer(a.marker);
-        window.rtrlApp.map.removeLayer(a.circle);
-      }
+    
+    window.rtrlApp.state.anchors.forEach(a => {
+        if(window.rtrlApp.map) {
+            window.rtrlApp.map.removeLayer(a.marker);
+            window.rtrlApp.map.removeLayer(a.circle);
+        }
     });
     window.rtrlApp.state.anchors = [];
+    
     document.querySelectorAll(".tag").forEach((t) => t.remove());
+    
     if (el.aiToggle) el.aiToggle.checked = p.useAiEnrichment !== false;
-    el.country.value = p.country || "Australia";
+    if (el.country) el.country.value = p.country || "Australia";
+    
     if (p.count === -1) {
-      el.findAll.checked = true;
-      el.count.value = "";
-      el.count.disabled = true;
+      if(el.findAll) el.findAll.checked = true;
+      if(el.count) {
+          el.count.value = "";
+          el.count.disabled = true;
+      }
     } else {
-      el.findAll.checked = false;
-      el.count.value = p.count || "";
-      el.count.disabled = false;
+      if(el.findAll) el.findAll.checked = false;
+      if(el.count) {
+          el.count.value = p.count || "";
+          el.count.disabled = false;
+      }
     }
+    
     if (p.businessNames?.length > 0) {
-      el.names.value = p.businessNames.join("\n");
-      document
-        .getElementById("individualSearchContainer")
-        .classList.remove("collapsed");
+      if(el.names) el.names.value = p.businessNames.join("\n");
+      const indContainer = document.getElementById("individualSearchContainer");
+      if(indContainer) indContainer.classList.remove("collapsed");
     } else if (p.categoriesToLoop) {
       p.categoriesToLoop.forEach((kw) => {
         window.rtrlApp.customKeywords.push(kw);
         const t = document.createElement("span");
         t.className = "tag";
         t.innerHTML = `<span>${kw}</span> <span class="tag-close-btn" data-value="${kw}">&times;</span>`;
-        document
-          .getElementById("customKeywordContainer")
-          .insertBefore(t, el.customCat);
+        const kwContainer = document.getElementById("customKeywordContainer");
+        if(kwContainer && el.customCat) kwContainer.insertBefore(t, el.customCat);
       });
     }
+    
     if (p.multiRadiusPoints && p.multiRadiusPoints.length > 0) {
       p.multiRadiusPoints.forEach((point, i) => {
-        const co = point.coords.split(",");
-        const latlng = { lat: parseFloat(co[0]), lng: parseFloat(co[1]) };
-        window.rtrlApp.addAnchor(latlng, `Zone ${i + 1}`);
-        const last =
-          window.rtrlApp.state.anchors[window.rtrlApp.state.anchors.length - 1];
-        last.radius = point.radius;
-        if (last.circle) last.circle.setRadius(point.radius * 1000);
+          const co = point.coords.split(",");
+          const latlng = { lat: parseFloat(co[0]), lng: parseFloat(co[1]) };
+          window.rtrlApp.addAnchor(latlng, `Zone ${i+1}`);
+          const last = window.rtrlApp.state.anchors[window.rtrlApp.state.anchors.length - 1];
+          last.radius = point.radius;
+          if (last.circle) last.circle.setRadius(point.radius * 1000);
       });
-      document
-        .getElementById("radiusSearchContainer")
-        .classList.remove("collapsed");
-      updateMapPreviewText();
+      const radContainer = document.getElementById("radiusSearchContainer");
+      if(radContainer) radContainer.classList.remove("collapsed");
+      
+      const txt = document.getElementById('map-preview-text');
+      if (txt) txt.textContent = `${window.rtrlApp.state.anchors.length} active search zone(s) defined.`;
     } else {
-      el.location.value = p.location || "";
-      if (p.postalCode)
-        p.postalCode.forEach((pc) => window.rtrlApp.validateAndAddTag(pc));
-      document
-        .getElementById("locationSearchContainer")
-        .classList.remove("collapsed");
+      if(el.location) el.location.value = p.location || "";
+      if (p.postalCode) {
+          p.postalCode.forEach((pc) => window.rtrlApp.validateAndAddTag(pc));
+      }
+      const locContainer = document.getElementById("locationSearchContainer");
+      if(locContainer) locContainer.classList.remove("collapsed");
     }
+    
     window.scrollTo({ top: 0, behavior: "smooth" });
-  };
-
-  function populatePrimaryCategories(selectEl, categories, selectedValue) {
-    if (!selectEl) return;
-    selectEl.innerHTML = "";
-    Object.keys(categories).forEach((category) => {
-      const option = document.createElement("option");
-      option.value = category === "Select Category" ? "" : category;
-      option.textContent = category;
-      if (category === selectedValue) option.selected = true;
-      selectEl.appendChild(option);
-    });
-  }
-
-  window.rtrlApp.initializeMapServices = () => {
-    if (window.google?.maps?.places) {
-      window.rtrlApp.state.googleMapsService =
-        new google.maps.places.AutocompleteService();
-      window.rtrlApp.state.googleMapsGeocoder = new google.maps.Geocoder();
-    }
   };
 });

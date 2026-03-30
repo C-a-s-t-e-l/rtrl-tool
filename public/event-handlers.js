@@ -19,7 +19,6 @@ function setupEventListeners(
       if (icon) icon.classList.toggle("open");
 
       if (!content.classList.contains("collapsed")) {
-        
         if (content.id === "radiusSearchContainer" && map) {
           setTimeout(() => {
             map.invalidateSize();
@@ -48,57 +47,82 @@ function setupEventListeners(
 
   function setupTagInput() {
     function updateSaveButtonState() {
-      elements.savePostcodeListButton.disabled = postalCodes.length === 0;
+      if(elements.savePostcodeListButton) {
+          elements.savePostcodeListButton.disabled = postalCodes.length === 0;
+      }
     }
 
-    elements.postalCodeContainer.addEventListener("click", (e) => {
-      if (e.target.classList.contains("tag-close-btn")) {
-        const postcode = e.target.dataset.value;
-        const index = postalCodes.indexOf(postcode);
-        if (index > -1) postalCodes.splice(index, 1);
-        e.target.parentElement.remove();
-        if (postalCodes.length === 0 && !elements.locationInput.value.trim())
-          window.rtrlApp.setRadiusInputsState(false);
-
-        updateSaveButtonState();
-      } else {
-        elements.postalCodeInput.focus();
-      }
-    });
-    elements.postalCodeInput.addEventListener("keydown", async (e) => {
-      if (e.key === "Enter" || e.key === ",") {
-        e.preventDefault();
-        const value = elements.postalCodeInput.value.trim();
-        if (value) {
-          await window.rtrlApp.validateAndAddTag(value);
-          updateSaveButtonState();
-        }
-      } else if (
-        e.key === "Backspace" &&
-        elements.postalCodeInput.value === ""
-      ) {
-        if (postalCodes.length > 0) {
-          const lastTag =
-            elements.postalCodeContainer.querySelector(".tag:last-of-type");
-          if (lastTag) {
-            const closeBtn = lastTag.querySelector(".tag-close-btn");
-            const postcode = closeBtn.dataset.value;
+    if(elements.postalCodeContainer) {
+        elements.postalCodeContainer.addEventListener("click", (e) => {
+          if (e.target.classList.contains("tag-close-btn")) {
+            const postcode = e.target.dataset.value;
             const index = postalCodes.indexOf(postcode);
             if (index > -1) postalCodes.splice(index, 1);
-            lastTag.remove();
+            e.target.parentElement.remove();
+            if (postalCodes.length === 0 && !elements.locationInput.value.trim())
+              window.rtrlApp.setRadiusInputsState(false);
+
             updateSaveButtonState();
+          } else {
+            elements.postalCodeInput.focus();
           }
-        }
-      }
-    });
-    elements.postalCodeContainer.addEventListener("input", () => {
-      const hasTags =
-        postalCodes.length > 0 || elements.postalCodeInput.value.trim();
-      if (hasTags) window.rtrlApp.setRadiusInputsState(true);
-    });
+        });
+    }
+
+    if(elements.postalCodeInput) {
+        elements.postalCodeInput.addEventListener("keydown", async (e) => {
+          if (e.key === "Enter" || e.key === ",") {
+            e.preventDefault();
+            const value = elements.postalCodeInput.value.trim();
+            if (value) {
+              await window.rtrlApp.validateAndAddTag(value);
+              updateSaveButtonState();
+            }
+          } else if (
+            e.key === "Backspace" &&
+            elements.postalCodeInput.value === ""
+          ) {
+            if (postalCodes.length > 0) {
+              const lastTag =
+                elements.postalCodeContainer.querySelector(".tag:last-of-type");
+              if (lastTag) {
+                const closeBtn = lastTag.querySelector(".tag-close-btn");
+                const postcode = closeBtn.dataset.value;
+                const index = postalCodes.indexOf(postcode);
+                if (index > -1) postalCodes.splice(index, 1);
+                lastTag.remove();
+                updateSaveButtonState();
+              }
+            }
+          }
+        });
+
+        elements.postalCodeInput.addEventListener("input", () => {
+          clearTimeout(window.rtrlApp.timers.postalCode);
+          window.rtrlApp.timers.postalCode = setTimeout(
+            () =>
+              window.rtrlApp.fetchPlaceSuggestions(
+                elements.postalCodeInput,
+                elements.postalCodeSuggestionsEl,
+                ["(regions)"],
+                window.rtrlApp.handlePostalCodeSelection
+              ),
+            300
+          );
+        });
+    }
+
+    if(elements.postalCodeContainer) {
+        elements.postalCodeContainer.addEventListener("input", () => {
+          const hasTags = postalCodes.length > 0 || elements.postalCodeInput.value.trim();
+          if (hasTags) window.rtrlApp.setRadiusInputsState(true);
+        });
+    }
   }
 
   function setupKeywordTagInput() {
+    if(!elements.customKeywordContainer || !elements.customCategoryInput) return;
+
     elements.customKeywordContainer.addEventListener("click", (e) => {
       if (e.target.classList.contains("tag-close-btn")) {
         const keyword = e.target.dataset.value;
@@ -108,9 +132,11 @@ function setupEventListeners(
 
         const hasCustomText = customKeywords.length > 0;
         elements.primaryCategorySelect.disabled = hasCustomText;
-        elements.subCategoryCheckboxContainer
-          .querySelectorAll("input")
-          .forEach((cb) => (cb.disabled = hasCustomText));
+        if(elements.subCategoryCheckboxContainer) {
+            elements.subCategoryCheckboxContainer
+              .querySelectorAll("input")
+              .forEach((cb) => (cb.disabled = hasCustomText));
+        }
       } else {
         elements.customCategoryInput.focus();
       }
@@ -151,9 +177,11 @@ function setupEventListeners(
         customKeywords.length > 0 ||
         elements.customCategoryInput.value.trim() !== "";
       elements.primaryCategorySelect.disabled = hasCustomText;
-      elements.subCategoryCheckboxContainer
-        .querySelectorAll("input")
-        .forEach((cb) => (cb.disabled = hasCustomText));
+      if(elements.subCategoryCheckboxContainer) {
+          elements.subCategoryCheckboxContainer
+            .querySelectorAll("input")
+            .forEach((cb) => (cb.disabled = hasCustomText));
+      }
       if (hasCustomText) {
         elements.primaryCategorySelect.value = "";
         elements.primaryCategorySelect.dispatchEvent(new Event("change"));
@@ -165,9 +193,11 @@ function setupEventListeners(
         customKeywords.length > 0 ||
         elements.customCategoryInput.value.trim() !== "";
       elements.primaryCategorySelect.disabled = hasCustomText;
-      elements.subCategoryCheckboxContainer
-        .querySelectorAll("input")
-        .forEach((cb) => (cb.disabled = hasCustomText));
+      if(elements.subCategoryCheckboxContainer) {
+          elements.subCategoryCheckboxContainer
+            .querySelectorAll("input")
+            .forEach((cb) => (cb.disabled = hasCustomText));
+      }
       if (elements.categoryModifierInput)
         elements.categoryModifierInput.disabled = hasCustomText;
 
@@ -181,152 +211,131 @@ function setupEventListeners(
   setupTagInput();
   setupKeywordTagInput();
 
-  elements.primaryCategorySelect.addEventListener("change", (event) => {
-    const selectedCategory = event.target.value;
-    populateSubCategories(
-      elements.subCategoryCheckboxContainer,
-      elements.subCategoryGroup,
-      selectedCategory,
-      categories
-    );
+  if(elements.primaryCategorySelect) {
+      elements.primaryCategorySelect.addEventListener("change", (event) => {
+        const selectedCategory = event.target.value;
+        populateSubCategories(
+          elements.subCategoryCheckboxContainer,
+          elements.subCategoryGroup,
+          selectedCategory,
+          categories
+        );
 
-    const hasCategorySelection = selectedCategory !== "";
-    elements.customCategoryInput.disabled = hasCategorySelection;
-    if (elements.categoryModifierGroup) {
-      elements.categoryModifierGroup.style.display = hasCategorySelection
-        ? "block"
-        : "none";
-      if (!hasCategorySelection) elements.categoryModifierInput.value = "";
-    }
-
-    if (hasCategorySelection) {
-      elements.customCategoryInput.value = "";
-      customKeywords.length = 0;
-      elements.customKeywordContainer
-        .querySelectorAll(".tag")
-        .forEach((tag) => tag.remove());
-    }
-  });
-
-  elements.findAllBusinessesCheckbox.addEventListener("change", (e) => {
-    elements.countInput.disabled = e.target.checked;
-    if (e.target.checked) elements.countInput.value = "";
-  });
-
-  elements.countryInput.addEventListener("input", () => {
-    clearTimeout(window.rtrlApp.timers.country);
-    window.rtrlApp.timers.country = setTimeout(() => {
-      const query = elements.countryInput.value.toLowerCase();
-      if (query.length < 1) {
-        elements.countrySuggestionsEl.style.display = "none";
-        return;
-      }
-      const filteredCountries = countries.filter((c) =>
-        c.text.toLowerCase().includes(query)
-      );
-      renderSuggestions(
-        elements.countryInput,
-        elements.countrySuggestionsEl,
-        filteredCountries,
-        "text",
-        "value",
-        (c) => {
-          elements.countryInput.value = c.text;
+        const hasCategorySelection = selectedCategory !== "";
+        elements.customCategoryInput.disabled = hasCategorySelection;
+        if (elements.categoryModifierGroup) {
+          elements.categoryModifierGroup.style.display = hasCategorySelection
+            ? "block"
+            : "none";
+          if (!hasCategorySelection) elements.categoryModifierInput.value = "";
         }
-      );
-    }, 300);
-  });
 
-  elements.locationInput.addEventListener("input", () => {
-    clearTimeout(window.rtrlApp.timers.location);
-    window.rtrlApp.timers.location = setTimeout(
-      () =>
-        window.rtrlApp.fetchPlaceSuggestions(
-          elements.locationInput,
-          elements.locationSuggestionsEl,
-          ["geocode"],
-          window.rtrlApp.handleLocationSelection
-        ),
-      300
-    );
-    window.rtrlApp.setRadiusInputsState(
-      elements.locationInput.value.trim().length > 0
-    );
-  });
+        if (hasCategorySelection && elements.customKeywordContainer) {
+          elements.customCategoryInput.value = "";
+          customKeywords.length = 0;
+          elements.customKeywordContainer
+            .querySelectorAll(".tag")
+            .forEach((tag) => tag.remove());
+        }
+      });
+  }
 
-  elements.postalCodeInput.addEventListener("input", () => {
-    clearTimeout(window.rtrlApp.timers.postalCode);
-    window.rtrlApp.timers.postalCode = setTimeout(
-      () =>
-        window.rtrlApp.fetchPlaceSuggestions(
-          elements.postalCodeInput,
-          elements.postalCodeSuggestionsEl,
-          ["(regions)"],
-          window.rtrlApp.handlePostalCodeSelection
-        ),
-      300
-    );
-  });
+  if(elements.findAllBusinessesCheckbox) {
+      elements.findAllBusinessesCheckbox.addEventListener("change", (e) => {
+        elements.countInput.disabled = e.target.checked;
+        if (e.target.checked) elements.countInput.value = "";
+      });
+  }
 
-  elements.anchorPointInput.addEventListener("input", () => {
-    const hasText = elements.anchorPointInput.value.trim().length > 0;
-    window.rtrlApp.setLocationInputsState(hasText);
-    if (
-      state.selectedAnchorPoint &&
-      elements.anchorPointInput.value.trim() !== state.selectedAnchorPoint.name
-    ) {
-      state.selectedAnchorPoint = null;
-    }
-    clearTimeout(window.rtrlApp.timers.anchorPoint);
-    window.rtrlApp.timers.anchorPoint = setTimeout(() => {
-      window.rtrlApp.fetchPlaceSuggestions(
-        elements.anchorPointInput,
-        elements.anchorPointSuggestionsEl,
-        ["geocode"],
-        window.rtrlApp.handleAnchorPointSelection
-      );
-    }, 300);
-  });
+  if(elements.countryInput) {
+      elements.countryInput.addEventListener("input", () => {
+        clearTimeout(window.rtrlApp.timers.country);
+        window.rtrlApp.timers.country = setTimeout(() => {
+          const query = elements.countryInput.value.toLowerCase();
+          if (query.length < 1) {
+            elements.countrySuggestionsEl.style.display = "none";
+            return;
+          }
+          const filteredCountries = countries.filter((c) =>
+            c.text.toLowerCase().includes(query)
+          );
+          renderSuggestions(
+            elements.countryInput,
+            elements.countrySuggestionsEl,
+            filteredCountries,
+            "text",
+            "value",
+            (c) => {
+              elements.countryInput.value = c.text;
+            }
+          );
+        }, 300);
+      });
+  }
 
-  elements.radiusSlider.addEventListener("input", () => {
-    const km = elements.radiusSlider.value;
-    elements.radiusValue.textContent = `${km} km`;
-    if (state.selectedAnchorPoint) {
-      window.rtrlApp.drawSearchCircle(state.selectedAnchorPoint.center);
-    }
-  });
+  if(elements.locationInput) {
+      elements.locationInput.addEventListener("input", () => {
+        clearTimeout(window.rtrlApp.timers.location);
+        window.rtrlApp.timers.location = setTimeout(
+          () =>
+            window.rtrlApp.fetchPlaceSuggestions(
+              elements.locationInput,
+              elements.locationSuggestionsEl,
+              ["geocode"],
+              window.rtrlApp.handleLocationSelection
+            ),
+          300
+        );
+        window.rtrlApp.setRadiusInputsState(
+          elements.locationInput.value.trim().length > 0
+        );
+      });
+  }
+
+  // Anchor Point / Radius Slider legacy elements removed.
 
   document.addEventListener("click", (event) => {
-    if (!elements.locationInput.contains(event.target))
-      elements.locationSuggestionsEl.style.display = "none";
-    if (!elements.postalCodeContainer.contains(event.target))
-      elements.postalCodeSuggestionsEl.style.display = "none";
-    if (!elements.countryInput.contains(event.target))
-      elements.countrySuggestionsEl.style.display = "none";
-    if (!elements.anchorPointInput.contains(event.target))
-      elements.anchorPointSuggestionsEl.style.display = "none";
+    if (elements.locationInput && !elements.locationInput.contains(event.target))
+      if(elements.locationSuggestionsEl) elements.locationSuggestionsEl.style.display = "none";
+    if (elements.postalCodeContainer && !elements.postalCodeContainer.contains(event.target))
+      if(elements.postalCodeSuggestionsEl) elements.postalCodeSuggestionsEl.style.display = "none";
+    if (elements.countryInput && !elements.countryInput.contains(event.target))
+      if(elements.countrySuggestionsEl) elements.countrySuggestionsEl.style.display = "none";
+    
+    // Check if workspace search suggestions exist
+    const wsInput = document.getElementById('workspace-search-input');
+    const wsSugg = document.getElementById('workspace-suggestions');
+    if(wsInput && wsSugg && !wsInput.contains(event.target)) {
+        wsSugg.style.display = "none";
+    }
   });
 
-  elements.startButton.addEventListener("click", () =>
-    window.rtrlApp.startResearch()
-  );
+  if(elements.startButton) {
+      elements.startButton.addEventListener("click", () =>
+        window.rtrlApp.startResearch()
+      );
+  }
 
-  elements.businessNamesInput.addEventListener("input", (e) => {
-    const isIndividualSearch = e.target.value.trim().length > 0;
-    window.rtrlApp.setRadiusInputsState(isIndividualSearch);
-    window.rtrlApp.setLocationInputsState(isIndividualSearch);
-  });
+  if(elements.businessNamesInput) {
+      elements.businessNamesInput.addEventListener("input", (e) => {
+        const isIndividualSearch = e.target.value.trim().length > 0;
+        window.rtrlApp.setRadiusInputsState(isIndividualSearch);
+        window.rtrlApp.setLocationInputsState(isIndividualSearch);
+      });
+  }
 
   let emailSaveTimeout;
-  elements.userEmailInput.addEventListener("input", (e) => {
-    clearTimeout(emailSaveTimeout);
-    const email = e.target.value;
-    emailSaveTimeout = setTimeout(() => {
-      if (email) {
-        localStorage.setItem("rtrl_last_used_email", email);
-      } else {
-        localStorage.removeItem("rtrl_last_used_email");
-      }
-    }, 500);
-  });
+  if(elements.userEmailInput) {
+      elements.userEmailInput.addEventListener("input", (e) => {
+        clearTimeout(emailSaveTimeout);
+        const email = e.target.value;
+        emailSaveTimeout = setTimeout(() => {
+          if (email) {
+            localStorage.setItem("rtrl_last_used_email", email);
+          } else {
+            localStorage.removeItem("rtrl_last_used_email");
+          }
+        }, 500);
+      });
+  }
 }
