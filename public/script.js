@@ -30,7 +30,6 @@ document.addEventListener("DOMContentLoaded", () => {
     validateAndAddTag: () => {},
     setRadiusInputsState: () => {},
     setLocationInputsState: () => {},
-    drawSearchCircle: () => {},
     addAnchor: () => {}
   };
 
@@ -225,24 +224,17 @@ document.addEventListener("DOMContentLoaded", () => {
         if (status === "running") {
             const now = new Date().toLocaleTimeString();
             logMessage(elements.logEl, `[${now}] Worker picked up Job ${jobId.substring(0,8)}...`, "info");
-            
             currentJobId = jobId;
             localStorage.setItem("rtrl_active_job_id", jobId);
-            
             socket.emit("subscribe_to_job", { jobId, authToken: currentUserSession.access_token });
             
             resetStatusUI();
             updateDashboardUi("running");
-
             window.scrollTo({ top: 0, behavior: 'smooth' });
             
-            if (window.rtrlApp.jobHistory) {
-                window.rtrlApp.jobHistory.fetchAndRenderJobs();
-            }
+            if (window.rtrlApp.jobHistory) window.rtrlApp.jobHistory.fetchAndRenderJobs();
         } else if (status === "completed" || status === "failed") {
-            if (window.rtrlApp.jobHistory) {
-                window.rtrlApp.jobHistory.fetchAndRenderJobs();
-            }
+            if (window.rtrlApp.jobHistory) window.rtrlApp.jobHistory.fetchAndRenderJobs();
         }
     });
 
@@ -281,40 +273,21 @@ document.addEventListener("DOMContentLoaded", () => {
           updateDashboardUi("running");
       }
       const {
-        phase,
-        processed,
-        discovered,
-        added,
-        target,
-        enriched,
-        aiProcessed,
-        aiTarget,
+        phase, processed, discovered, added, target, enriched, aiProcessed, aiTarget,
       } = data;
-      let visualPercent = 0,
-        phaseText = "Initializing...";
+      let visualPercent = 0, phaseText = "Initializing...";
       if (phase === "discovery") {
         phaseText = "Phase 1/3: Scanning Maps";
         visualPercent = 10;
         updateStatusCardPhase("discovery");
       } else if (phase === "scraping") {
         phaseText = "Phase 1/3: Scraping Data";
-        let scrapePct =
-          target === -1
-            ? discovered > 0
-              ? processed / discovered
-              : 0
-            : target > 0
-              ? added / target
-              : 0;
+        let scrapePct = target === -1 ? (discovered > 0 ? processed / discovered : 0) : (target > 0 ? added / target : 0);
         visualPercent = 10 + Math.round(Math.min(scrapePct, 1) * 60);
         updateStatusCardPhase("scraping");
       } else if (phase === "ai") {
         phaseText = "Phase 2/3: AI Enrichment";
-        visualPercent =
-          70 +
-          Math.round(
-            Math.min(aiTarget > 0 ? aiProcessed / aiTarget : 0, 1) * 25,
-          );
+        visualPercent = 70 + Math.round(Math.min(aiTarget > 0 ? aiProcessed / aiTarget : 0, 1) * 25);
         updateStatusCardPhase("ai");
       } else if (phase === "completed") {
         visualPercent = 100;
@@ -327,18 +300,13 @@ document.addEventListener("DOMContentLoaded", () => {
       if (fill) fill.style.width = `${visualPercent}%`;
       if (pctLabel) pctLabel.textContent = `${visualPercent}%`;
       if (phaseLabel) phaseLabel.textContent = phaseText;
-      if (document.getElementById("stat-found"))
-        document.getElementById("stat-found").textContent = discovered || 0;
-      if (document.getElementById("stat-processed"))
-        document.getElementById("stat-processed").textContent = added || 0;
-      if (document.getElementById("stat-enriched"))
-        document.getElementById("stat-enriched").textContent = enriched || 0;
+      if (document.getElementById("stat-found")) document.getElementById("stat-found").textContent = discovered || 0;
+      if (document.getElementById("stat-processed")) document.getElementById("stat-processed").textContent = added || 0;
+      if (document.getElementById("stat-enriched")) document.getElementById("stat-enriched").textContent = enriched || 0;
     });
 
     socket.on("job_log", (msg) => logMessage(elements.logEl, msg, "info"));
-    socket.on("job_error", ({ error }) =>
-      logMessage(elements.logEl, `Error: ${error}`, "error"),
-    );
+    socket.on("job_error", ({ error }) => logMessage(elements.logEl, `Error: ${error}`, "error"));
     socket.on("business_found", () => refreshUsageTracker());
     socket.on("user_profile_updated", () => refreshUsageTracker());
 
@@ -350,16 +318,14 @@ document.addEventListener("DOMContentLoaded", () => {
       if (pctLabel) pctLabel.textContent = `0%`;
       if (phaseLabel) phaseLabel.textContent = "Initializing...";
       ["stat-found", "stat-processed", "stat-enriched"].forEach((id) => {
-        if (document.getElementById(id))
-          document.getElementById(id).textContent = "0";
+        if (document.getElementById(id)) document.getElementById(id).textContent = "0";
       });
       const icon = document.getElementById("status-icon"),
         headline = document.getElementById("status-headline"),
         subtext = document.getElementById("status-subtext");
       if (icon) icon.className = "fas fa-satellite-dish spin-slow";
       if (headline) headline.textContent = "Extracting Data...";
-      if (subtext)
-        subtext.textContent = "Moving job from queue to active thread...";
+      if (subtext) subtext.textContent = "Moving job from queue to active thread...";
     }
 
     function updateDashboardUi(status) {
@@ -402,12 +368,7 @@ document.addEventListener("DOMContentLoaded", () => {
         icon = document.getElementById("status-icon"),
         headline = document.getElementById("status-headline");
       if (!card) return;
-      card.classList.remove(
-        "phase-scraping",
-        "phase-ai",
-        "phase-complete",
-        "phase-error",
-      );
+      card.classList.remove("phase-scraping", "phase-ai", "phase-complete", "phase-error");
       if (phase === "discovery") {
         card.classList.add("phase-scraping");
         if (icon) icon.className = "fas fa-map-marked-alt spin-slow";
@@ -439,16 +400,22 @@ document.addEventListener("DOMContentLoaded", () => {
               window.rtrlApp.map.fitBounds(group.getBounds().pad(0.1));
             }
           }
-        }, 50);
+        }, 150);
       } else {
         elements.mapModal.style.display = 'none';
         elements.smallMapContainer.appendChild(elements.mapElement);
         setTimeout(() => {
           if (window.rtrlApp.map) {
             window.rtrlApp.map.invalidateSize();
+            if (window.rtrlApp.state.anchors.length > 0) {
+              const group = new L.featureGroup(window.rtrlApp.state.anchors.map(a => a.circle));
+              window.rtrlApp.map.fitBounds(group.getBounds().pad(0.1));
+            } else {
+              window.rtrlApp.map.setView([-33.8688, 151.2093], 10);
+            }
           }
           updateMapPreviewText();
-        }, 50);
+        }, 150);
       }
     }
 
@@ -471,10 +438,7 @@ document.addEventListener("DOMContentLoaded", () => {
         inputField = document.getElementById(inputId);
       if (toggleBtn && inputField) {
         toggleBtn.addEventListener("click", () => {
-          const type =
-            inputField.getAttribute("type") === "password"
-              ? "text"
-              : "password";
+          const type = inputField.getAttribute("type") === "password" ? "text" : "password";
           inputField.setAttribute("type", type);
           toggleBtn.classList.toggle("fa-eye");
           toggleBtn.classList.toggle("fa-eye-slash");
@@ -485,22 +449,12 @@ document.addEventListener("DOMContentLoaded", () => {
     setupPasswordToggle("toggle-login-password", "password-input");
     setupPasswordToggle("toggle-signup-password", "signup-password-input");
 
-    document
-      .getElementById("login-google")
-      ?.addEventListener("click", () =>
-        supabaseClient.auth.signInWithOAuth({
-          provider: "google",
-          options: { redirectTo: window.location.origin },
-        }),
-      );
-    document
-      .getElementById("login-microsoft")
-      ?.addEventListener("click", () =>
-        supabaseClient.auth.signInWithOAuth({
-          provider: "azure",
-          options: { scopes: "email", redirectTo: window.location.origin },
-        }),
-      );
+    document.getElementById("login-google")?.addEventListener("click", () =>
+      supabaseClient.auth.signInWithOAuth({ provider: "google", options: { redirectTo: window.location.origin } })
+    );
+    document.getElementById("login-microsoft")?.addEventListener("click", () =>
+      supabaseClient.auth.signInWithOAuth({ provider: "azure", options: { scopes: "email", redirectTo: window.location.origin } })
+    );
     document.getElementById("to-signup-btn")?.addEventListener("click", (e) => {
       e.preventDefault();
       elements.flipCardContainer.classList.add("flipped");
@@ -511,33 +465,20 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     elements.loginEmailBtn?.addEventListener("click", async () => {
-      const email = elements.emailInputAuth.value,
-        password = elements.passwordInputAuth.value;
+      const email = elements.emailInputAuth.value, password = elements.passwordInputAuth.value;
       if (!email || !password) return alert("Please enter credentials.");
       elements.loginEmailBtn.disabled = true;
-      const { error } = await supabaseClient.auth.signInWithPassword({
-        email,
-        password,
-      });
-      if (error) {
-        alert(error.message);
-        elements.loginEmailBtn.disabled = false;
-      }
+      const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
+      if (error) { alert(error.message); elements.loginEmailBtn.disabled = false; }
     });
 
     elements.signupEmailBtn?.addEventListener("click", async () => {
-      const email = elements.signupEmailInput.value,
-        password = elements.signupPasswordInput.value;
+      const email = elements.signupEmailInput.value, password = elements.signupPasswordInput.value;
       if (!email || !password) return alert("Please enter credentials.");
       elements.signupEmailBtn.disabled = true;
-      const { data, error } = await supabaseClient.auth.signUp({
-        email,
-        password,
-      });
-      if (error) {
-        alert(error.message);
-        elements.signupEmailBtn.disabled = false;
-      } else if (!data.session) {
+      const { data, error } = await supabaseClient.auth.signUp({ email, password });
+      if (error) { alert(error.message); elements.signupEmailBtn.disabled = false; } 
+      else if (!data.session) {
         alert("Check email!");
         elements.flipCardContainer.classList.remove("flipped");
         elements.signupEmailBtn.disabled = false;
@@ -553,37 +494,23 @@ document.addEventListener("DOMContentLoaded", () => {
     supabaseClient.auth.onAuthStateChange(async (event, session) => {
       currentUserSession = session;
       if (session) {
-        if (socket.connected)
-          socket.emit("authenticate_socket", session.access_token);
+        if (socket.connected) socket.emit("authenticate_socket", session.access_token);
         elements.loginOverlay.style.display = "none";
         elements.appContent.style.display = "block";
         elements.userMenu.style.display = "block";
-        elements.userInfoSpan.textContent =
-          session.user.user_metadata.full_name || "User";
+        elements.userInfoSpan.textContent = session.user.user_metadata.full_name || "User";
         elements.userEmailDisplay.textContent = session.user.email;
         refreshUsageTracker();
-        supabaseClient
-          .from("profiles")
-          .select("role")
-          .eq("id", session.user.id)
-          .single()
+        supabaseClient.from("profiles").select("role").eq("id", session.user.id).single()
           .then(({ data: profile }) => {
-            if (profile?.role === "admin")
-              document.getElementById("admin-control-link").style.display =
-                "flex";
+            if (profile?.role === "admin") document.getElementById("admin-control-link").style.display = "flex";
           });
-        if (elements.userEmailInput.value === "")
-          elements.userEmailInput.value = session.user.email;
+        if (elements.userEmailInput.value === "") elements.userEmailInput.value = session.user.email;
         fetchPostcodeLists();
         window.rtrlApp.jobHistory.fetchAndRenderJobs();
-        fetch(`${BACKEND_URL}/api/exclusions`, {
-          headers: { Authorization: `Bearer ${session.access_token}` },
-        })
+        fetch(`${BACKEND_URL}/api/exclusions`, { headers: { Authorization: `Bearer ${session.access_token}` } })
           .then((res) => (res.ok ? res.json() : null))
-          .then((data) => {
-            if (data)
-              window.rtrlApp.exclusionFeature.populateTags(data.exclusionList);
-          });
+          .then((data) => { if (data) window.rtrlApp.exclusionFeature.populateTags(data.exclusionList); });
       } else {
         elements.loginOverlay.style.display = "flex";
         elements.appContent.style.display = "none";
@@ -595,15 +522,10 @@ document.addEventListener("DOMContentLoaded", () => {
     async function fetchPostcodeLists() {
       if (!currentUserSession) return;
       try {
-        const response = await fetch(`${BACKEND_URL}/api/postcode-lists`, {
-          headers: {
-            Authorization: `Bearer ${currentUserSession.access_token}`,
-          },
-        });
+        const response = await fetch(`${BACKEND_URL}/api/postcode-lists`, { headers: { Authorization: `Bearer ${currentUserSession.access_token}` } });
         if (response.ok) {
           savedPostcodeLists = await response.json();
-          elements.postcodeListSelect.innerHTML =
-            '<option value="">Load a saved list...</option>';
+          elements.postcodeListSelect.innerHTML = '<option value="">Load a saved list...</option>';
           savedPostcodeLists.forEach((list) => {
             const option = document.createElement("option");
             option.value = list.id;
@@ -616,15 +538,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function setupPostcodeListHandlers() {
       if (!elements.postcodeListSelect) return;
-      
       elements.postcodeListSelect.addEventListener("change", () => {
-        const sl = savedPostcodeLists.find(
-          (list) => list.id == elements.postcodeListSelect.value,
-        );
+        const sl = savedPostcodeLists.find((list) => list.id == elements.postcodeListSelect.value);
         window.rtrlApp.postalCodes.length = 0;
-        elements.postalCodeContainer
-          .querySelectorAll(".tag")
-          .forEach((tag) => tag.remove());
+        elements.postalCodeContainer.querySelectorAll(".tag").forEach((tag) => tag.remove());
         if (sl) {
           sl.postcodes.forEach((pc) => window.rtrlApp.validateAndAddTag(pc));
           elements.deletePostcodeListButton.style.display = "inline-flex";
@@ -632,44 +549,25 @@ document.addEventListener("DOMContentLoaded", () => {
           elements.deletePostcodeListButton.style.display = "none";
         }
       });
-      new MutationObserver(
-        () =>
-          (elements.savePostcodeListButton.disabled =
-            elements.postalCodeContainer.querySelector(".tag") === null),
-      ).observe(elements.postalCodeContainer, { childList: true });
+      new MutationObserver(() => elements.savePostcodeListButton.disabled = elements.postalCodeContainer.querySelector(".tag") === null)
+        .observe(elements.postalCodeContainer, { childList: true });
       
       elements.savePostcodeListButton.addEventListener("click", async () => {
         const listName = prompt("Name this list:", "");
         if (!listName || !currentUserSession) return;
         const response = await fetch(`${BACKEND_URL}/api/postcode-lists`, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${currentUserSession.access_token}`,
-          },
-          body: JSON.stringify({
-            list_name: listName.trim(),
-            postcodes: window.rtrlApp.postalCodes,
-          }),
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${currentUserSession.access_token}` },
+          body: JSON.stringify({ list_name: listName.trim(), postcodes: window.rtrlApp.postalCodes }),
         });
         if (response.status === 201) fetchPostcodeLists();
       });
       
       elements.deletePostcodeListButton.addEventListener("click", async () => {
-        if (
-          elements.postcodeListSelect.value &&
-          currentUserSession &&
-          confirm("Delete?")
-        ) {
-          const response = await fetch(
-            `${BACKEND_URL}/api/postcode-lists/${elements.postcodeListSelect.value}`,
-            {
-              method: "DELETE",
-              headers: {
-                Authorization: `Bearer ${currentUserSession.access_token}`,
-              },
-            },
-          );
+        if (elements.postcodeListSelect.value && currentUserSession && confirm("Delete?")) {
+          const response = await fetch(`${BACKEND_URL}/api/postcode-lists/${elements.postcodeListSelect.value}`, {
+            method: "DELETE", headers: { Authorization: `Bearer ${currentUserSession.access_token}` },
+          });
           if (response.ok) fetchPostcodeLists();
         }
       });
@@ -678,150 +576,28 @@ document.addEventListener("DOMContentLoaded", () => {
     const categories = {
       "Select Category": [],
       "Alterations and tailoring": [],
-      "Baby and nursery": [
-        "ALL",
-        "Baby and infant toys",
-        "Baby bedding",
-        "Nursery furniture",
-        "Prams, strollers and carriers",
-        "Tableware and feeding",
-      ],
-      Banks: [],
-      "Beauty and wellness": [
-        "ALL",
-        "Bath and body",
-        "Fragrance",
-        "Hair and beauty",
-        "Hair care",
-        "Makeup",
-        "Skincare",
-        "Vitamins and supplements",
-      ],
-      "Books, stationery and gifts": [
-        "ALL",
-        "Book stores",
-        "Cards and gift wrap",
-        "Newsagencies",
-        "Office supplies",
-        "Stationery",
-      ],
+      "Baby and nursery": ["ALL", "Baby and infant toys", "Baby bedding", "Nursery furniture", "Prams, strollers and carriers", "Tableware and feeding"],
+      "Banks": [],
+      "Beauty and wellness": ["ALL", "Bath and body", "Fragrance", "Hair and beauty", "Hair care", "Makeup", "Skincare", "Vitamins and supplements"],
+      "Books, stationery and gifts": ["ALL", "Book stores", "Cards and gift wrap", "Newsagencies", "Office supplies", "Stationery"],
       "Car and auto": [],
-      Childcare: [],
-      "Clothing and accessories": [
-        "ALL",
-        "Babies' and toddlers'",
-        "Footwear",
-        "Jewellery and watches",
-        "Kids' and junior",
-        "Men's fashion",
-        "Sunglasses",
-        "Women's fashion",
-      ],
+      "Childcare": [],
+      "Clothing and accessories": ["ALL", "Babies' and toddlers'", "Footwear", "Jewellery and watches", "Kids' and junior", "Men's fashion", "Sunglasses", "Women's fashion"],
       "Community services": [],
       "Department stores": [],
       "Designer and boutique": [],
       "Discount and variety": [],
       "Dry cleaning": [],
-      "Electronics and technology": [
-        "ALL",
-        "Cameras",
-        "Computers and tablets",
-        "Gaming and consoles",
-        "Mobile and accessories",
-        "Navigation",
-        "TV and audio",
-      ],
-      "Entertainment and activities": [
-        "ALL",
-        "Arcades and games",
-        "Bowling",
-        "Cinemas",
-        "Kids activities",
-        "Learning and education",
-        "Music",
-      ],
-      Florists: [],
-      "Food and drink": [
-        "ALL",
-        "Asian",
-        "Bars and pubs",
-        "Breakfast and brunch",
-        "Cafes",
-        "Casual dining",
-        "Chocolate cafes",
-        "Desserts",
-        "Dietary requirements",
-        "Fast food",
-        "Fine dining",
-        "Greek",
-        "Grill houses",
-        "Halal",
-        "Healthy options",
-        "Italian",
-        "Juice bars",
-        "Kid-friendly",
-        "Lebanese",
-        "Mexican and Latin American",
-        "Middle Eastern",
-        "Modern Australian",
-        "Sandwiches and salads",
-        "Takeaway",
-      ],
+      "Electronics and technology": ["ALL", "Cameras", "Computers and tablets", "Gaming and consoles", "Mobile and accessories", "Navigation", "TV and audio"],
+      "Entertainment and activities": ["ALL", "Arcades and games", "Bowling", "Cinemas", "Kids activities", "Learning and education", "Music"],
+      "Florists": [],
+      "Food and drink": ["ALL", "Asian", "Bars and pubs", "Breakfast and brunch", "Cafes", "Casual dining", "Chocolate cafes", "Desserts", "Dietary requirements", "Fast food", "Fine dining", "Greek", "Grill houses", "Halal", "Healthy options", "Italian", "Juice bars", "Kid-friendly", "Lebanese", "Mexican and Latin American", "Middle Eastern", "Modern Australian", "Sandwiches and salads", "Takeaway"],
       "Foreign currency exchange": [],
-      "Fresh food and groceries": [
-        "ALL",
-        "Bakeries",
-        "Butchers",
-        "Confectionery",
-        "Delicatessens",
-        "Fresh produce",
-        "Liquor",
-        "Patisseries",
-        "Poultry",
-        "Seafood",
-        "Specialty foods",
-        "Supermarkets",
-      ],
-      "Health and fitness": [
-        "ALL",
-        "Chemists",
-        "Dentists",
-        "Gyms and fitness studios",
-        "Health insurers",
-        "Medical centres",
-        "Medicare",
-        "Optometrists",
-        "Specialty health providers",
-      ],
-      Home: [
-        "ALL",
-        "Bath and home fragrances",
-        "Bedding",
-        "Furniture",
-        "Gifts",
-        "Hardware",
-        "Home appliances",
-        "Home decor",
-        "Kitchen",
-        "Pets",
-        "Photography and art",
-        "Picture frames",
-      ],
-      "Luggage and travel accessories": [
-        "ALL",
-        "Backpacks and gym duffle bags",
-        "Laptop cases and sleeves",
-        "Small leather goods",
-        "Suitcases and travel accessories",
-        "Work and laptop bags",
-      ],
-      "Luxury and premium": [
-        "ALL",
-        "Australian designer",
-        "International designer",
-        "Luxury",
-        "Premium brands",
-      ],
+      "Fresh food and groceries": ["ALL", "Bakeries", "Butchers", "Confectionery", "Delicatessens", "Fresh produce", "Liquor", "Patisseries", "Poultry", "Seafood", "Specialty foods", "Supermarkets"],
+      "Health and fitness": ["ALL", "Chemists", "Dentists", "Gyms and fitness studios", "Health insurers", "Medical centres", "Medicare", "Optometrists", "Specialty health providers"],
+      "Home": ["ALL", "Bath and home fragrances", "Bedding", "Furniture", "Gifts", "Hardware", "Home appliances", "Home decor", "Kitchen", "Pets", "Photography and art", "Picture frames"],
+      "Luggage and travel accessories": ["ALL", "Backpacks and gym duffle bags", "Laptop cases and sleeves", "Small leather goods", "Suitcases and travel accessories", "Work and laptop bags"],
+      "Luxury and premium": ["ALL", "Australian designer", "International designer", "Luxury", "Premium brands"],
       "Pawn brokers": [],
       "Phone repairs": [],
       "Photographic services": [],
@@ -830,22 +606,10 @@ document.addEventListener("DOMContentLoaded", () => {
       "Professional services": [],
       "Real estate agents": [],
       "Shoe repair and key cutting": [],
-      "Sporting goods": [
-        "ALL",
-        "Activewear",
-        "Fitness and gym equipment",
-        "Outdoors and camping",
-        "Tech and wearables",
-      ],
-      Tobacconists: [],
-      "Toys and hobbies": [
-        "ALL",
-        "Arts and crafts",
-        "Games",
-        "Hobbies",
-        "Toys",
-      ],
-      "Travel agents": [],
+      "Sporting goods": ["ALL", "Activewear", "Fitness and gym equipment", "Outdoors and camping", "Tech and wearables"],
+      "Tobacconists": [],
+      "Toys and hobbies": ["ALL", "Arts and crafts", "Games", "Hobbies", "Toys"],
+      "Travel agents": []
     };
     const countries = [
       { value: "AU", text: "Australia" },
@@ -859,31 +623,20 @@ document.addEventListener("DOMContentLoaded", () => {
     async function getPlaceDetails(placeId) {
       return new Promise((resolve, reject) => {
         if (!window.rtrlApp.state.googleMapsGeocoder) return reject();
-        window.rtrlApp.state.googleMapsGeocoder.geocode(
-          { placeId },
-          (results, status) => {
-            if (status === google.maps.GeocoderStatus.OK && results[0])
-              resolve(results[0]);
+        window.rtrlApp.state.googleMapsGeocoder.geocode({ placeId }, (results, status) => {
+            if (status === google.maps.GeocoderStatus.OK && results[0]) resolve(results[0]);
             else reject();
-          },
-        );
+        });
       });
     }
 
     window.rtrlApp.handleLocationSelection = async (item) => {
       try {
         const details = await getPlaceDetails(item.place_id);
-        const countryName =
-          (
-            details.address_components.find((c) =>
-              c.types.includes("country"),
-            ) || {}
-          ).long_name || "";
+        const countryName = (details.address_components.find((c) => c.types.includes("country")) || {}).long_name || "";
         if (countryName) elements.countryInput.value = countryName;
         elements.locationInput.value = item.description;
-      } catch (error) {
-        elements.locationInput.value = item.description.split(",")[0];
-      }
+      } catch (error) { elements.locationInput.value = item.description.split(",")[0]; }
     };
 
     window.rtrlApp.handleAnchorPointSelection = async (item) => {
@@ -907,9 +660,7 @@ document.addEventListener("DOMContentLoaded", () => {
     window.rtrlApp.handlePostalCodeSelection = async (item) => {
       try {
         const details = await getPlaceDetails(item.place_id);
-        const pc = details.address_components.find((c) =>
-          c.types.includes("postal_code"),
-        );
+        const pc = details.address_components.find((c) => c.types.includes("postal_code"));
         if (pc) {
           await window.rtrlApp.validateAndAddTag(pc.long_name);
           elements.postalCodeInput.value = "";
@@ -923,34 +674,22 @@ document.addEventListener("DOMContentLoaded", () => {
         elements.postalCodeInput.value = "";
         return;
       }
-      const iso = countries.find(
-        (c) =>
-          c.text.toLowerCase() === elements.countryInput.value.toLowerCase(),
-      )?.value;
+      const iso = countries.find((c) => c.text.toLowerCase() === elements.countryInput.value.toLowerCase())?.value;
       if (!iso || !window.rtrlApp.state.googleMapsGeocoder) return;
-      window.rtrlApp.state.googleMapsGeocoder.geocode(
-        { componentRestrictions: { country: iso, postalCode: v } },
-        (res, status) => {
+      window.rtrlApp.state.googleMapsGeocoder.geocode({ componentRestrictions: { country: iso, postalCode: v } }, (res, status) => {
           if (status === google.maps.GeocoderStatus.OK && res[0]) {
-            const pcComp = res[0].address_components.find((c) =>
-              c.types.includes("postal_code"),
-            );
+            const pcComp = res[0].address_components.find((c) => c.types.includes("postal_code"));
             if (pcComp?.long_name === v) {
-              const sub = res[0].address_components.find((c) =>
-                c.types.includes("locality"),
-              );
+              const sub = res[0].address_components.find((c) => c.types.includes("locality"));
               window.rtrlApp.postalCodes.push(v);
               const tagEl = document.createElement("span");
               tagEl.className = "tag";
               tagEl.innerHTML = `<span>${sub ? sub.long_name + " " : ""}${v}</span> <span class="tag-close-btn" data-value="${v}">&times;</span>`;
-              elements.postalCodeContainer.insertBefore(
-                tagEl,
-                elements.postalCodeInput,
-              );
+              elements.postalCodeContainer.insertBefore(tagEl, elements.postalCodeInput);
               elements.postalCodeInput.value = "";
             }
           }
-        },
+        }
       );
     };
 
@@ -960,16 +699,12 @@ document.addEventListener("DOMContentLoaded", () => {
       if (d) {
         elements.locationInput.value = "";
         window.rtrlApp.postalCodes.length = 0;
-        elements.postalCodeContainer
-          .querySelectorAll(".tag")
-          .forEach((tag) => tag.remove());
+        elements.postalCodeContainer.querySelectorAll(".tag").forEach((tag) => tag.remove());
       }
     };
 
     window.rtrlApp.setRadiusInputsState = (d) => {
-      if (elements.btnOpenMapWorkspace) {
-          elements.btnOpenMapWorkspace.disabled = d;
-      }
+      if (elements.btnOpenMapWorkspace) elements.btnOpenMapWorkspace.disabled = d;
       if (d) {
         window.rtrlApp.state.anchors.forEach(a => {
             if(window.rtrlApp.map) {
@@ -985,8 +720,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     window.rtrlApp.initializeMapServices = () => {
       if (window.google?.maps?.places) {
-        window.rtrlApp.state.googleMapsService =
-          new google.maps.places.AutocompleteService();
+        window.rtrlApp.state.googleMapsService = new google.maps.places.AutocompleteService();
         window.rtrlApp.state.googleMapsGeocoder = new google.maps.Geocoder();
       }
     };
@@ -994,41 +728,38 @@ document.addEventListener("DOMContentLoaded", () => {
     window.rtrlApp.fetchPlaceSuggestions = (el, sel, t, onSelect) => {
       if (!window.rtrlApp.state.googleMapsService || el.value.trim().length < 2)
         return (sel.style.display = "none");
-      const iso = countries.find(
-        (c) =>
-          c.text.toLowerCase() === elements.countryInput.value.toLowerCase(),
-      )?.value;
+      const iso = countries.find((c) => c.text.toLowerCase() === elements.countryInput.value.toLowerCase())?.value;
       const req = { input: el.value, types: t };
       if (iso) req.componentRestrictions = { country: iso };
-      window.rtrlApp.state.googleMapsService.getPlacePredictions(
-        req,
-        (p, status) => {
+      window.rtrlApp.state.googleMapsService.getPlacePredictions(req, (p, status) => {
           if (status === google.maps.places.PlacesServiceStatus.OK && p)
-            renderSuggestions(
-              el,
-              sel,
-              p.map((x) => ({
-                description: x.description,
-                place_id: x.place_id,
-              })),
-              "description",
-              "place_id",
-              onSelect,
-            );
+            renderSuggestions(el, sel, p.map((x) => ({ description: x.description, place_id: x.place_id })), "description", "place_id", onSelect);
           else sel.style.display = "none";
-        },
+        }
       );
     };
 
     if (document.getElementById("map")) {
         window.rtrlApp.map = L.map("map").setView([-33.8688, 151.2093], 10);
-        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-          attribution: "&copy; OpenStreetMap",
-        }).addTo(window.rtrlApp.map);
+        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "&copy; OpenStreetMap" }).addTo(window.rtrlApp.map);
 
-        window.rtrlApp.map.on('click', function(e) {
+        window.rtrlApp.map.on('click', async function(e) {
           if (elements.mapModal && elements.mapModal.style.display === 'flex') {
-            window.rtrlApp.addAnchor(e.latlng, `Zone ${window.rtrlApp.state.anchors.length + 1}`);
+            let name = `Zone ${window.rtrlApp.state.anchors.length + 1}`;
+            if (window.rtrlApp.state.googleMapsGeocoder) {
+                try {
+                    const results = await new Promise((resolve, reject) => {
+                        window.rtrlApp.state.googleMapsGeocoder.geocode({ location: e.latlng }, (res, status) => {
+                            if (status === "OK" && res[0]) resolve(res);
+                            else reject(status);
+                        });
+                    });
+                    let locality = results[0].address_components.find(c => c.types.includes("locality"));
+                    if (locality) name = locality.long_name;
+                    else name = results[0].formatted_address.split(',')[0];
+                } catch(err) {}
+            }
+            window.rtrlApp.addAnchor(e.latlng, name);
           }
         });
     }
@@ -1040,9 +771,9 @@ document.addEventListener("DOMContentLoaded", () => {
       const marker = L.marker(latlng, { draggable: true }).addTo(window.rtrlApp.map);
       const circle = L.circle(latlng, {
           radius: defaultRadius * 1000,
-          color: "#8b5cf6",
+          color: "#3b82f6",
           weight: 2,
-          fillColor: "#8b5cf6",
+          fillColor: "#3b82f6",
           fillOpacity: 0.15
       }).addTo(window.rtrlApp.map);
 
@@ -1056,10 +787,31 @@ document.addEventListener("DOMContentLoaded", () => {
           anchor.lng = pos.lng;
       });
 
+      marker.on('dragend', async (e) => {
+          const pos = e.target.getLatLng();
+          if (window.rtrlApp.state.googleMapsGeocoder) {
+             try {
+                const results = await new Promise((resolve, reject) => {
+                    window.rtrlApp.state.googleMapsGeocoder.geocode({ location: pos }, (res, status) => {
+                        if (status === "OK" && res[0]) resolve(res);
+                        else reject(status);
+                    });
+                });
+                let locality = results[0].address_components.find(c => c.types.includes("locality"));
+                if (locality) anchor.name = locality.long_name;
+                else anchor.name = results[0].formatted_address.split(',')[0];
+                renderZoneList();
+             } catch(err) {}
+          }
+      });
+
       renderZoneList();
       
       if(window.rtrlApp.state.anchors.length === 1) {
           window.rtrlApp.map.setView(latlng, 12);
+      } else {
+          const group = new L.featureGroup(window.rtrlApp.state.anchors.map(a => a.circle));
+          window.rtrlApp.map.fitBounds(group.getBounds().pad(0.1));
       }
     };
 
@@ -1073,8 +825,11 @@ document.addEventListener("DOMContentLoaded", () => {
           card.className = "zone-card";
           card.innerHTML = `
               <div class="zone-card-header">
-                  <span class="zone-card-title">${a.name}</span>
-                  <button class="zone-delete-btn"><i class="fas fa-trash-alt"></i></button>
+                  <div class="zone-card-title-wrapper">
+                      <div class="zone-card-icon"><i class="fas fa-map-marker-alt"></i></div>
+                      <span class="zone-card-title" title="${a.name}">${a.name}</span>
+                  </div>
+                  <button class="zone-delete-btn" title="Remove Zone"><i class="fas fa-trash-alt"></i></button>
               </div>
               <div class="zone-slider-container">
                   <input type="range" class="zone-slider-input" min="1" max="25" value="${a.radius}">
@@ -1094,37 +849,36 @@ document.addEventListener("DOMContentLoaded", () => {
               window.rtrlApp.map.removeLayer(a.circle);
               window.rtrlApp.state.anchors = window.rtrlApp.state.anchors.filter(x => x.id !== a.id);
               renderZoneList();
+              updateMapPreviewText();
           };
           list.appendChild(card);
       });
+      updateMapPreviewText();
     }
 
     function updateMapPreviewText() {
       const txt = document.getElementById('map-preview-text');
-      if (txt) {
-          txt.textContent = `${window.rtrlApp.state.anchors.length} active search zone(s) defined.`;
-      }
+      if (txt) txt.textContent = `${window.rtrlApp.state.anchors.length} active search zone(s) defined.`;
     }
 
     if (elements.workspaceSearchInput) {
         elements.workspaceSearchInput.addEventListener('input', () => {
-            window.rtrlApp.fetchPlaceSuggestions(
-                elements.workspaceSearchInput, 
-                elements.workspaceSuggestions, 
-                ["geocode"], 
-                window.rtrlApp.handleAnchorPointSelection
-            );
+            clearTimeout(window.rtrlApp.timers.workspace);
+            window.rtrlApp.timers.workspace = setTimeout(() => {
+                window.rtrlApp.fetchPlaceSuggestions(
+                    elements.workspaceSearchInput, 
+                    elements.workspaceSuggestions, 
+                    ["geocode"], 
+                    window.rtrlApp.handleAnchorPointSelection
+                );
+            }, 300);
         });
     }
 
     window.rtrlApp.startResearch = () => {
         if (!currentUserSession) return;
 
-        document.querySelectorAll(".collapsible-section").forEach(s => {
-            s.style.borderColor = "";
-            s.style.boxShadow = "";
-        });
-        
+        document.querySelectorAll(".collapsible-section").forEach(s => { s.style.borderColor = ""; s.style.boxShadow = ""; });
         const errorModal = document.getElementById("alert-modal");
         const errorText = document.getElementById("alert-modal-message");
 
@@ -1144,7 +898,6 @@ document.addEventListener("DOMContentLoaded", () => {
                 content.classList.remove("collapsed");
                 const icon = content.previousElementSibling.querySelector(".toggle-icon");
                 if (icon) icon.classList.add("open");
-                
                 if (elementId === "radiusSearchContainer" && window.rtrlApp.map) {
                     setTimeout(() => window.rtrlApp.map.invalidateSize(), 300);
                 }
@@ -1159,38 +912,31 @@ document.addEventListener("DOMContentLoaded", () => {
             expandAndHighlight("bulkSearchContainer");
             expandAndHighlight("locationSearchContainer");
             expandAndHighlight("radiusSearchContainer");
-            errorModal.style.display = "flex";
-            return;
+            errorModal.style.display = "flex"; return;
         }
 
         if (!hasBusinessDef) {
             errorText.innerHTML = "Please specify a <b>Category</b> or enter <b>Business Names</b> so the system knows what to look for.";
             expandAndHighlight("bulkSearchContainer");
             expandAndHighlight("individualSearchContainer");
-            errorModal.style.display = "flex";
-            return;
+            errorModal.style.display = "flex"; return;
         }
 
         if (!hasLocationDef) {
             errorText.innerHTML = "The system needs a <b>Location</b>. Please provide a Suburb or define a Search Radius.";
             expandAndHighlight("locationSearchContainer");
             expandAndHighlight("radiusSearchContainer");
-            errorModal.style.display = "flex";
-            return;
+            errorModal.style.display = "flex"; return;
         }
 
         const ns = businessNames.split("\n").map((n) => n.trim()).filter(Boolean);
         const ss = Array.from(elements.subCategoryCheckboxContainer.querySelectorAll("input:checked")).map((c) => c.value).filter((v) => v !== "select_all");
         const localToday = new Date();
         
-        const multiPoints = window.rtrlApp.state.anchors.map(a => ({
-            coords: `${a.lat},${a.lng}`,
-            radius: a.radius
-        }));
+        const multiPoints = window.rtrlApp.state.anchors.map(a => ({ coords: `${a.lat},${a.lng}`, radius: a.radius }));
         
         const p = {
-            country: elements.countryInput.value,
-            businessNames: ns,
+            country: elements.countryInput.value, businessNames: ns,
             userEmail: elements.userEmailInput.value.trim(),
             exclusionList: window.rtrlApp.exclusionFeature.getExclusionList(),
             useAiEnrichment: elements.useAiToggle.checked,
@@ -1204,18 +950,14 @@ document.addEventListener("DOMContentLoaded", () => {
             p.postalCode = window.rtrlApp.postalCodes;
         }
 
-        if (ns.length > 0) {
-            p.count = -1;
-        } else if (window.rtrlApp.customKeywords.length > 0) {
-            p.categoriesToLoop = window.rtrlApp.customKeywords;
-        } else {
+        if (ns.length > 0) { p.count = -1; } 
+        else if (window.rtrlApp.customKeywords.length > 0) { p.categoriesToLoop = window.rtrlApp.customKeywords; } 
+        else {
             let b = ss.length > 0 ? ss : [elements.primaryCategorySelect.value];
             p.categoriesToLoop = elements.categoryModifierInput.value.trim() ? b.map((c) => `"${elements.categoryModifierInput.value.trim()}" ${c}`) : b;
         }
 
-        if (ns.length === 0) {
-            p.count = elements.findAllBusinessesCheckbox.checked || !elements.countInput.value.trim() ? -1 : parseInt(elements.countInput.value, 10);
-        }
+        if (ns.length === 0) p.count = elements.findAllBusinessesCheckbox.checked || !elements.countInput.value.trim() ? -1 : parseInt(elements.countInput.value, 10);
 
         const areaKey = multiPoints.length > 0 ? `${multiPoints.length} Zones` : (window.rtrlApp.postalCodes.length > 0 ? window.rtrlApp.postalCodes.join("_") : elements.locationInput.value.split(",")[0]);
 
@@ -1224,9 +966,7 @@ document.addEventListener("DOMContentLoaded", () => {
             subCategory: ss.length > 1 ? "multiple_subcategories" : ss[0] || "",
             subCategoryList: ss,
             customCategory: window.rtrlApp.customKeywords.length > 0 ? window.rtrlApp.customKeywords.join(", ") : elements.categoryModifierInput.value,
-            area: areaKey,
-            postcodes: window.rtrlApp.postalCodes,
-            country: elements.countryInput.value,
+            area: areaKey, postcodes: window.rtrlApp.postalCodes, country: elements.countryInput.value,
         };
 
         socket.emit("start_scrape_job", {
@@ -1238,77 +978,43 @@ document.addEventListener("DOMContentLoaded", () => {
         const originalText = elements.startButton.innerHTML;
         elements.startButton.innerHTML = '<i class="fas fa-check"></i> Added to Queue!';
         elements.startButton.style.backgroundColor = "#10b981";
-        setTimeout(() => {
-            elements.startButton.innerHTML = originalText;
-            elements.startButton.style.backgroundColor = "";
-        }, 2000);
+        setTimeout(() => { elements.startButton.innerHTML = originalText; elements.startButton.style.backgroundColor = ""; }, 2000);
     };
 
     function initializeApp() {
-      window.rtrlApp.jobHistory.init(
-        () => currentUserSession?.access_token,
-        BACKEND_URL,
-      );
-      window.rtrlApp.exclusionFeature.init(
-        () => currentUserSession?.access_token,
-      );
-      if (localStorage.getItem("rtrl_last_used_email"))
-        elements.userEmailInput.value = localStorage.getItem(
-          "rtrl_last_used_email",
-        );
-      
-      if (elements.primaryCategorySelect) {
-          populatePrimaryCategories(elements.primaryCategorySelect, categories, "");
-      }
-      
+      window.rtrlApp.jobHistory.init(() => currentUserSession?.access_token, BACKEND_URL);
+      window.rtrlApp.exclusionFeature.init(() => currentUserSession?.access_token);
+      if (localStorage.getItem("rtrl_last_used_email")) elements.userEmailInput.value = localStorage.getItem("rtrl_last_used_email");
+      if (elements.primaryCategorySelect) populatePrimaryCategories(elements.primaryCategorySelect, categories, "");
       setupPostcodeListHandlers();
       
       if (typeof setupEventListeners === 'function') {
           setupEventListeners(
-            elements,
-            socket,
-            categories,
-            countries,
-            window.rtrlApp.postalCodes,
-            window.rtrlApp.customKeywords,
-            window.rtrlApp.map,
-            window.rtrlApp.searchCircle,
+            elements, socket, categories, countries, window.rtrlApp.postalCodes,
+            window.rtrlApp.customKeywords, window.rtrlApp.map, window.rtrlApp.searchCircle,
           );
       }
       loadGoogleMaps();
     }
-
     initializeApp();
   }
-
   initializeMainApp();
 
   window.rtrlApp.cloneJobIntoForm = (p) => {
     const el = {
-      primaryCat: document.getElementById("primaryCategorySelect"),
-      customCat: document.getElementById("customCategoryInput"),
-      location: document.getElementById("locationInput"),
-      country: document.getElementById("countryInput"),
-      count: document.getElementById("count"),
-      findAll: document.getElementById("findAllBusinesses"),
-      names: document.getElementById("businessNamesInput"),
-      aiToggle: document.getElementById("useAiToggle"),
+      primaryCat: document.getElementById("primaryCategorySelect"), customCat: document.getElementById("customCategoryInput"),
+      location: document.getElementById("locationInput"), country: document.getElementById("countryInput"), count: document.getElementById("count"),
+      findAll: document.getElementById("findAllBusinesses"), names: document.getElementById("businessNamesInput"), aiToggle: document.getElementById("useAiToggle"),
     };
-    
     if(el.location) el.location.value = "";
     if(el.names) el.names.value = "";
-    
     window.rtrlApp.postalCodes.length = 0;
     window.rtrlApp.customKeywords.length = 0;
     
     window.rtrlApp.state.anchors.forEach(a => {
-        if(window.rtrlApp.map) {
-            window.rtrlApp.map.removeLayer(a.marker);
-            window.rtrlApp.map.removeLayer(a.circle);
-        }
+        if(window.rtrlApp.map) { window.rtrlApp.map.removeLayer(a.marker); window.rtrlApp.map.removeLayer(a.circle); }
     });
     window.rtrlApp.state.anchors = [];
-    
     document.querySelectorAll(".tag").forEach((t) => t.remove());
     
     if (el.aiToggle) el.aiToggle.checked = p.useAiEnrichment !== false;
@@ -1316,16 +1022,10 @@ document.addEventListener("DOMContentLoaded", () => {
     
     if (p.count === -1) {
       if(el.findAll) el.findAll.checked = true;
-      if(el.count) {
-          el.count.value = "";
-          el.count.disabled = true;
-      }
+      if(el.count) { el.count.value = ""; el.count.disabled = true; }
     } else {
       if(el.findAll) el.findAll.checked = false;
-      if(el.count) {
-          el.count.value = p.count || "";
-          el.count.disabled = false;
-      }
+      if(el.count) { el.count.value = p.count || ""; el.count.disabled = false; }
     }
     
     if (p.businessNames?.length > 0) {
@@ -1336,8 +1036,7 @@ document.addEventListener("DOMContentLoaded", () => {
       p.categoriesToLoop.forEach((kw) => {
         window.rtrlApp.customKeywords.push(kw);
         const t = document.createElement("span");
-        t.className = "tag";
-        t.innerHTML = `<span>${kw}</span> <span class="tag-close-btn" data-value="${kw}">&times;</span>`;
+        t.className = "tag"; t.innerHTML = `<span>${kw}</span> <span class="tag-close-btn" data-value="${kw}">&times;</span>`;
         const kwContainer = document.getElementById("customKeywordContainer");
         if(kwContainer && el.customCat) kwContainer.insertBefore(t, el.customCat);
       });
@@ -1354,18 +1053,14 @@ document.addEventListener("DOMContentLoaded", () => {
       });
       const radContainer = document.getElementById("radiusSearchContainer");
       if(radContainer) radContainer.classList.remove("collapsed");
-      
       const txt = document.getElementById('map-preview-text');
       if (txt) txt.textContent = `${window.rtrlApp.state.anchors.length} active search zone(s) defined.`;
     } else {
       if(el.location) el.location.value = p.location || "";
-      if (p.postalCode) {
-          p.postalCode.forEach((pc) => window.rtrlApp.validateAndAddTag(pc));
-      }
+      if (p.postalCode) p.postalCode.forEach((pc) => window.rtrlApp.validateAndAddTag(pc));
       const locContainer = document.getElementById("locationSearchContainer");
       if(locContainer) locContainer.classList.remove("collapsed");
     }
-    
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 });

@@ -10,6 +10,7 @@ function setupEventListeners(
 ) {
   const state = window.rtrlApp.state;
 
+  // Accordion Logic
   document.querySelectorAll(".collapsible-header").forEach((header) => {
     header.addEventListener("click", () => {
       const content = header.nextElementSibling;
@@ -19,12 +20,18 @@ function setupEventListeners(
       if (icon) icon.classList.toggle("open");
 
       if (!content.classList.contains("collapsed")) {
-        if (content.id === "radiusSearchContainer" && map) {
+        // Fix for Leaflet gray tiles: Force map to recalculate its size after the CSS transition finishes
+        if (content.id === "radiusSearchContainer" && window.rtrlApp.map) {
           setTimeout(() => {
-            map.invalidateSize();
-          }, 300);
+            window.rtrlApp.map.invalidateSize();
+            if (window.rtrlApp.state.anchors.length > 0) {
+              const group = new L.featureGroup(window.rtrlApp.state.anchors.map(a => a.circle));
+              window.rtrlApp.map.fitBounds(group.getBounds().pad(0.1));
+            }
+          }, 350); // 350ms delay to ensure the CSS expansion is 100% complete
         }
 
+        // Refresh job history if that tab is opened
         if (content.querySelector('#job-list-container')) {
           window.rtrlApp.jobHistory.fetchAndRenderJobs();
         }
@@ -32,6 +39,7 @@ function setupEventListeners(
     });
   });
 
+  // User Menu Dropdown
   const userMenuButton = document.getElementById("user-menu-button");
   const userMenuDropdown = document.getElementById("user-menu-dropdown");
   if (userMenuButton) {
@@ -41,8 +49,27 @@ function setupEventListeners(
       userMenuDropdown.style.display = isVisible ? "none" : "block";
     });
   }
-  document.addEventListener("click", () => {
+  
+  // Close suggestions and dropdowns on outside click
+  document.addEventListener("click", (event) => {
     if (userMenuDropdown) userMenuDropdown.style.display = "none";
+
+    if (elements.locationInput && !elements.locationInput.contains(event.target)) {
+      if(elements.locationSuggestionsEl) elements.locationSuggestionsEl.style.display = "none";
+    }
+    if (elements.postalCodeContainer && !elements.postalCodeContainer.contains(event.target)) {
+      if(elements.postalCodeSuggestionsEl) elements.postalCodeSuggestionsEl.style.display = "none";
+    }
+    if (elements.countryInput && !elements.countryInput.contains(event.target)) {
+      if(elements.countrySuggestionsEl) elements.countrySuggestionsEl.style.display = "none";
+    }
+    
+    // Workspace search suggestions check
+    const wsInput = document.getElementById('workspace-search-input');
+    const wsSugg = document.getElementById('workspace-suggestions');
+    if(wsInput && wsSugg && !wsInput.contains(event.target)) {
+        wsSugg.style.display = "none";
+    }
   });
 
   function setupTagInput() {
@@ -59,9 +86,10 @@ function setupEventListeners(
             const index = postalCodes.indexOf(postcode);
             if (index > -1) postalCodes.splice(index, 1);
             e.target.parentElement.remove();
-            if (postalCodes.length === 0 && !elements.locationInput.value.trim())
+            
+            if (postalCodes.length === 0 && !elements.locationInput.value.trim()) {
               window.rtrlApp.setRadiusInputsState(false);
-
+            }
             updateSaveButtonState();
           } else {
             elements.postalCodeInput.focus();
@@ -83,8 +111,7 @@ function setupEventListeners(
             elements.postalCodeInput.value === ""
           ) {
             if (postalCodes.length > 0) {
-              const lastTag =
-                elements.postalCodeContainer.querySelector(".tag:last-of-type");
+              const lastTag = elements.postalCodeContainer.querySelector(".tag:last-of-type");
               if (lastTag) {
                 const closeBtn = lastTag.querySelector(".tag-close-btn");
                 const postcode = closeBtn.dataset.value;
@@ -291,24 +318,6 @@ function setupEventListeners(
         );
       });
   }
-
-  // Anchor Point / Radius Slider legacy elements removed.
-
-  document.addEventListener("click", (event) => {
-    if (elements.locationInput && !elements.locationInput.contains(event.target))
-      if(elements.locationSuggestionsEl) elements.locationSuggestionsEl.style.display = "none";
-    if (elements.postalCodeContainer && !elements.postalCodeContainer.contains(event.target))
-      if(elements.postalCodeSuggestionsEl) elements.postalCodeSuggestionsEl.style.display = "none";
-    if (elements.countryInput && !elements.countryInput.contains(event.target))
-      if(elements.countrySuggestionsEl) elements.countrySuggestionsEl.style.display = "none";
-    
-    // Check if workspace search suggestions exist
-    const wsInput = document.getElementById('workspace-search-input');
-    const wsSugg = document.getElementById('workspace-suggestions');
-    if(wsInput && wsSugg && !wsInput.contains(event.target)) {
-        wsSugg.style.display = "none";
-    }
-  });
 
   if(elements.startButton) {
       elements.startButton.addEventListener("click", () =>
