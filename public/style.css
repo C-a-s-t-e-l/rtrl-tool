@@ -934,6 +934,62 @@ input:checked + .slider:before {
     border: 1px solid var(--border-color);
 }
 
+.zone-card {
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 15px;
+    margin-bottom: 12px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+    transition: border-color 0.2s;
+}
+.zone-card:hover {
+    border-color: #3b82f6;
+}
+.zone-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+.zone-card-title {
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: #1e293b;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 200px;
+}
+.zone-delete-btn {
+    background: none;
+    border: none;
+    color: #94a3b8;
+    cursor: pointer;
+    font-size: 0.9rem;
+    padding: 4px;
+    transition: color 0.2s;
+}
+.zone-delete-btn:hover {
+    color: #ef4444;
+}
+.zone-slider-container {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.zone-slider-input {
+    flex: 1;
+    height: 6px;
+    accent-color: #8b5cf6;
+}
+.zone-radius-display {
+    font-size: 0.8rem;
+    font-weight: 800;
+    color: #475569;
+    min-width: 40px;
+}
+
 @keyframes wave-animation {
     0% { transform: scale(1); opacity: 0.6; }
     100% { transform: scale(1.6); opacity: 0; }
