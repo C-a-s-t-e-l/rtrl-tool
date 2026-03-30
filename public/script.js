@@ -234,13 +234,14 @@ socket.on("user_job_transition", ({ jobId, status }) => {
     if (status === "running") {
         currentJobId = jobId;
         localStorage.setItem("rtrl_active_job_id", jobId);
-        
         socket.emit("subscribe_to_job", { jobId, authToken: currentUserSession.access_token });
         
         resetStatusUI();
         updateDashboardUi("running");
         
-        if (window.rtrlApp.jobHistory) window.rtrlApp.jobHistory.fetchAndRenderJobs();
+        if (window.rtrlApp.jobHistory) {
+            window.rtrlApp.jobHistory.fetchAndRenderJobs(true);
+        }
     }
 });
 
@@ -255,7 +256,7 @@ socket.on("job_state", (job) => {
     if (job.status === "running") {
         socket.emit("subscribe_to_job", { jobId: job.id, authToken: currentUserSession.access_token });
         updateDashboardUi("running");
-        setUiState(true, elements); 
+        // setUiState(true, elements); 
     } 
     else if (job.status === "queued") {
         updateDashboardUi("ready");
@@ -275,16 +276,20 @@ socket.on("job_update", (data) => {
         localStorage.setItem("rtrl_active_job_id", data.id);
         resetStatusUI();
         updateDashboardUi("running");
-        setUiState(true, elements); 
-    } else if (data.status === "completed" || data.status === "failed") {
+        
+    } 
+    else if (data.status === "completed" || data.status === "failed") {
         updateDashboardUi(data.status); 
         localStorage.removeItem("rtrl_active_job_id");
         currentJobId = null;
+        
         setUiState(false, elements); 
         
-        if (window.rtrlApp.jobHistory) {
-            window.rtrlApp.jobHistory.fetchAndRenderJobs();
-        }
+        setTimeout(() => {
+            if (window.rtrlApp.jobHistory) {
+                window.rtrlApp.jobHistory.fetchAndRenderJobs(true);
+            }
+        }, 1500); 
     }
 });
 
@@ -1082,11 +1087,17 @@ if (window.rtrlApp.state.anchors.length > 0) {
             elements.startButton.innerHTML = originalText;
             elements.startButton.style.backgroundColor = "";
             elements.startButton.disabled = false; 
-
             elements.locationInput.value = "";
             elements.businessNamesInput.value = "";
             window.rtrlApp.postalCodes = [];
+            
             document.querySelectorAll(".tag").forEach(t => t.remove());
+            
+            if (typeof window.rtrlApp.setRadiusInputsState === 'function') {
+                window.rtrlApp.setRadiusInputsState(true); 
+            }
+            
+            localStorage.removeItem("rtrl_saved_zones");
         }, 2000);
     };
 

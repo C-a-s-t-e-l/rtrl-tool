@@ -379,6 +379,13 @@ if (browser) await browser.close();
 
     const { uniqueBusinesses, duplicates } = deduplicateBusinesses(allProcessedBusinesses);
 
+    console.log(`[Job: ${jobId}] Final Sync: Saving ${uniqueBusinesses.length} unique results to database.`);
+    
+await supabase.from("jobs").update({ 
+    results: uniqueBusinesses, 
+    result_count: uniqueBusinesses.length 
+}).eq("id", jobId);
+
     // Send one final progress update to lock in the numbers on the UI
 io.to(jobId).emit("progress_update", { 
     phase: 'completed', 
@@ -1039,8 +1046,7 @@ app.get("/api/jobs/history", async (req, res) => {
         let query = supabase
             .from('jobs')
             .select('id, created_at, parameters, status, result_count', { count: 'exact' })
-            .eq('user_id', user.id)
-            .neq('status', 'queued');
+            .eq('user_id', user.id);
 
         if (searchTerm) {
             query = query.or(`parameters->searchParamsForEmail->>area.ilike.%${searchTerm}%,parameters->searchParamsForEmail->>primaryCategory.ilike.%${searchTerm}%,parameters->searchParamsForEmail->>customCategory.ilike.%${searchTerm}%`);
