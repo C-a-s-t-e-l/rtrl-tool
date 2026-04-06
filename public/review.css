@@ -315,6 +315,7 @@
 }
 
 .tooltip-text {
+  text-wrap: wrap;
   visibility: hidden;
   width: 280px;
   background-color: #1e293b;
