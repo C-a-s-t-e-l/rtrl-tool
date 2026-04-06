@@ -155,7 +155,13 @@ window.rtrlApp.review = (function () {
                 <div class="review-toolbar">
                     <div class="filter-group-inline">
                         <span class="filter-label">Clean:</span>
-                        <button class="btn-smart-clean-inline" id="rev-smart-clean">Clean Junk Leads</button>
+                        <div class="tooltip-wrapper">
+                            <button class="btn-smart-clean-inline" id="rev-smart-clean">Clean Junk Leads</button>
+                            <span class="tooltip-text">
+                                <b>Smart Cleanup</b><br>
+                                Automatically unselects leads that have no email address and no phone number.
+                            </span>
+                        </div>
                     </div>
                     <div style="width:1px; height:20px; background:#e2e8f0;"></div>
                     <div class="filter-group-inline">
