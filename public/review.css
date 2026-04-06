@@ -94,9 +94,9 @@
     border-bottom: 1px solid #f1f5f9;
     display: flex;
     align-items: center;
-    gap: 30px;
-    flex-wrap: nowrap;
-    overflow-x: visible;
+    gap: 20px; 
+    flex-wrap: wrap; 
+    overflow: visible; 
 }
 
 .filter-group-inline {
@@ -284,24 +284,30 @@
 
 .tooltip-text {
     visibility: hidden;
-    width: 320px;
+    width: 280px;
     background-color: #1e293b;
     color: #fff;
-    text-align: left;
     border-radius: 12px;
-    padding: 16px;
+    padding: 12px;
     position: absolute;
-    z-index: 99999; 
-    bottom: 140%;
+    z-index: 99999;
+    bottom: 150%; 
     left: 50%;
-    margin-left: -160px;
+    transform: translateX(-50%); 
+    margin-left: 0;
     opacity: 0;
     transition: opacity 0.2s, visibility 0.2s;
-    font-size: 0.8rem;
-    font-weight: 400;
-    line-height: 1.5;
+    font-size: 0.75rem;
     pointer-events: none;
-    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.4);
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+}
+
+.tooltip-wrapper:first-child .tooltip-text {
+    left: 0;
+    transform: none;
+}
+.tooltip-wrapper:first-child .tooltip-text::after {
+    left: 20px;
 }
 
 .tooltip-wrapper:last-child .tooltip-text {
