@@ -82,9 +82,10 @@ window.rtrlApp.review = (function () {
       const s = activeFilters.search.toLowerCase();
       data = data.filter(d => (d.BusinessName || "").toLowerCase().includes(s) || (d.StreetAddress || "").toLowerCase().includes(s) || (d.Category || "").toLowerCase().includes(s) || (d.Suburb || "").toLowerCase().includes(s));
     }
+    
     if (activeFilters.contact === "mobile") data = data.filter(d => (d.Phone || "").startsWith("614") || (d.Phone || "").startsWith("04"));
-    else if (activeFilters.contact === "email") data = data.filter(d => d.Email1);
-    else if (activeFilters.contact === "both") data = data.filter(d => d.Email1 && ((d.Phone || "").startsWith("614") || (d.Phone || "").startsWith("04")));
+    else if (activeFilters.contact === "email") data = data.filter(d => d.Email1 || d.Email2 || d.Email3);
+    else if (activeFilters.contact === "both") data = data.filter(d => (d.Email1 || d.Email2 || d.Email3) && ((d.Phone || "").startsWith("614") || (d.Phone || "").startsWith("04")));
 
     if (activeFilters.rating > 0) data = data.filter(d => parseFloat(d.StarRating || 0) >= activeFilters.rating);
 
@@ -155,15 +156,15 @@ window.rtrlApp.review = (function () {
                 <div class="review-toolbar">
                     <div class="filter-group-inline">
                         <span class="filter-label">Clean:</span>
-                        <button class="btn-smart-clean-inline" id="rev-smart-clean">Clean Junk Leads</button>
+                        <div class="tooltip-wrapper"><button class="btn-smart-clean-inline" id="rev-smart-clean">Clean Junk Leads</button><span class="tooltip-text"><b>Lead Scrubbing</b><br>Automatically unchecks every lead that is missing both a Phone number and an Email.</span></div>
                     </div>
                     <div style="width:1px; height:20px; background:#e2e8f0;"></div>
                     <div class="filter-group-inline">
                         <span class="filter-label">Contact:</span>
-                        <div class="tooltip-wrapper"><button class="filter-pill ${activeFilters.contact === "all" ? "active" : ""}" data-type="contact" data-val="all">All</button><span class="tooltip-text">Show all leads found.</span></div>
+                        <div class="tooltip-wrapper"><button class="filter-pill ${activeFilters.contact === "all" ? "active" : ""}" data-type="contact" data-val="all">All</button><span class="tooltip-text">Show all leads found in this research job.</span></div>
                         <div class="tooltip-wrapper"><button class="filter-pill ${activeFilters.contact === "mobile" ? "active" : ""}" data-type="contact" data-val="mobile">Mobiles</button><span class="tooltip-text">Show only leads with Australian mobile numbers (starts with 04).</span></div>
-                        <div class="tooltip-wrapper"><button class="filter-pill ${activeFilters.contact === "email" ? "active" : ""}" data-type="contact" data-val="email">Emails</button><span class="tooltip-text">Show only leads with at least one email address found.</span></div>
-                        <div class="tooltip-wrapper"><button class="filter-pill ${activeFilters.contact === "both" ? "active" : ""}" data-type="contact" data-val="both">Mobiles + Emails</button><span class="tooltip-text">Show only high-quality leads that have BOTH a mobile and an email.</span></div>
+                        <div class="tooltip-wrapper"><button class="filter-pill ${activeFilters.contact === "email" ? "active" : ""}" data-type="contact" data-val="email">Emails</button><span class="tooltip-text">Show only leads where at least one email address was found.</span></div>
+                        <div class="tooltip-wrapper"><button class="filter-pill ${activeFilters.contact === "both" ? "active" : ""}" data-type="contact" data-val="both">Mobiles + Emails</button><span class="tooltip-text">Show "Power Leads" that have both a Mobile number and an Email address.</span></div>
                     </div>
                     <div style="width:1px; height:20px; background:#e2e8f0;"></div>
                     <div class="filter-group-inline">
@@ -208,18 +209,17 @@ window.rtrlApp.review = (function () {
                     <button class="btn-review-close" onclick="document.getElementById('review-modal').remove()">Close Workspace</button>
                     <div class="tooltip-wrapper">
                         <button class="btn-review-export" style="background:#10b981" id="rev-xlsx">Refined Masterlist (.xlsx)</button>
-                        <span class="tooltip-text"><b>High-Detail Spreadsheet Export</b><br>Downloads a complete Excel file including every data point, your manual corrections, and your internal notes. Matches the standard "Full Duplicates Removed" format.</span>
+                        <span class="tooltip-text"><b>Master Spreadsheet Export</b><br>Downloads a detailed Excel file including all columns, your manual edits, and notes. Matches the original "Full Duplicates Removed" format.</span>
                     </div>
                     <div class="tooltip-wrapper">
                         <button class="btn-review-export" id="rev-zip">Refined Full File (.zip)</button>
-                        <span class="tooltip-text"><b>Complete Lead Outreach Package</b><br>Generates a ZIP folder containing:<br>1. Refined Masterlist (XLSX)<br>2. SMS-ready list of checked mobiles (CSV)<br>3. Cleaned email-only database (CSV).</span>
+                        <span class="tooltip-text"><b>Full Lead Package (.zip)</b><br>Generates a collection of cleaned files:<br>1. Master Excel List<br>2. Cleaned SMS Import (CSV)<br>3. Cleaned Email Database (CSV).</span>
                     </div>
                 </div>
             </div>`;
     document.body.appendChild(overlay);
     refreshUI();
 
-    // Handlers
     document.getElementById("rev-search").oninput = (e) => { activeFilters.search = e.target.value; refreshUI(); };
     document.getElementById("rev-filter-rating").onchange = (e) => { activeFilters.rating = parseFloat(e.target.value); refreshUI(); };
     document.getElementById("rev-filter-owner").onchange = (e) => { activeFilters.ownerType = e.target.value; refreshUI(); };
@@ -236,7 +236,7 @@ window.rtrlApp.review = (function () {
 
     document.getElementById("rev-smart-clean").onclick = () => {
         let count = 0;
-        masterData.forEach(d => { if (!d.Email1 && !d.Phone) { d._checked = false; count++; } });
+        masterData.forEach(d => { if (!d.Email1 && !d.Email2 && !d.Email3 && !d.Phone) { d._checked = false; count++; } });
         refreshUI(); debouncedSave();
         alert(`Unchecked ${count} leads that had no contact information.`);
     };
@@ -278,7 +278,7 @@ window.rtrlApp.review = (function () {
                 <td class="editable-cell" contenteditable="true" onblur="window.rtrlApp.review.edit(${d._id}, 'Phone', this.innerText)">${d.Phone || ""}</td>
                 <td style="color:#64748b; font-size:0.75rem">${d.Category}</td>
                 <td>${d.Suburb || ""}</td>
-                <td style="font-size:0.75rem; color:#64748b">${d.StreetAddress || ""}</td>
+                <td style="font-size:0.7rem; color:#64748b">${d.StreetAddress || ""}</td>
                 <td style="font-weight:600">${d.StarRating ? d.StarRating + " ★" : ""}</td>
                 <td><div style="display:flex; gap:10px; font-size:0.9rem">
                     ${d.Website ? `<a href="${d.Website}" target="_blank" style="color:#3b82f6"><i class="fas fa-link"></i></a>` : ""}
