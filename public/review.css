@@ -340,3 +340,63 @@
 }
 
 .review-table tr:hover td { background-color: rgba(59, 130, 246, 0.03); }
+
+/* Indicate that a cell is editable */
+.editable-cell {
+    cursor: text;
+    transition: background-color 0.2s;
+    border-radius: 4px;
+    min-height: 20px;
+    padding: 4px 8px !important;
+}
+
+.editable-cell:hover {
+    background-color: #f1f5f9;
+    outline: 1px dashed #cbd5e1;
+}
+
+.editable-cell:focus {
+    background-color: #fff;
+    outline: 2px solid #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+/* Tooltip for editable cells */
+.editable-cell:hover::after {
+    content: "Click to edit";
+    position: absolute;
+    font-size: 0.6rem;
+    color: #94a3b8;
+    bottom: -15px;
+    left: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+/* Smart Cleanup Button Style */
+.btn-smart-clean {
+    background: #fffbeb;
+    color: #92400e;
+    border: 1px solid #fde68a;
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+}
+
+.btn-smart-clean:hover {
+    background: #fef3c7;
+    border-color: #fcd34d;
+}
+
+/* Specific width for the notes column */
+.col-notes {
+    min-width: 250px;
+    max-width: 400px;
+    white-space: normal !important;
+    font-style: italic;
+    color: #475569;
+}
