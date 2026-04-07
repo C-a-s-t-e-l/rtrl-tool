@@ -250,8 +250,25 @@ window.rtrlApp.review = (function () {
                 <div class="review-footer">
                     <div id="rev-save-indicator" class="save-indicator"></div>
                     <button class="btn-review-close" onclick="document.getElementById('review-modal').remove()">Close Workspace</button>
-                    <button class="btn-review-export" style="background:#10b981" id="rev-xlsx">Export List (.xlsx)</button>
-                    <button class="btn-review-export" id="rev-zip">Export ZIP Pack</button>
+                    
+                    <div class="tooltip-wrapper">
+                        <button class="btn-review-export" style="background:#10b981" id="rev-xlsx">Export List (.xlsx)</button>
+                        <span class="tooltip-text">
+                            <b>High-Detail Spreadsheet Export</b><br>
+                            Downloads a complete Excel file including every data point, your manual corrections, and internal notes. Matches the standard format.
+                        </span>
+                    </div>
+                    
+                    <div class="tooltip-wrapper">
+                        <button class="btn-review-export" id="rev-zip">Export ZIP Pack</button>
+                        <span class="tooltip-text">
+                            <b>Complete Lead Outreach Package</b><br>
+                            Generates a ZIP folder containing:<br>
+                            1. Refined Masterlist (XLSX)<br>
+                            2. SMS-ready list of checked mobiles (CSV)<br>
+                            3. Cleaned email-only database (CSV).
+                        </span>
+                    </div>
                 </div>
             </div>`;
     document.body.appendChild(overlay);
