@@ -8,7 +8,7 @@ window.rtrlApp.review = (function () {
   let activeFilters = { search: "", contact: "all", rating: 0, ownerType: "all" };
   let sharedSbClient = null;
   let tokenProvider = () => null;
-  let backendUrl = ''; // Added local variable
+  let backendUrl = '';
 
   function getSbClient() {
     if (!sharedSbClient) {
@@ -17,9 +17,9 @@ window.rtrlApp.review = (function () {
     return sharedSbClient;
   }
 
-  function init(provider, url) { // Updated to accept url
+  function init(provider, url) {
     if (provider) tokenProvider = provider;
-    if (url) backendUrl = url; // Set the backend URL
+    if (url) backendUrl = url;
 
     const observer = new MutationObserver((mutations) => {
       mutations.forEach((mutation) => {
@@ -30,6 +30,12 @@ window.rtrlApp.review = (function () {
               if (!container.querySelector(".btn-review-trigger")) {
                 const resendBtn = container.querySelector(".resend-email-btn");
                 if (!resendBtn) return;
+                const btn = document.createElement("button");
+                btn.className = "job-action-btn btn-review-trigger";
+                btn.style.backgroundColor = "#f0f9ff";
+                btn.innerHTML = `<i class="fas fa-list-check"></i> Review & Filter`;
+                btn.onclick = () => openReview(resendBtn.dataset.jobId);
+                container.appendChild(btn);
               }
             });
           }
@@ -41,11 +47,13 @@ window.rtrlApp.review = (function () {
   }
 
   async function openReview(jobIds) {
+    // Show Loading Cursor
+    document.body.style.cursor = 'wait';
+    
     const idArray = Array.isArray(jobIds) ? jobIds : [jobIds];
     const token = tokenProvider();
 
     try {
-        // Uses the backendUrl set during init
         const response = await fetch(`${backendUrl}/api/jobs/merge`, {
             method: 'POST',
             headers: { 
@@ -55,14 +63,20 @@ window.rtrlApp.review = (function () {
             body: JSON.stringify({ jobIds: idArray })
         });
         
-        if (!response.ok) throw new Error("Server error");
+        if (!response.ok) throw new Error("Fetch failed");
         const data = await response.json();
+        
+        // Reset local state for merge
+        currentJobId = idArray.length === 1 ? idArray[0] : 'Merged_Collection';
         
         processData(data.results || [], []);
         renderModal();
     } catch (err) { 
         console.error(err);
-        alert("Failed to load workspace. Make sure you selected valid jobs."); 
+        alert("Failed to load review workspace."); 
+    } finally {
+        // Restore Cursor
+        document.body.style.cursor = 'default';
     }
   }
 
@@ -127,6 +141,7 @@ window.rtrlApp.review = (function () {
     const ind = document.getElementById("rev-save-indicator");
     if (ind) { ind.innerHTML = '<i class="fas fa-sync fa-spin"></i> Saving...'; ind.classList.add("visible"); }
 
+    // Group modified rows by their source job
     const updatesByJob = masterData.reduce((acc, item) => {
         if (!item._sourceJobId) return acc;
         if (!acc[item._sourceJobId]) acc[item._sourceJobId] = [];
@@ -135,6 +150,7 @@ window.rtrlApp.review = (function () {
         return acc;
     }, {});
 
+    // Save each affected job individually back to database
     for (const jobId in updatesByJob) {
         await getSbClient().from("jobs").update({ results: updatesByJob[jobId] }).eq("id", jobId);
     }
@@ -146,6 +162,8 @@ window.rtrlApp.review = (function () {
 
   function renderModal() {
     if (document.getElementById("review-modal")) document.getElementById("review-modal").remove();
+    const s = jobParams.searchParamsForEmail || {};
+    const title = "Data Review Workspace";
     
     let ratingsOptions = '<option value="0">Any Rating</option>';
     for(let r=0.5; r<=4.5; r+=0.5) {
@@ -158,7 +176,7 @@ window.rtrlApp.review = (function () {
     overlay.innerHTML = `
             <div class="review-window">
                 <div class="review-header">
-                    <div class="header-top-row"><h3>Data Review Workspace</h3></div>
+                    <div class="header-top-row"><h3>${title}</h3></div>
                     <div class="header-bottom-row">
                         <div class="review-summary">
                             <span id="rev-sel-count" class="sum-pill" style="background:#e0f2fe; color:#0369a1; border-color:#0369a1;">0 SELECTED</span>
@@ -177,17 +195,21 @@ window.rtrlApp.review = (function () {
                         <span class="filter-label">Clean:</span>
                         <div class="tooltip-wrapper">
                             <button class="btn-smart-clean-inline" id="rev-smart-clean">Clean Junk Leads</button>
-                            <span class="tooltip-text"><b>Smart Cleanup</b><br>Automatically unselects leads that have no email and no phone.</span>
+                            <span class="tooltip-text">
+                                <b>Smart Cleanup</b><br>
+                                Automatically unselects leads that have no email address and no phone number.
+                            </span>
                         </div>
                     </div>
                     <div style="width:1px; height:20px; background:#e2e8f0;"></div>
                     <div class="filter-group-inline">
                         <span class="filter-label">Contact:</span>
-                        <div class="tooltip-wrapper"><button class="filter-pill ${activeFilters.contact === "all" ? "active" : ""}" data-type="contact" data-val="all">All</button></div>
-                        <div class="tooltip-wrapper"><button class="filter-pill ${activeFilters.contact === "mobile" ? "active" : ""}" data-type="contact" data-val="mobile">Mobiles</button></div>
-                        <div class="tooltip-wrapper"><button class="filter-pill ${activeFilters.contact === "email" ? "active" : ""}" data-type="contact" data-val="email">Emails</button></div>
-                        <div class="tooltip-wrapper"><button class="filter-pill ${activeFilters.contact === "both" ? "active" : ""}" data-type="contact" data-val="both">Mobiles + Emails</button></div>
+                        <div class="tooltip-wrapper"><button class="filter-pill ${activeFilters.contact === "all" ? "active" : ""}" data-type="contact" data-val="all">All</button><span class="tooltip-text">Show all leads found.</span></div>
+                        <div class="tooltip-wrapper"><button class="filter-pill ${activeFilters.contact === "mobile" ? "active" : ""}" data-type="contact" data-val="mobile">Mobiles</button><span class="tooltip-text">Show only leads with Australian mobile numbers (starts with 04).</span></div>
+                        <div class="tooltip-wrapper"><button class="filter-pill ${activeFilters.contact === "email" ? "active" : ""}" data-type="contact" data-val="email">Emails</button><span class="tooltip-text">Show only leads with at least one email address found.</span></div>
+                        <div class="tooltip-wrapper"><button class="filter-pill ${activeFilters.contact === "both" ? "active" : ""}" data-type="contact" data-val="both">Mobiles + Emails</button><span class="tooltip-text">Show only high-quality leads that have BOTH a mobile and an email.</span></div>
                     </div>
+                    <div style="width:1px; height:20px; background:#e2e8f0;"></div>
                     <div class="filter-group-inline">
                         <span class="filter-label">Min Rating:</span>
                         <select class="filter-select" id="rev-filter-rating">${ratingsOptions}</select>
@@ -208,13 +230,16 @@ window.rtrlApp.review = (function () {
                         <thead><tr>
                             <th style="width:50px">#</th>
                             <th style="width:50px"><input type="checkbox" id="rev-master-check"></th>
-                            <th style="width:110px" data-sort="_reviewStatus">Status</th>
-                            <th style="width:250px" data-sort="BusinessName">Business Name</th>
-                            <th style="width:180px" data-sort="OwnerName">Owner</th>
+                            <th style="width:110px" data-sort="_reviewStatus"><div class="header-content">Status <i class="fas fa-sort"></i></div></th>
+                            <th style="width:250px" data-sort="BusinessName"><div class="header-content">Business Name <i class="fas fa-sort"></i></div></th>
+                            <th style="width:180px" data-sort="OwnerName"><div class="header-content">Owner <i class="fas fa-sort"></i></div></th>
                             <th style="width:180px">Email 1</th>
+                            <th style="width:180px">Email 2</th>
+                            <th style="width:180px">Email 3</th>
                             <th style="width:120px">Phone</th>
                             <th style="width:160px" data-sort="Category">Category</th>
                             <th style="width:140px" data-sort="Suburb">Suburb</th>
+                            <th style="width:300px">Street Address</th>
                             <th style="width:100px" data-sort="StarRating">Rating</th>
                             <th style="width:100px">Links</th>
                             <th class="col-notes">Internal User Notes</th>
@@ -232,6 +257,7 @@ window.rtrlApp.review = (function () {
     document.body.appendChild(overlay);
     refreshUI();
 
+    // Handlers
     document.getElementById("rev-search").oninput = (e) => { activeFilters.search = e.target.value; refreshUI(); };
     document.getElementById("rev-filter-rating").onchange = (e) => { activeFilters.rating = parseFloat(e.target.value); refreshUI(); };
     document.getElementById("rev-filter-owner").onchange = (e) => { activeFilters.ownerType = e.target.value; refreshUI(); };
@@ -250,7 +276,7 @@ window.rtrlApp.review = (function () {
         let count = 0;
         masterData.forEach(d => { if (!d.Email1 && !d.Phone) { d._checked = false; count++; } });
         refreshUI(); debouncedSave();
-        alert(`Unchecked ${count} leads with no contact info.`);
+        alert(`Unchecked ${count} leads that had no contact information.`);
     };
 
     document.getElementById("rev-xlsx").onclick = exportMaster;
@@ -268,6 +294,8 @@ window.rtrlApp.review = (function () {
     document.querySelectorAll('.filter-pill[data-type="contact"]').forEach((btn) => { btn.classList.toggle("active", activeFilters.contact === btn.dataset.val); });
     document.querySelectorAll(".review-table th[data-sort]").forEach((th) => {
       th.classList.toggle("sort-active", th.dataset.sort === currentSort.key);
+      const icon = th.querySelector("i");
+      if (icon) icon.className = th.dataset.sort === currentSort.key ? (currentSort.dir === "asc" ? "fas fa-sort-up" : "fas fa-sort-down") : "fas fa-sort";
     });
     document.getElementById("rev-visible-count").textContent = `Showing ${filteredData.length} of ${masterData.length} leads`;
   }
@@ -283,13 +311,17 @@ window.rtrlApp.review = (function () {
                 <td style="font-weight:600; color:#1e293b">${d.BusinessName}</td>
                 <td class="editable-cell" contenteditable="true" onblur="window.rtrlApp.review.edit(${d._id}, 'OwnerName', this.innerText)">${d.OwnerName || ""}</td>
                 <td class="editable-cell" contenteditable="true" onblur="window.rtrlApp.review.edit(${d._id}, 'Email1', this.innerText)" style="color:#3b82f6">${d.Email1 || ""}</td>
+                <td class="editable-cell" contenteditable="true" onblur="window.rtrlApp.review.edit(${d._id}, 'Email2', this.innerText)" style="color:#3b82f6">${d.Email2 || ""}</td>
+                <td class="editable-cell" contenteditable="true" onblur="window.rtrlApp.review.edit(${d._id}, 'Email3', this.innerText)" style="color:#3b82f6">${d.Email3 || ""}</td>
                 <td class="editable-cell" contenteditable="true" onblur="window.rtrlApp.review.edit(${d._id}, 'Phone', this.innerText)">${d.Phone || ""}</td>
                 <td style="color:#64748b; font-size:0.75rem">${d.Category}</td>
                 <td>${d.Suburb || ""}</td>
+                <td style="font-size:0.75rem; color:#64748b">${d.StreetAddress || ""}</td>
                 <td style="font-weight:600">${d.StarRating ? d.StarRating + " ★" : ""}</td>
                 <td><div style="display:flex; gap:10px; font-size:0.9rem">
                     ${d.Website ? `<a href="${d.Website}" target="_blank" style="color:#3b82f6"><i class="fas fa-link"></i></a>` : ""}
                     ${d.FacebookURL ? `<a href="${d.FacebookURL}" target="_blank" style="color:#1877f2"><i class="fab fa-facebook"></i></a>` : ""}
+                    ${d.InstagramURL ? `<a href="${d.InstagramURL}" target="_blank" style="color:#e4405f"><i class="fab fa-instagram"></i></a>` : ""}
                 </div></td>
                 <td class="editable-cell col-notes" contenteditable="true" onblur="window.rtrlApp.review.edit(${d._id}, 'ManualNotes', this.innerText)">${d.ManualNotes || ""}</td>
             </tr>`).join("");
@@ -323,8 +355,8 @@ window.rtrlApp.review = (function () {
     if (!sel.length) return alert("Select leads first.");
     const ws = XLSX.utils.json_to_sheet(mapToMaster(sel));
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Business List");
-    XLSX.writeFile(wb, `Refined_List.xlsx`);
+    XLSX.utils.book_append_sheet(wb, ws, "Business List (Unique)");
+    XLSX.writeFile(wb, `Refined_Full_Collection.xlsx`);
   }
 
   async function exportZip() {
@@ -332,9 +364,24 @@ window.rtrlApp.review = (function () {
     if (!sel.length) return alert("Select leads first.");
     const zip = new JSZip();
     const wbFull = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wbFull, XLSX.utils.json_to_sheet(mapToMaster(sel)), "Business List");
-    zip.file(`Refined_List.xlsx`, XLSX.write(wbFull, { type: "buffer", bookType: "xlsx" }));
+    XLSX.utils.book_append_sheet(wbFull, XLSX.utils.json_to_sheet(mapToMaster(sel)), "Business List (Unique)");
+    zip.file(`Refined_Full_DuplicatesRemoved.xlsx`, XLSX.write(wbFull, { type: "buffer", bookType: "xlsx" }));
     
+    // Refined SMS List
+    const sms = sel.filter((b) => b.Phone && b.Phone.startsWith("614")).map((b) => {
+        let fn = "", ln = "";
+        if (b.OwnerName && b.OwnerName.trim() !== "") { const p = b.OwnerName.trim().split(" "); fn = p.shift(); ln = p.join(" "); }
+        return { FirstName: fn, LastName: ln, Organization: b.BusinessName || "", Email: b.Email1 || "", MobileNumber: b.Phone || "", CustomField1: b.Category || "", CustomField2: b.Suburb || "", Notes: b.ManualNotes || "" };
+    });
+    zip.file(`Refined_Mobile_Numbers_Only.csv`, XLSX.write({ SheetNames: ["S"], Sheets: { S: XLSX.utils.json_to_sheet(sms) } }, { type: "buffer", bookType: "csv" }));
+
+    // Refined Email List
+    const con = sel.filter((d) => d.Email1 || d.Email2 || d.Email3).map((d) => {
+        let st = ""; if (d.StreetAddress) { const m = d.StreetAddress.match(/\b([A-Z]{2,3})\b(?= \d{4,})/); st = m ? m[1] : ""; }
+        return { Company: d.BusinessName || "", Address_Suburb: d.Suburb || "", Address_State: st, Notes: `Refined_Search_Collection`, Category: d.Category || "", facebook: d.FacebookURL || "", instagram: d.InstagramURL || "", email_1: d.Email1 || "", email_2: d.Email2 || "", email_3: d.Email3 || "", linkedin: "", };
+    });
+    zip.file(`Refined_Full_DuplicatesRemoved_Emails.csv`, XLSX.write({ SheetNames: ["C"], Sheets: { C: XLSX.utils.json_to_sheet(con) } }, { type: "buffer", bookType: "csv" }));
+
     const blob = await zip.generateAsync({ type: "blob" });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
