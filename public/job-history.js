@@ -61,21 +61,42 @@ window.rtrlApp.jobHistory = (function () {
 
     async function fetchAndRenderJobs(force = false) {
         if (!listContainer) return;
-        listContainer.innerHTML = '<div class="loading-text"><i class="fas fa-spinner fa-spin"></i> Loading...</div>';
+        listContainer.innerHTML = '<div class="loading-text"><i class="fas fa-spinner fa-spin"></i> Loading history...</div>';
+
         try {
             const token = tokenProvider();
+            if (!token) return;
+
             const url = `${backendUrl}/api/jobs/history?page=${currentPage}&limit=${itemsPerPage}&search=${encodeURIComponent(currentSearch)}`;
-            const response = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
+            const response = await fetch(url, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
             if (response.ok) {
                 const data = await response.json();
-                historyCache = data.jobs || [];
+                const jobs = data.jobs || [];
+                const totalCount = data.totalCount || 0;
+                historyCache = jobs;
                 isInitialLoadDone = true;
-                listContainer.innerHTML = historyCache.length > 0 
-                    ? historyCache.map(renderJob).join('') + renderPagination(data.totalCount)
-                    : '<p class="placeholder-text">No jobs found.</p>';
+
+                if (jobs.length === 0) {
+                    listContainer.innerHTML = currentSearch 
+                        ? `<p class="placeholder-text">No history matching "${currentSearch}"</p>`
+                        : '<p class="placeholder-text">No jobs found.</p>';
+                    return;
+                }
+
+                let html = jobs.map(renderJob).join('');
+                html += renderPagination(totalCount);
+                listContainer.innerHTML = html;
+                
+                // Attach the Merge Checkbox Listeners
                 attachCheckboxListeners();
             }
-        } catch (error) { listContainer.innerHTML = '<p class="error-text">Error loading history.</p>'; }
+        } catch (error) {
+            console.error("History Render Error:", error);
+            listContainer.innerHTML = '<p class="error-text">An error occurred while loading history.</p>';
+        }
     }
 
     function attachCheckboxListeners() {
@@ -85,7 +106,33 @@ window.rtrlApp.jobHistory = (function () {
         updateMergeButtonUI();
     }
 
-    
+    function updateMergeButtonUI() {
+        const mergeBtn = document.getElementById('merge-trigger-btn');
+        if (!mergeBtn) return;
+        const selectedCount = document.querySelectorAll('.job-merge-select:checked').length;
+        
+        if (selectedCount === 0) {
+            mergeBtn.style.display = 'none';
+        } else if (selectedCount === 1) {
+            mergeBtn.style.display = 'inline-flex';
+            mergeBtn.textContent = 'Select one more to merge';
+            mergeBtn.disabled = true;
+            mergeBtn.style.background = '#e2e8f0';
+            mergeBtn.style.color = '#64748b';
+        } else {
+            mergeBtn.style.display = 'inline-flex';
+            mergeBtn.textContent = `Merge & Review ${selectedCount} Jobs`;
+            mergeBtn.disabled = false;
+            mergeBtn.style.background = '#3b82f6';
+            mergeBtn.style.color = 'white';
+        }
+    }
+
+    function triggerMerge() {
+        const selected = Array.from(document.querySelectorAll('.job-merge-select:checked')).map(cb => cb.value);
+        if (selected.length < 2) return alert("Select at least 2 jobs");
+        window.rtrlApp.review.openReview(selected);
+    }
 
     function renderJob(job) {
         const { id, created_at, parameters, status, result_count } = job;
@@ -94,7 +141,7 @@ window.rtrlApp.jobHistory = (function () {
         const date = new Date(created_at).toLocaleString();
         const totalResults = result_count || 0;
 
-let searchType = "Suburb/Area Search";
+        let searchType = "Suburb/Area Search";
         let locationDetail = s.area || p.location || "N/A";
 
         if (p.multiRadiusPoints && p.multiRadiusPoints.length > 0) {
@@ -147,19 +194,19 @@ let searchType = "Suburb/Area Search";
             <a href="${backendUrl}/api/jobs/${id}/download/txt_zip?authToken=${authToken}" class="file-link" download><i class="fas fa-file-alt"></i> Contacts TXT Splits (.zip)</a>
         `;
 
-    return `
-        <div class="job-item" id="job-card-${id}">
-            <div class="job-header" style="display: flex; align-items: center; gap: 10px;">
-                <input type="checkbox" class="job-merge-select" value="${id}" style="margin-right: 10px; transform: scale(1.2);">
-                <div class="job-title-wrapper" style="flex: 1;">
-                    <i class="fas fa-history job-icon"></i>
-                    <h4 class="job-title">Search: "${s.area || 'Unknown'}"</h4>
+        return `
+            <div class="job-item" id="job-card-${id}">
+                <div class="job-header" style="display: flex; align-items: center; gap: 10px;">
+                    <input type="checkbox" class="job-merge-select" value="${id}" style="margin-right: 10px; transform: scale(1.2); cursor: pointer;">
+                    <div class="job-title-wrapper" style="flex: 1;">
+                        <i class="fas fa-history job-icon"></i>
+                        <h4 class="job-title">Search: "${s.area || 'Unknown'}"</h4>
+                    </div>
+                    <div id="job-status-${id}" class="job-status ${statusClass}">
+                        <i class="fas ${statusIcon}"></i>
+                        <span>${statusText}</span>
+                    </div>
                 </div>
-                <div id="job-status-${id}" class="job-status ${statusClass}">
-                    <i class="fas ${statusIcon}"></i>
-                    <span>${statusText}</span>
-                </div>
-            </div>
 
                 <div class="job-parameter-summary" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; background: #f0f7ff; padding: 15px; border-radius: 10px; border-left: 6px solid #3b82f6; margin: 12px 0; font-size: 0.85rem; color: #1e293b; box-shadow: inset 0 1px 2px rgba(0,0,0,0.05);">
                     <div style="line-height: 1.6;">
@@ -200,6 +247,7 @@ let searchType = "Suburb/Area Search";
                             <button class="job-action-btn resend-email-btn" data-job-id="${id}"><i class="fas fa-paper-plane"></i> Resend Email</button>
                             <button class="job-action-btn email-body-list-btn" data-job-id="${id}"><i class="fas fa-mobile-alt"></i> Send Mobile List</button>
                             <button class="job-action-btn clone-job-btn" style="background: #e0f2fe; border-color: #bae6fd; color: #0369a1;" data-job-id="${id}"><i class="fas fa-sync-alt"></i> Repeat Search</button>
+                            <button class="job-action-btn btn-review-trigger" style="background-color: #f0f9ff;" onclick="window.rtrlApp.review.openReview('${id}')"><i class="fas fa-list-check"></i> Review & Filter</button>
                         </div>
                     </div>
                 </div>
@@ -261,31 +309,6 @@ let searchType = "Suburb/Area Search";
         } catch (error) { buttonEl.innerHTML = `<i class="fas fa-times"></i> Error`; }
         finally { setTimeout(() => { buttonEl.innerHTML = originalText; buttonEl.disabled = false; }, 3000); }
     }
-
-    function updateMergeButtonUI() {
-    const mergeBtn = document.getElementById('merge-trigger-btn');
-    const selectedCount = document.querySelectorAll('.job-merge-select:checked').length;
-    
-    if (selectedCount === 0) {
-        mergeBtn.style.display = 'none';
-    } else if (selectedCount === 1) {
-        mergeBtn.style.display = 'inline-flex';
-        mergeBtn.textContent = 'Select one more to merge';
-        mergeBtn.disabled = true;
-        mergeBtn.style.background = '#e2e8f0';
-    } else {
-        mergeBtn.style.display = 'inline-flex';
-        mergeBtn.textContent = `Merge & Review ${selectedCount} Jobs`;
-        mergeBtn.disabled = false;
-        mergeBtn.style.background = '#3b82f6';
-    }
-}
-
-        function triggerMerge() {
-        const selected = Array.from(document.querySelectorAll('.job-merge-select:checked')).map(cb => cb.value);
-        if (selected.length < 2) return alert("Select at least 2 jobs");
-        window.rtrlApp.review.openReview(selected);
-}
 
     return { init, fetchAndRenderJobs, triggerMerge };
 })();

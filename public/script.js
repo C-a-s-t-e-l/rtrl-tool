@@ -1110,6 +1110,7 @@ if (window.rtrlApp.state.anchors.length > 0) {
 
     function initializeApp() {
       window.rtrlApp.jobHistory.init(() => currentUserSession?.access_token, BACKEND_URL);
+      window.rtrlApp.review.init(() => currentUserSession?.access_token); 
       window.rtrlApp.exclusionFeature.init(() => currentUserSession?.access_token);
       if (localStorage.getItem("rtrl_last_used_email")) elements.userEmailInput.value = localStorage.getItem("rtrl_last_used_email");
       if (elements.primaryCategorySelect) populatePrimaryCategories(elements.primaryCategorySelect, categories, "");
