@@ -1073,14 +1073,21 @@ app.post("/api/jobs/merge", async (req, res) => {
         const { jobIds } = req.body;
         const authHeader = req.headers.authorization;
         const token = authHeader.split(' ')[1];
-        const { data: { user } } = await supabase.auth.getUser(token);
         
-        if (!user) return res.status(401).json({ error: 'Unauthorized' });
+        // 1. Get the authenticated user
+        const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+        if (authError || !user) return res.status(401).json({ error: 'Unauthorized' });
 
         let allMergedResults = [];
 
         for (const id of jobIds) {
-            const { data: job } = await supabase.from('jobs').select('results').eq('id', id).single();
+            const { data: job } = await supabase
+                .from('jobs')
+                .select('results')
+                .eq('id', id)
+                .eq('user_id', user.id) 
+                .single();
+
             if (job && job.results) {
                 const resultsWithSource = job.results.map(r => ({ ...r, _sourceJobId: id }));
                 allMergedResults.push(...resultsWithSource);

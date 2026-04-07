@@ -368,6 +368,19 @@
   background-color: rgba(59, 130, 246, 0.03);
 }
 
+.review-table th:nth-child(4), 
+.review-table td:nth-child(4) {
+    position: sticky;
+    left: 0;
+    background: white;
+    z-index: 10;
+    border-right: 2px solid #e2e8f0;
+}
+.review-table th:nth-child(4) {
+    z-index: 15; 
+    background: #f8fafc;
+}
+
 .editable-cell {
   cursor: text;
   transition: background-color 0.2s;
