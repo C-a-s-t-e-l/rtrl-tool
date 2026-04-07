@@ -61,41 +61,31 @@ window.rtrlApp.jobHistory = (function () {
 
     async function fetchAndRenderJobs(force = false) {
         if (!listContainer) return;
-        if (isInitialLoadDone && !force) return;
-
-        const token = tokenProvider();
-        if (!token) return;
-
-        listContainer.innerHTML = '<div class="loading-text"><i class="fas fa-spinner fa-spin"></i> Loading history...</div>';
-
+        listContainer.innerHTML = '<div class="loading-text"><i class="fas fa-spinner fa-spin"></i> Loading...</div>';
         try {
+            const token = tokenProvider();
             const url = `${backendUrl}/api/jobs/history?page=${currentPage}&limit=${itemsPerPage}&search=${encodeURIComponent(currentSearch)}`;
-            const response = await fetch(url, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-
+            const response = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
             if (response.ok) {
                 const data = await response.json();
-                const jobs = data.jobs || [];
-                const totalCount = data.totalCount || 0;
-                historyCache = jobs;
+                historyCache = data.jobs || [];
                 isInitialLoadDone = true;
-
-                if (jobs.length === 0) {
-                    listContainer.innerHTML = currentSearch 
-                        ? `<p class="placeholder-text">No history matching "${currentSearch}"</p>`
-                        : '<p class="placeholder-text">No jobs found.</p>';
-                    return;
-                }
-
-                let html = jobs.map(renderJob).join('');
-                html += renderPagination(totalCount);
-                listContainer.innerHTML = html;
+                listContainer.innerHTML = historyCache.length > 0 
+                    ? historyCache.map(renderJob).join('') + renderPagination(data.totalCount)
+                    : '<p class="placeholder-text">No jobs found.</p>';
+                attachCheckboxListeners();
             }
-        } catch (error) {
-            listContainer.innerHTML = '<p class="error-text">An error occurred while loading history.</p>';
-        }
+        } catch (error) { listContainer.innerHTML = '<p class="error-text">Error loading history.</p>'; }
     }
+
+    function attachCheckboxListeners() {
+        document.querySelectorAll('.job-merge-select').forEach(cb => {
+            cb.onchange = updateMergeButtonUI;
+        });
+        updateMergeButtonUI();
+    }
+
+    
 
     function renderJob(job) {
         const { id, created_at, parameters, status, result_count } = job;
@@ -157,19 +147,19 @@ let searchType = "Suburb/Area Search";
             <a href="${backendUrl}/api/jobs/${id}/download/txt_zip?authToken=${authToken}" class="file-link" download><i class="fas fa-file-alt"></i> Contacts TXT Splits (.zip)</a>
         `;
 
-        return `
-            <div class="job-item" id="job-card-${id}">
-                <div class="job-header">
-                    <div class="job-title-wrapper">
-                    <input type="checkbox" class="job-merge-select" value="${id}" style="margin-right: 10px; transform: scale(1.2);">
-                        <i class="fas fa-history job-icon"></i>
-                        <h4 class="job-title">Search: "${s.area || 'Unknown'}"</h4>
-                    </div>
-                    <div id="job-status-${id}" class="job-status ${statusClass}">
-                        <i class="fas ${statusIcon}"></i>
-                        <span>${statusText}</span>
-                    </div>
+    return `
+        <div class="job-item" id="job-card-${id}">
+            <div class="job-header" style="display: flex; align-items: center; gap: 10px;">
+                <input type="checkbox" class="job-merge-select" value="${id}" style="margin-right: 10px; transform: scale(1.2);">
+                <div class="job-title-wrapper" style="flex: 1;">
+                    <i class="fas fa-history job-icon"></i>
+                    <h4 class="job-title">Search: "${s.area || 'Unknown'}"</h4>
                 </div>
+                <div id="job-status-${id}" class="job-status ${statusClass}">
+                    <i class="fas ${statusIcon}"></i>
+                    <span>${statusText}</span>
+                </div>
+            </div>
 
                 <div class="job-parameter-summary" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; background: #f0f7ff; padding: 15px; border-radius: 10px; border-left: 6px solid #3b82f6; margin: 12px 0; font-size: 0.85rem; color: #1e293b; box-shadow: inset 0 1px 2px rgba(0,0,0,0.05);">
                     <div style="line-height: 1.6;">
@@ -271,6 +261,25 @@ let searchType = "Suburb/Area Search";
         } catch (error) { buttonEl.innerHTML = `<i class="fas fa-times"></i> Error`; }
         finally { setTimeout(() => { buttonEl.innerHTML = originalText; buttonEl.disabled = false; }, 3000); }
     }
+
+    function updateMergeButtonUI() {
+    const mergeBtn = document.getElementById('merge-trigger-btn');
+    const selectedCount = document.querySelectorAll('.job-merge-select:checked').length;
+    
+    if (selectedCount === 0) {
+        mergeBtn.style.display = 'none';
+    } else if (selectedCount === 1) {
+        mergeBtn.style.display = 'inline-flex';
+        mergeBtn.textContent = 'Select one more to merge';
+        mergeBtn.disabled = true;
+        mergeBtn.style.background = '#e2e8f0';
+    } else {
+        mergeBtn.style.display = 'inline-flex';
+        mergeBtn.textContent = `Merge & Review ${selectedCount} Jobs`;
+        mergeBtn.disabled = false;
+        mergeBtn.style.background = '#3b82f6';
+    }
+}
 
         function triggerMerge() {
         const selected = Array.from(document.querySelectorAll('.job-merge-select:checked')).map(cb => cb.value);

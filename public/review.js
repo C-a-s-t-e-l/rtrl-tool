@@ -372,7 +372,8 @@ async function saveProgress() {
   return {
     init,
     toggle: (id) => { const item = masterData.find((d) => d._id === id); if (item) { item._checked = !item._checked; updateRowsOnly(); debouncedSave(); } },
-    edit: (id, field, val) => handleCellEdit(id, field, val)
+    edit: (id, field, val) => handleCellEdit(id, field, val),
+    openReview
   };
 })();
 document.addEventListener("DOMContentLoaded", () => window.rtrlApp.review.init());
