@@ -161,6 +161,7 @@ let searchType = "Suburb/Area Search";
             <div class="job-item" id="job-card-${id}">
                 <div class="job-header">
                     <div class="job-title-wrapper">
+                    <input type="checkbox" class="job-merge-select" value="${id}" style="margin-right: 10px; transform: scale(1.2);">
                         <i class="fas fa-history job-icon"></i>
                         <h4 class="job-title">Search: "${s.area || 'Unknown'}"</h4>
                     </div>
@@ -271,5 +272,11 @@ let searchType = "Suburb/Area Search";
         finally { setTimeout(() => { buttonEl.innerHTML = originalText; buttonEl.disabled = false; }, 3000); }
     }
 
-    return { init, fetchAndRenderJobs };
+        function triggerMerge() {
+        const selected = Array.from(document.querySelectorAll('.job-merge-select:checked')).map(cb => cb.value);
+        if (selected.length < 2) return alert("Select at least 2 jobs");
+        window.rtrlApp.review.openReview(selected);
+}
+
+    return { init, fetchAndRenderJobs, triggerMerge };
 })();

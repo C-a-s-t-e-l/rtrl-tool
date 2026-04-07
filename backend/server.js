@@ -1068,6 +1068,31 @@ app.get("/api/jobs/history", async (req, res) => {
     }
 });
 
+app.post("/api/jobs/merge", async (req, res) => {
+    try {
+        const { jobIds } = req.body;
+        const authHeader = req.headers.authorization;
+        const token = authHeader.split(' ')[1];
+        const { data: { user } } = await supabase.auth.getUser(token);
+        
+        if (!user) return res.status(401).json({ error: 'Unauthorized' });
+
+        let allMergedResults = [];
+
+        for (const id of jobIds) {
+            const { data: job } = await supabase.from('jobs').select('results').eq('id', id).single();
+            if (job && job.results) {
+                const resultsWithSource = job.results.map(r => ({ ...r, _sourceJobId: id }));
+                allMergedResults.push(...resultsWithSource);
+            }
+        }
+
+        res.json({ results: allMergedResults });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to merge jobs' });
+    }
+});
+
 const containerPublicPath = path.join(__dirname, "..", "public");
 app.use(express.static(containerPublicPath, { index: false }));
 app.get(/(.*)/, (req, res) => {

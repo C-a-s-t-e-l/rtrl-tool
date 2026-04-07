@@ -41,16 +41,21 @@ window.rtrlApp.review = (function () {
     if (list) observer.observe(list, { childList: true, subtree: true });
   }
 
-  async function openReview(jobId) {
-    currentJobId = jobId;
+async function openReview(jobIds) {
+    const idArray = Array.isArray(jobIds) ? jobIds : [jobIds];
+    
     try {
-      const { data, error } = await getSbClient().from("jobs").select("results, parameters").eq("id", jobId).single();
-      if (error || !data) throw new Error("Fetch failed");
-      jobParams = data.parameters || {};
-      processData(data.results || [], jobParams.exclusionList || []);
-      renderModal();
-    } catch (err) { alert("Failed to load review workspace."); }
-  }
+        const response = await fetch(`${window.BACKEND_URL}/api/jobs/merge`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${tokenProvider()}` },
+            body: JSON.stringify({ jobIds: idArray })
+        });
+        const data = await response.json();
+        
+        processData(data.results || [], jobParams.exclusionList || []);
+        renderModal();
+    } catch (err) { alert("Failed to load workspace."); }
+}
 
   function processData(results, exclusionList) {
     const seen = new Set();
@@ -109,16 +114,23 @@ window.rtrlApp.review = (function () {
     filteredData = data;
   }
 
-  async function saveProgress() {
+async function saveProgress() {
     const ind = document.getElementById("rev-save-indicator");
     if (ind) { ind.innerHTML = '<i class="fas fa-sync fa-spin"></i> Saving...'; ind.classList.add("visible"); }
-    const res = masterData.map((item) => {
-      const { _id, _reviewStatus, _checked, ...clean } = item;
-      return { ...clean, _selected: _checked };
-    });
-    await getSbClient().from("jobs").update({ results: res }).eq("id", currentJobId);
+
+    const updatesByJob = masterData.reduce((acc, item) => {
+        if (!acc[item._sourceJobId]) acc[item._sourceJobId] = [];
+        const { _id, _reviewStatus, _checked, _sourceJobId, ...clean } = item;
+        acc[item._sourceJobId].push({ ...clean, _selected: _checked });
+        return acc;
+    }, {});
+
+    for (const jobId in updatesByJob) {
+        await getSbClient().from("jobs").update({ results: updatesByJob[jobId] }).eq("id", jobId);
+    }
+
     setTimeout(() => { if (ind) ind.innerHTML = '<i class="fas fa-check"></i> Changes saved'; }, 500);
-  }
+}
 
   function debouncedSave() { clearTimeout(saveTimeout); saveTimeout = setTimeout(saveProgress, 1200); }
 
