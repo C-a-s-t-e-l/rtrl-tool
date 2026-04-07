@@ -89,12 +89,10 @@ window.rtrlApp.jobHistory = (function () {
                 let html = jobs.map(renderJob).join('');
                 html += renderPagination(totalCount);
                 listContainer.innerHTML = html;
-                
-                // Attach the Merge Checkbox Listeners
                 attachCheckboxListeners();
             }
         } catch (error) {
-            console.error("History Render Error:", error);
+            console.error(error);
             listContainer.innerHTML = '<p class="error-text">An error occurred while loading history.</p>';
         }
     }
@@ -117,14 +115,16 @@ window.rtrlApp.jobHistory = (function () {
             mergeBtn.style.display = 'inline-flex';
             mergeBtn.textContent = 'Select one more to merge';
             mergeBtn.disabled = true;
-            mergeBtn.style.background = '#e2e8f0';
-            mergeBtn.style.color = '#64748b';
+            mergeBtn.style.background = '#f1f5f9';
+            mergeBtn.style.color = '#94a3b8';
+            mergeBtn.style.borderColor = '#e2e8f0';
         } else {
             mergeBtn.style.display = 'inline-flex';
             mergeBtn.textContent = `Merge & Review ${selectedCount} Jobs`;
             mergeBtn.disabled = false;
             mergeBtn.style.background = '#3b82f6';
             mergeBtn.style.color = 'white';
+            mergeBtn.style.borderColor = '#2563eb';
         }
     }
 
@@ -196,13 +196,15 @@ window.rtrlApp.jobHistory = (function () {
 
         return `
             <div class="job-item" id="job-card-${id}">
-                <div class="job-header" style="display: flex; align-items: center; gap: 10px;">
-                    <input type="checkbox" class="job-merge-select" value="${id}" style="margin-right: 10px; transform: scale(1.2); cursor: pointer;">
-                    <div class="job-title-wrapper" style="flex: 1;">
-                        <i class="fas fa-history job-icon"></i>
-                        <h4 class="job-title">Search: "${s.area || 'Unknown'}"</h4>
+                <div class="job-header" style="display: flex; align-items: center; gap: 15px;">
+                    <div style="display: flex; align-items: center; justify-content: center; width: 30px;">
+                        <input type="checkbox" class="job-merge-select" value="${id}" style="width: 18px; height: 18px; cursor: pointer; margin: 0;">
                     </div>
-                    <div id="job-status-${id}" class="job-status ${statusClass}">
+                    <div class="job-title-wrapper" style="flex: 1; display: flex; align-items: center; gap: 10px;">
+                        <i class="fas fa-history job-icon"></i>
+                        <h4 class="job-title" style="margin:0;">Search: "${s.area || 'Unknown'}"</h4>
+                    </div>
+                    <div id="job-status-${id}" class="job-status ${statusClass}" style="margin-left: auto;">
                         <i class="fas ${statusIcon}"></i>
                         <span>${statusText}</span>
                     </div>

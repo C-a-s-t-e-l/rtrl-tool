@@ -8,6 +8,7 @@ window.rtrlApp.review = (function () {
   let activeFilters = { search: "", contact: "all", rating: 0, ownerType: "all" };
   let sharedSbClient = null;
   let tokenProvider = () => null;
+  let backendUrl = ''; // Added local variable
 
   function getSbClient() {
     if (!sharedSbClient) {
@@ -16,8 +17,9 @@ window.rtrlApp.review = (function () {
     return sharedSbClient;
   }
 
-  function init(provider) {
+  function init(provider, url) { // Updated to accept url
     if (provider) tokenProvider = provider;
+    if (url) backendUrl = url; // Set the backend URL
 
     const observer = new MutationObserver((mutations) => {
       mutations.forEach((mutation) => {
@@ -28,7 +30,6 @@ window.rtrlApp.review = (function () {
               if (!container.querySelector(".btn-review-trigger")) {
                 const resendBtn = container.querySelector(".resend-email-btn");
                 if (!resendBtn) return;
-                // Note: Handled directly in job-history.js render now to avoid duplicates
               }
             });
           }
@@ -44,7 +45,8 @@ window.rtrlApp.review = (function () {
     const token = tokenProvider();
 
     try {
-        const response = await fetch(`${window.BACKEND_URL}/api/jobs/merge`, {
+        // Uses the backendUrl set during init
+        const response = await fetch(`${backendUrl}/api/jobs/merge`, {
             method: 'POST',
             headers: { 
                 'Content-Type': 'application/json', 
@@ -52,13 +54,15 @@ window.rtrlApp.review = (function () {
             },
             body: JSON.stringify({ jobIds: idArray })
         });
+        
+        if (!response.ok) throw new Error("Server error");
         const data = await response.json();
         
         processData(data.results || [], []);
         renderModal();
     } catch (err) { 
         console.error(err);
-        alert("Failed to load workspace."); 
+        alert("Failed to load workspace. Make sure you selected valid jobs."); 
     }
   }
 
@@ -345,4 +349,3 @@ window.rtrlApp.review = (function () {
     openReview
   };
 })();
-document.addEventListener("DOMContentLoaded", () => window.rtrlApp.review.init());
