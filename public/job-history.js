@@ -91,7 +91,7 @@ window.rtrlApp.jobHistory = (function () {
         }
     }
 
-    function attachCheckboxListeners() {
+function attachCheckboxListeners() {
         document.querySelectorAll('.job-merge-select').forEach(cb => {
             cb.onchange = (e) => {
                 const id = e.target.value;
@@ -109,27 +109,40 @@ window.rtrlApp.jobHistory = (function () {
 
     function updateMergeButtonUI() {
         const mergeBtn = document.getElementById('merge-trigger-btn');
+        const clearBtn = document.getElementById('clear-merges-btn');
         if (!mergeBtn) return;
         
         const count = selectedJobIds.length;
         
         if (count === 0) {
-            mergeBtn.style.display = 'none';
-        } else if (count === 1) {
-            mergeBtn.style.display = 'inline-flex';
-            mergeBtn.textContent = 'Select one more to merge';
+            mergeBtn.textContent = 'Merge & Review Selected (0)';
             mergeBtn.disabled = true;
             mergeBtn.style.background = '#f1f5f9';
             mergeBtn.style.color = '#94a3b8';
             mergeBtn.style.borderColor = '#e2e8f0';
+            if (clearBtn) clearBtn.style.display = 'none';
+        } else if (count === 1) {
+            mergeBtn.textContent = `Select one more to merge (1)`;
+            mergeBtn.disabled = true;
+            mergeBtn.style.background = '#f1f5f9';
+            mergeBtn.style.color = '#94a3b8';
+            mergeBtn.style.borderColor = '#e2e8f0';
+            if (clearBtn) clearBtn.style.display = 'inline-flex';
         } else {
-            mergeBtn.style.display = 'inline-flex';
-            mergeBtn.textContent = `Merge & Review ${count} Jobs`;
+            mergeBtn.textContent = `Merge & Review Selected (${count})`;
             mergeBtn.disabled = false;
             mergeBtn.style.background = '#3b82f6';
             mergeBtn.style.color = 'white';
             mergeBtn.style.borderColor = '#2563eb';
+            if (clearBtn) clearBtn.style.display = 'inline-flex';
         }
+    }
+
+    function clearSelection() {
+        selectedJobIds = [];
+        localStorage.setItem('rtrl_selected_merges', JSON.stringify([]));
+        document.querySelectorAll('.job-merge-select').forEach(cb => cb.checked = false);
+        updateMergeButtonUI();
     }
 
     function triggerMerge() {
@@ -281,5 +294,5 @@ window.rtrlApp.jobHistory = (function () {
         finally { setTimeout(() => { buttonEl.innerHTML = originalText; buttonEl.disabled = false; }, 3000); }
     }
 
-    return { init, fetchAndRenderJobs, triggerMerge };
+    return { init, fetchAndRenderJobs, triggerMerge, clearSelection  };
 })();
