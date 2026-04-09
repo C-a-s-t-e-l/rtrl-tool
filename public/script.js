@@ -254,7 +254,7 @@ socket.on("job_state", (job) => {
     localStorage.setItem("rtrl_active_job_id", job.id);
 
     if (job.status === "running") {
-        socket.emit("subscribe_to_job", { jobId: job.id, authToken: currentUserSession.access_token });
+        // socket.emit("subscribe_to_job", { jobId: job.id, authToken: currentUserSession.access_token });
         updateDashboardUi("running");
         // setUiState(true, elements); 
     } 

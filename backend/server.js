@@ -1074,7 +1074,6 @@ app.post("/api/jobs/merge", async (req, res) => {
         const authHeader = req.headers.authorization;
         const token = authHeader.split(' ')[1];
         
-        // 1. Get the authenticated user
         const { data: { user }, error: authError } = await supabase.auth.getUser(token);
         if (authError || !user) return res.status(401).json({ error: 'Unauthorized' });
 
