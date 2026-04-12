@@ -47,7 +47,6 @@ window.rtrlApp.review = (function () {
   }
 
   async function openReview(jobIds) {
-    // Show Loading Cursor
     document.body.style.cursor = 'wait';
     
     const idArray = Array.isArray(jobIds) ? jobIds : [jobIds];
@@ -66,7 +65,6 @@ window.rtrlApp.review = (function () {
         if (!response.ok) throw new Error("Fetch failed");
         const data = await response.json();
         
-        // Reset local state for merge
         currentJobId = idArray.length === 1 ? idArray[0] : 'Merged_Collection';
         
         processData(data.results || [], []);
@@ -75,32 +73,70 @@ window.rtrlApp.review = (function () {
         console.error(err);
         alert("Failed to load review workspace."); 
     } finally {
-        // Restore Cursor
         document.body.style.cursor = 'default';
     }
   }
 
+  const getSocialIdentifier = (url) => {
+    if (!url) return null;
+    try {
+      const path = new URL(url).pathname;
+      const parts = path.split('/').filter(p => p && !['p', 'pages', 'groups', 'company'].includes(p.toLowerCase()));
+      return parts.length > 0 ? parts[0].toLowerCase() : null;
+    } catch (e) { return null; }
+  };
+
+  const getCleanBusinessName = (name) => {
+    if (!name) return '';
+    return name.toLowerCase()
+      .replace(/\s(pizza|fast food|burger|cafe|restaurant|store|ltd|pty|inc|co)\.?\s*$/g, '')
+      .replace(/\s\s+/g, ' ')
+      .trim()
+      .substring(0, 15);
+  };
+
   function processData(results, exclusionList) {
-    const seen = new Set();
+    const seenSignatures = new Set();
     const norm = (s) => (s || "").toLowerCase().replace(/['’`.,()&]/g, "").replace(/\s+/g, "");
     const excl = (exclusionList || []).map((e) => norm(e));
     
     masterData = results.map((item, index) => {
-      const name = norm(item.BusinessName);
-      const sig = `NAME:${name.substring(0, 15)}_${norm(item.StreetAddress)}`;
+      const nameNorm = norm(item.BusinessName);
+      
+      const facebookId = getSocialIdentifier(item.FacebookURL);
+      const instagramId = getSocialIdentifier(item.InstagramURL);
+      const cleanName = getCleanBusinessName(item.BusinessName);
+      
+      let signature = null;
+      if (facebookId && instagramId) {
+          signature = `SOCIAL_FB:${facebookId}_IG:${instagramId}`;
+      } else if (cleanName) {
+          signature = `NAME:${cleanName}_${norm(item.Suburb)}`;
+      } else {
+          signature = `UNIQUE_${item.GoogleMapsURL || Math.random()}`;
+      }
+
       let status = "Active";
-      if (excl.some((ex) => name.includes(ex))) status = "Excluded";
-      else if (seen.has(sig)) status = "Duplicate";
-      if (status === "Active") seen.add(sig);
+      if (excl.some((ex) => nameNorm.includes(ex))) {
+          status = "Excluded";
+      } else if (seenSignatures.has(signature)) {
+          status = "Duplicate";
+      }
+
+      if (status === "Active") {
+          seenSignatures.add(signature);
+      }
       
       return {
         ...item,
         _id: index,
         _reviewStatus: status,
+
         _checked: item._selected !== undefined ? item._selected : status === "Active",
         ManualNotes: item.ManualNotes || ""
       };
     });
+    
     applyFiltersAndSort();
   }
 

@@ -377,16 +377,15 @@ discovered.forEach(url => {
     }
 if (browser) await browser.close();
 
-    const { uniqueBusinesses, duplicates } = deduplicateBusinesses(allProcessedBusinesses);
+const { uniqueBusinesses, duplicates } = deduplicateBusinesses(allProcessedBusinesses);
 
-    console.log(`[Job: ${jobId}] Final Sync: Saving ${uniqueBusinesses.length} unique results to database.`);
-    
+console.log(`[Job: ${jobId}] Final Sync: Saving all ${allProcessedBusinesses.length} records to database.`);
+
 await supabase.from("jobs").update({ 
-    results: uniqueBusinesses, 
+    results: allProcessedBusinesses, 
     result_count: uniqueBusinesses.length 
 }).eq("id", jobId);
 
-    // Send one final progress update to lock in the numbers on the UI
 io.to(jobId).emit("progress_update", { 
     phase: 'completed', 
     processed: allProcessedBusinesses.length, 
@@ -1260,7 +1259,7 @@ function deduplicateBusinesses(businesses) {
             signature = `SOCIAL_FB:${facebookId}_IG:${instagramId}`;
         } 
         else if (cleanName) {
-            signature = `NAME:${cleanName}`;
+            signature = `NAME:${cleanName}_${norm(item.Suburb)}`;
         }
         else {
             signature = `UNIQUE_${business.GoogleMapsURL || Math.random()}`;
