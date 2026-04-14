@@ -296,14 +296,16 @@ discovered.forEach(url => {
         masterUrlMap.set(url, item);
     }
 });
-
                 
                 io.to(jobId).emit("progress_update", { phase: 'discovery', discovered: masterUrlMap.size, processed: 0, added: allProcessedBusinesses.length });
             }
+
             if (browser) { await browser.close(); browser = null; }
-        }
-        // Save the filtered URLs to Supabase so we don't lose progress
+                    // Save the filtered URLs to Supabase so we don't lose progress
         await supabase.from("jobs").update({ collected_urls: Array.from(masterUrlMap, ([url, cat]) => ({ url, category: cat })) }).eq("id", jobId);
+            await new Promise(r => setTimeout(r, 10000));
+        }
+
     }
 
     // --- GRACEFUL CHECK: Did we find anything? ---
@@ -1231,6 +1233,8 @@ function deduplicateBusinesses(businesses) {
         return { uniqueBusinesses: [], duplicates: [] };
     }
 
+    const norm = (s) => (s || "").toLowerCase().replace(/['’`.,()&]/g, "").replace(/\s+/g, "");
+
     const getSocialIdentifier = (url) => {
         if (!url) return null;
         try {
@@ -1259,7 +1263,7 @@ function deduplicateBusinesses(businesses) {
             signature = `SOCIAL_FB:${facebookId}_IG:${instagramId}`;
         } 
         else if (cleanName) {
-            signature = `NAME:${cleanName}_${norm(item.Suburb)}`;
+            signature = `NAME:${cleanName}_${norm(business.Suburb)}`;
         }
         else {
             signature = `UNIQUE_${business.GoogleMapsURL || Math.random()}`;
@@ -1372,27 +1376,28 @@ async function getSearchQueriesForRadius(
   }
 
   const radiusVal = parseFloat(radiusKm);
-  // Grid Size: 1 for <= 2km, otherwise scale based on size
-  const GRID_SIZE = radiusVal <= 2 ? 1 : Math.max(3, Math.ceil(radiusVal / 2));
-  
-  const latOffset = radiusVal / 111.0;
-  const lngOffset = radiusVal / (111.0 * Math.cos(degToRad(centerLat)));
-  
-  const minLat = centerLat - latOffset;
-  const maxLat = centerLat + latOffset;
-  const minLng = centerLng - lngOffset;
-  const maxLng = centerLng + lngOffset;
 
-  for (let i = 0; i < GRID_SIZE; i++) {
-    for (let j = 0; j < GRID_SIZE; j++) {
-      const pointLat = GRID_SIZE === 1 ? centerLat : (minLat + (maxLat - minLat) * (i / (GRID_SIZE - 1)));
-      const pointLng = GRID_SIZE === 1 ? centerLng : (minLng + (maxLng - minLng) * (j / (GRID_SIZE - 1)));
-      
-      if (calculateDistance(centerLat, centerLng, pointLat, pointLng) <= (radiusVal * 1.05)) {
-        searchQueries.push(`near ${pointLat.toFixed(6)},${pointLng.toFixed(6)}`);
-      }
-    }
+  // 1. Always add the center point
+  searchQueries.push(`near ${centerLat.toFixed(6)},${centerLng.toFixed(6)}`);
+
+  // 2. If radius is larger than 2km, add 4 cardinal points (North, South, East, West)
+  // This creates a 5-point "Cross" pattern, which is much faster than a square grid.
+  if (radiusVal > 2) {
+    // We place the points at 60% of the radius to ensure overlap but cover the edges
+    const distOffset = radiusVal * 0.6; 
+    const latOffset = distOffset / 111.0;
+    const lngOffset = distOffset / (111.0 * Math.cos(degToRad(centerLat)));
+
+    searchQueries.push(`near ${(centerLat + latOffset).toFixed(6)},${centerLng.toFixed(6)}`); // North
+    searchQueries.push(`near ${(centerLat - latOffset).toFixed(6)},${centerLng.toFixed(6)}`); // South
+    searchQueries.push(`near ${centerLat.toFixed(6)},${(centerLng + lngOffset).toFixed(6)}`); // East
+    searchQueries.push(`near ${centerLat.toFixed(6)},${(centerLng - lngOffset).toFixed(6)}`); // West
   }
+
+  // Log how many points were generated for your own debugging
+  // await addLog(jobId, `   -> Optimized search pattern: ${searchQueries.length} points generated for ${radiusKm}km radius.`);
+
+  console.log(`[Job ${jobId}] Generated ${searchQueries.length} search points for ${radiusKm}km radius.`);
   return searchQueries;
 }
 
@@ -1444,7 +1449,7 @@ async function getSearchQueriesForLocation(
  
     if (Math.sqrt(lat_dist * lat_dist + lng_dist * lng_dist) < 0.5)
       return [searchQuery];
-      
+      // FIX - REDUCE GRID SIZE - MAX should bee 6
     const GRID_SIZE = 3,
       searchQueries = [];
     const categoryPart = searchQuery.split(" in ")[0];
