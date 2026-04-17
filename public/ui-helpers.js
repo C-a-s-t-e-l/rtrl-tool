@@ -9,15 +9,18 @@ function logMessage(el, message, type = "info") {
   const lowerMsg = message.toLowerCase();
 
   const loopMatch = message.match(/\[Loop (\d+)\/(\d+)\]/);
-  const searchMatch = message.match(/Searching for: "(.*?)"/);
+  const searchMatch = message.match(/Searching for: "?([^"\[]+)"?/);
   
   if (loopMatch) {
       const current = loopMatch[1];
       const total = loopMatch[2];
-      const searchTerm = searchMatch ? searchMatch[1] : "...";
+      const searchTerm = searchMatch ? searchMatch[1].trim() : "...";
       
       headline.textContent = `Scanning Area (${current}/${total})`;
       subtext.textContent = `Current: "${searchTerm}"`;
+      
+      icon.className = "fas fa-map-marked-alt spin-slow";
+      card.classList.add("phase-scraping");
       return; 
   }
 

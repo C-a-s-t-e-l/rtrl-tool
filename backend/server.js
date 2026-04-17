@@ -250,7 +250,11 @@ const runScrapeJob = async (jobId) => {
     if (masterUrlMap.size === 0 || allProcessedBusinesses.length < finalCount || finalCount === -1) {
         for (const item of searchItems) {
 
-            browser = await launchBrowser(`[Phase 1][Loop ${currentTermIndex}/${totalTerms}] Searching Maps for: "${item}"`);
+            currentTermIndex++;
+
+            await addLog(jobId, `[Loop ${currentTermIndex}/${totalTerms}] Searching for: "${item}"`);
+
+            browser = await launchBrowser(`[System] Initializing browser for: ${item}`);
             let collectionPage = await browser.newPage();
 
 
