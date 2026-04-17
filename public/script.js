@@ -493,7 +493,7 @@ socket.on("job_update", (data) => {
         visualPercent = 10;
         updateStatusCardPhase("discovery");
       } else if (phase === "scraping") {
-        phaseText = "Phase 1/3: Scraping Data";
+        phaseText = "Phase 2/3: Data Extraction";
         let scrapePct = target === -1 ? (discovered > 0 ? processed / discovered : 0) : (target > 0 ? added / target : 0);
         visualPercent = 10 + Math.round(Math.min(scrapePct, 1) * 60);
         updateStatusCardPhase("scraping");
@@ -548,19 +548,24 @@ socket.on("job_update", (data) => {
       if (subtext) subtext.textContent = "Moving job from queue to active thread...";
     }
 
-    function updateDashboardUi(status) {
+function updateDashboardUi(status) {
       const headline = document.getElementById("status-headline"),
         subtext = document.getElementById("status-subtext"),
         icon = document.getElementById("status-icon"),
         card = document.getElementById("status-card");
       if (!headline || !card) return;
       card.className = "status-card";
+      
       if (status === "running") {
         card.classList.add("state-working", "phase-scraping");
-        headline.textContent = "Job Active";
-        subtext.textContent = "Processing data...";
+        if (!headline.textContent.includes("(")) {
+            headline.textContent = "Job Active";
+        }
+        if (!subtext.textContent.includes("Current:")) {
+            subtext.textContent = "Processing data...";
+        }
         if (icon) icon.className = "fas fa-circle-notch fa-spin";
-      } else if (status === "completed") {
+      }  else if (status === "completed") {
         card.classList.add("phase-complete");
         headline.textContent = "Job Completed";
         subtext.textContent = "Check your email for results.";
@@ -592,7 +597,9 @@ socket.on("job_update", (data) => {
       if (phase === "discovery") {
         card.classList.add("phase-scraping");
         if (icon) icon.className = "fas fa-map-marked-alt spin-slow";
-        if (headline) headline.textContent = "Scanning Area...";
+        if (headline && !headline.textContent.includes("(")) {
+            headline.textContent = "Scanning Area...";
+        }
       } else if (phase === "scraping") {
         card.classList.add("phase-scraping");
         if (icon) icon.className = "fas fa-satellite-dish spin-slow";
