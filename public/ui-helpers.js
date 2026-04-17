@@ -4,16 +4,29 @@ function logMessage(el, message, type = "info") {
   const headline = document.getElementById("status-headline");
   const subtext = document.getElementById("status-subtext");
 
-  if (!card || !icon || !headline) return;
+  if (!card || !icon || !headline || !subtext) return;
 
   const lowerMsg = message.toLowerCase();
+
+  const loopMatch = message.match(/\[Loop (\d+)\/(\d+)\]/);
+  const searchMatch = message.match(/Searching for: "(.*?)"/);
+  
+  if (loopMatch) {
+      const current = loopMatch[1];
+      const total = loopMatch[2];
+      const searchTerm = searchMatch ? searchMatch[1] : "...";
+      
+      headline.textContent = `Scanning Area (${current}/${total})`;
+      subtext.textContent = `Current: "${searchTerm}"`;
+      return; 
+  }
 
   if (type === "error" && (lowerMsg.includes("connection lost") || lowerMsg.includes("socket"))) {
     card.classList.remove("phase-scraping", "phase-ai", "phase-complete");
     card.classList.add("phase-error");
     icon.className = "fas fa-wifi";
     headline.textContent = "Connection Lost";
-    if (subtext) subtext.textContent = "Attempting to reconnect...";
+    subtext.textContent = "Attempting to reconnect...";
     return;
   }
   
@@ -24,23 +37,20 @@ function logMessage(el, message, type = "info") {
             card.classList.remove("phase-error", "phase-scraping", "phase-ai");
             icon.className = "fas fa-play";
             headline.textContent = "Ready to Start";
-            if (subtext) subtext.textContent = "Waiting for input...";
+            subtext.textContent = "Waiting for input...";
         }
     }, 2000);
     return;
   }
 
   if (type === "info" && !lowerMsg.includes("complete") && !lowerMsg.includes("finished")) {
-    
-
-    if (lowerMsg.includes("starting phase 2")) {
-        headline.textContent = "AI Analysis Active";
-        if (subtext) subtext.textContent = "Enriching business data...";
+    if (lowerMsg.includes("starting data extraction")) {
+        headline.textContent = "Extracting Details";
+        subtext.textContent = "Gathering contact info & social links...";
     }
     else if (lowerMsg.includes("finalizing")) {
-        if (subtext) subtext.textContent = "Generating files and sending email...";
+        subtext.textContent = "Generating files and sending email...";
     }
-    
     return;
   }
 
@@ -49,7 +59,7 @@ function logMessage(el, message, type = "info") {
     card.classList.add("phase-complete");
     icon.className = "fas fa-check-circle";
     headline.textContent = "Research Complete";
-    if (subtext) subtext.textContent = "Check your email for results.";
+    subtext.textContent = "Check your email for results.";
     
     const fill = document.getElementById("progress-fill");
     const label = document.getElementById("pct-label");
@@ -66,7 +76,7 @@ function logMessage(el, message, type = "info") {
     card.classList.add("phase-error");
     icon.className = "fas fa-exclamation-triangle";
     headline.textContent = "An Error Occurred";
-    if (subtext) subtext.textContent = "Please try again or check settings.";
+    subtext.textContent = "Please try again or check settings.";
   }
 }
 
