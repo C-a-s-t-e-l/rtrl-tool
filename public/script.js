@@ -116,9 +116,7 @@ function renderExplorer(filterText = "") {
     const container = document.getElementById('subCategoryCheckboxContainer');
     if (!container || !selectedIndustry) return;
 
-    const currentlyOpen = Array.from(container.querySelectorAll('.explorer-group.open'))
-        .map(el => el.id);
-
+    const currentlyOpen = Array.from(container.querySelectorAll('.explorer-group.open')).map(el => el.id);
     const groups = categoryHierarchy[selectedIndustry];
     let html = "";
 
@@ -138,12 +136,11 @@ function renderExplorer(filterText = "") {
             html += `
                 <div class="standalone-item">
                     <input type="checkbox" id="check_${item.id}" ${isChecked ? 'checked' : ''} onchange="window.rtrlApp.toggleCategory(${item.id})">
-                    <label for="check_${item.id}" style="margin:0; text-transform:none; font-size:0.85rem; color:#1e293b; font-weight:700; cursor:pointer;">${groupName}</label>
+                    <label for="check_${item.id}">${groupName}</label>
                 </div>
             `;
         } else {
             const isOpen = currentlyOpen.includes(groupId) ? 'open' : '';
-            
             html += `
                 <div class="explorer-group ${isOpen}" id="${groupId}">
                     <div class="explorer-group-header" onclick="this.parentElement.classList.toggle('open')">
@@ -159,7 +156,7 @@ function renderExplorer(filterText = "") {
                             return `
                                 <div class="ui-label-item">
                                     <input type="checkbox" id="check_${item.id}" ${isChecked ? 'checked' : ''} onchange="window.rtrlApp.toggleCategory(${item.id})">
-                                    <label for="check_${item.id}" style="margin:0; text-transform:none; cursor:pointer;">${item.label}</label>
+                                    <label for="check_${item.id}">${item.label}</label>
                                 </div>
                             `;
                         }).join('')}

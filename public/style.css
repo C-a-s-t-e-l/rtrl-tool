@@ -899,118 +899,116 @@ input:checked + .slider:before {
 }
 
 .explorer-scroll-area {
-    max-height: 500px;
+    max-height: 480px;
     overflow-y: auto;
-    padding: 2px;
-    border: none;
-    background: transparent;
+    padding-right: 6px;
+    margin-top: 10px;
 }
 
-.explorer-group {
+/* Custom Scrollbar */
+.explorer-scroll-area::-webkit-scrollbar { width: 4px; }
+.explorer-scroll-area::-webkit-scrollbar-track { background: transparent; }
+.explorer-scroll-area::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+
+/* Cards for Groups and Standalone Items */
+.explorer-group, .standalone-item {
     background: #ffffff;
-    border: 1px solid #e5eaf0;
-    border-radius: 10px;
-    margin-bottom: 8px;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    margin-bottom: 6px;
     transition: all 0.2s ease;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.02);
 }
 
-.explorer-group:hover {
+.explorer-group:hover, .standalone-item:hover {
     border-color: #cbd5e1;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+    background: #fcfdfe;
 }
 
-.explorer-group-header {
+/* Header/Standalone Alignment */
+.explorer-group-header, .standalone-item {
     display: flex;
-    justify-content: space-between;
     align-items: center;
-    padding: 12px 14px;
+    justify-content: space-between;
+    padding: 8px 12px;
+    min-height: 40px;
     cursor: pointer;
-    user-select: none;
 }
 
+/* Fix for Massive Checkboxes - CRITICAL */
+.standalone-item input[type="checkbox"], 
+.ui-label-item input[type="checkbox"] {
+    width: 16px !important;    /* Override global width: 100% */
+    height: 16px !important;
+    margin: 0 !important;      /* Override global margin */
+    padding: 0 !important;     /* Override global padding */
+    flex-shrink: 0;
+    cursor: pointer;
+    accent-color: #3b82f6;
+}
+
+.standalone-item label, .ui-label-item label {
+    flex-grow: 1;
+    margin: 0 0 0 10px !important; /* Spacing between box and text */
+    text-transform: none !important;
+    font-size: 0.85rem !important;
+    font-weight: 600;
+    color: #334155;
+    cursor: pointer;
+    letter-spacing: 0;
+}
+
+/* Accordion Header Details */
 .group-title-wrapper {
     display: flex;
     align-items: center;
-    gap: 10px;
-    font-size: 0.9rem;
-    font-weight: 600;
+    gap: 8px;
+    font-size: 0.85rem;
+    font-weight: 700;
     color: #1e293b;
 }
 
 .group-arrow {
-    font-size: 0.7rem;
+    font-size: 0.65rem;
     color: #94a3b8;
-    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: transform 0.2s ease;
 }
 
+.explorer-group.open .group-arrow { transform: rotate(90deg); }
+.explorer-group.open { border-color: #3b82f6; box-shadow: 0 2px 4px rgba(59, 130, 246, 0.05); }
+
+/* Tier 3 items (Inside dropdowns) */
+.explorer-group-content {
+    padding: 4px 12px 10px 32px; /* Indented */
+    display: none;
+    background: #f8fafc;
+    border-top: 1px solid #f1f5f9;
+}
+
+.explorer-group.open .explorer-group-content { display: block; }
+
+.ui-label-item {
+    display: flex;
+    align-items: center;
+    padding: 6px 0;
+    border-bottom: 1px solid transparent;
+}
+
+/* Select All Button Stylized */
 .btn-select-group {
-    font-size: 0.65rem;
+    font-size: 0.6rem;
     font-weight: 800;
     color: #3b82f6;
     background: #eff6ff;
     border: 1px solid #dbeafe;
-    padding: 4px 8px;
-    border-radius: 5px;
-    letter-spacing: 0.02em;
-    transition: all 0.2s;
+    padding: 3px 6px;
+    border-radius: 4px;
+    cursor: pointer;
+    white-space: nowrap;
 }
 
 .btn-select-group:hover {
     background: #3b82f6;
     color: white;
-}
-
-.explorer-group-content {
-    padding: 0 14px 12px 34px; /* Indent Tier 3 items */
-    display: none; 
-    border-top: 1px solid #f8fafc;
-}
-
-/* Open State */
-.explorer-group.open {
-    border-color: #3b82f6;
-}
-
-.explorer-group.open .explorer-group-content {
-    display: block;
-}
-
-.explorer-group.open .group-arrow {
-    transform: rotate(90deg);
-}
-
-/* Tier 3 Checkbox Styling */
-.ui-label-item {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 8px 0;
-    font-size: 0.85rem;
-    color: #475569;
-    font-weight: 500;
-    cursor: pointer;
-}
-
-.ui-label-item:hover { color: #1e293b; }
-
-.ui-label-item input[type="checkbox"] {
-    width: 17px;
-    height: 17px;
-    accent-color: #3b82f6;
-    cursor: pointer;
-}
-
-/* Standalone (Collapsed) Item Styling */
-.standalone-item {
-    background: #ffffff;
-    border: 1px solid #e5eaf0;
-    border-radius: 10px;
-    padding: 12px 14px;
-    margin-bottom: 8px;
-    display: flex;
-    align-items: center;
-    gap: 12px;
 }
 
 @keyframes wave-animation {
