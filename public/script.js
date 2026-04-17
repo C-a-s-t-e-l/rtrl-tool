@@ -116,6 +116,9 @@ function renderExplorer(filterText = "") {
     const container = document.getElementById('subCategoryCheckboxContainer');
     if (!container || !selectedIndustry) return;
 
+    const currentlyOpen = Array.from(container.querySelectorAll('.explorer-group.open'))
+        .map(el => el.id);
+
     const groups = categoryHierarchy[selectedIndustry];
     let html = "";
 
@@ -127,24 +130,28 @@ function renderExplorer(filterText = "") {
 
         if (filteredItems.length === 0) continue;
 
-        if (items.length === 1 && items[0].label.toLowerCase() === groupName.toLowerCase()) {
+        const groupId = `group_${groupName.replace(/[^a-zA-Z0-9]/g, '')}`;
+
+        if (items.length === 1) {
             const item = items[0];
             const isChecked = activeSelections.some(s => s.id === item.id);
             html += `
-                <div class="ui-label-item" style="padding: 10px 12px; border: 1px solid #e2e8f0; border-radius:8px; margin-bottom:8px; background:#fff;">
+                <div class="standalone-item">
                     <input type="checkbox" id="check_${item.id}" ${isChecked ? 'checked' : ''} onchange="window.rtrlApp.toggleCategory(${item.id})">
-                    <label for="check_${item.id}" style="margin:0; text-transform:none; font-size:0.85rem; color:#1e293b; font-weight:700; cursor:pointer;">${item.label}</label>
+                    <label for="check_${item.id}" style="margin:0; text-transform:none; font-size:0.85rem; color:#1e293b; font-weight:700; cursor:pointer;">${groupName}</label>
                 </div>
             `;
         } else {
+            const isOpen = currentlyOpen.includes(groupId) ? 'open' : '';
+            
             html += `
-                <div class="explorer-group" id="group_${groupName.replace(/\s/g, '')}">
+                <div class="explorer-group ${isOpen}" id="${groupId}">
                     <div class="explorer-group-header" onclick="this.parentElement.classList.toggle('open')">
                         <div class="group-title-wrapper">
-                            <i class="fas fa-chevron-right group-arrow" style="transition:transform 0.2s; font-size:0.7rem;"></i>
+                            <i class="fas fa-chevron-right group-arrow"></i>
                             <span>${groupName}</span>
                         </div>
-                        <button class="btn-select-group" onclick="event.stopPropagation(); window.rtrlApp.selectGroup('${groupName}')">Select Group</button>
+                        <button class="btn-select-group" onclick="event.stopPropagation(); window.rtrlApp.selectGroup('${groupName.replace(/'/g, "\\'")}')">SELECT ALL</button>
                     </div>
                     <div class="explorer-group-content">
                         ${filteredItems.map(item => {
@@ -188,7 +195,8 @@ window.rtrlApp.toggleCategory = (id) => {
     else activeSelections.push({ id: item.id, label: item.ui_label, terms: item.search_terms });
 
     updateSelectionPills();
-    renderExplorer(document.getElementById('categorySearchInput').value);
+  
+    renderExplorer(document.getElementById('categorySearchInput')?.value || "");
 };
 
 window.rtrlApp.selectGroup = (groupName) => {
@@ -202,7 +210,7 @@ window.rtrlApp.selectGroup = (groupName) => {
         }
     });
     updateSelectionPills();
-    renderExplorer(document.getElementById('categorySearchInput').value);
+    renderExplorer(document.getElementById('categorySearchInput')?.value || "");
 };
 
 
