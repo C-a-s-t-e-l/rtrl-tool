@@ -273,7 +273,6 @@ window.rtrlApp.selectGroup = (groupName) => {
       categorySearchInput: document.getElementById("categorySearchInput"),
       selectionPillsContainer: document.getElementById("selectionPillsContainer"),
       explorerScrollArea: document.getElementById("explorerScrollArea"),
-      primaryCategorySelect: document.getElementById("primaryCategorySelect"),
       subCategoryGroup: document.getElementById("subCategoryGroup"),
       subCategoryCheckboxContainer: document.getElementById("subCategoryCheckboxContainer"),
       customCategoryGroup: document.getElementById("customCategoryGroup"),
