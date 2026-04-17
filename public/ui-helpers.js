@@ -111,18 +111,7 @@ function setUiState(isResearching, elements) {
 }
 
 function populatePrimaryCategories(selectEl, categories, selectedValue) {
-  if (!selectEl) return;
-  selectEl.innerHTML = "";
-  
-  Object.keys(categories).forEach((category) => {
-    const option = document.createElement("option");
-    option.value = category === "Select Category" ? "" : category;
-    option.textContent = category;
-    if (category === selectedValue) {
-      option.selected = true;
-    }
-    selectEl.appendChild(option);
-  });
+    return;
 }
 
 function populateSubCategories(container, group, selectedCategory, categories) {

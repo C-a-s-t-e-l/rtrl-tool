@@ -13,7 +13,8 @@ function generateFilename(searchParams, fileSuffix, fileExtension, creationDate 
     let categoryString;
     if (searchParams.customCategory) {
         categoryString = searchParams.customCategory.replace(/[\s/&]/g, "_");
-    } else if (searchParams.subCategory === 'multiple_subcategories' && searchParams.subCategoryList && searchParams.subCategoryList.length > 0) {
+    } 
+    else if ((searchParams.subCategory === 'multiple_subcategories' || searchParams.subCategory === 'multiple_categories') && searchParams.subCategoryList && searchParams.subCategoryList.length > 0) {
         categoryString = `${(searchParams.primaryCategory || '').replace(/[\s/&]/g, "_")}_${searchParams.subCategoryList.map(s => s.replace(/[\s/&]/g, "_")).join('_')}`;
     } else if (searchParams.subCategory) {
         categoryString = `${(searchParams.primaryCategory || '').replace(/[\s/&]/g, "_")}_${searchParams.subCategory.replace(/[\s/&]/g, "_")}`;
@@ -23,7 +24,9 @@ function generateFilename(searchParams, fileSuffix, fileExtension, creationDate 
     
     const locationString = (searchParams.area || 'location').replace(/[\s/,]/g, "_").toLowerCase();
 
-    return `${date}_${company}_${categoryString}_${locationString}_${fileSuffix}.${fileExtension}`;
+    const cleanCategory = categoryString.replace(/_{2,}/g, '_').substring(0, 50);
+
+    return `${date}_${company}_${cleanCategory}_${locationString}_${fileSuffix}.${fileExtension}`;
 }
 
 const createLinkObject = (url) => {
@@ -44,16 +47,19 @@ async function generateFileData(rawData, searchParams, duplicatesData = [], crea
 
     const dateObj = creationDate ? new Date(creationDate) : new Date();
     const date = dateObj.toISOString().split('T')[0].replace(/-/g, '');
+    
     let categoryString;
     if (searchParams.customCategory) {
         categoryString = searchParams.customCategory.replace(/[\s/&]/g, "_");
-    } else if (searchParams.subCategory === 'multiple_subcategories' && searchParams.subCategoryList && searchParams.subCategoryList.length > 0) {
+    } 
+    else if ((searchParams.subCategory === 'multiple_subcategories' || searchParams.subCategory === 'multiple_categories') && searchParams.subCategoryList && searchParams.subCategoryList.length > 0) {
         categoryString = `${(searchParams.primaryCategory || '').replace(/[\s/&]/g, "_")}_${searchParams.subCategoryList.map(s => s.replace(/[\s/&]/g, "_")).join('_')}`;
     } else if (searchParams.subCategory) {
         categoryString = `${(searchParams.primaryCategory || '').replace(/[\s/&]/g, "_")}_${searchParams.subCategory.replace(/[\s/&]/g, "_")}`;
     } else {
         categoryString = searchParams.primaryCategory?.replace(/[\s/&]/g, "_") || 'general';
     }
+
     const locationString = (searchParams.area || 'location').replace(/[\s/]/g, "_").toLowerCase();
     const notesContent = `${date}_${categoryString}_${locationString}`;
 

@@ -238,34 +238,34 @@ function setupEventListeners(
   setupTagInput();
   setupKeywordTagInput();
 
-  if(elements.primaryCategorySelect) {
-      elements.primaryCategorySelect.addEventListener("change", (event) => {
-        const selectedCategory = event.target.value;
-        populateSubCategories(
-          elements.subCategoryCheckboxContainer,
-          elements.subCategoryGroup,
-          selectedCategory,
-          categories
-        );
+  // if(elements.primaryCategorySelect) {
+  //     elements.primaryCategorySelect.addEventListener("change", (event) => {
+  //       const selectedCategory = event.target.value;
+  //       populateSubCategories(
+  //         elements.subCategoryCheckboxContainer,
+  //         elements.subCategoryGroup,
+  //         selectedCategory,
+  //         categories
+  //       );
 
-        const hasCategorySelection = selectedCategory !== "";
-        elements.customCategoryInput.disabled = hasCategorySelection;
-        if (elements.categoryModifierGroup) {
-          elements.categoryModifierGroup.style.display = hasCategorySelection
-            ? "block"
-            : "none";
-          if (!hasCategorySelection) elements.categoryModifierInput.value = "";
-        }
+  //       const hasCategorySelection = selectedCategory !== "";
+  //       elements.customCategoryInput.disabled = hasCategorySelection;
+  //       if (elements.categoryModifierGroup) {
+  //         elements.categoryModifierGroup.style.display = hasCategorySelection
+  //           ? "block"
+  //           : "none";
+  //         if (!hasCategorySelection) elements.categoryModifierInput.value = "";
+  //       }
 
-        if (hasCategorySelection && elements.customKeywordContainer) {
-          elements.customCategoryInput.value = "";
-          customKeywords.length = 0;
-          elements.customKeywordContainer
-            .querySelectorAll(".tag")
-            .forEach((tag) => tag.remove());
-        }
-      });
-  }
+  //       if (hasCategorySelection && elements.customKeywordContainer) {
+  //         elements.customCategoryInput.value = "";
+  //         customKeywords.length = 0;
+  //         elements.customKeywordContainer
+  //           .querySelectorAll(".tag")
+  //           .forEach((tag) => tag.remove());
+  //       }
+  //     });
+  // }
 
   if(elements.findAllBusinessesCheckbox) {
       elements.findAllBusinessesCheckbox.addEventListener("change", (e) => {

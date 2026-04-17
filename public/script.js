@@ -37,6 +37,176 @@ let isSubscribed = false;
   };
 
   function initializeMainApp() {
+
+    let masterCategoryData = []; 
+    let categoryHierarchy = {};  
+    let selectedIndustry = null; 
+    let activeSelections = []; 
+
+            const countries = [
+            { value: "AU", text: "Australia" },
+            { value: "NZ", text: "New Zealand" },
+            { value: "US", text: "United States" },
+            { value: "GB", text: "United Kingdom" },
+            { value: "CA", text: "Canada" },
+            { value: "PH", text: "Philippines" },
+        ];
+
+
+
+    async function fetchCategoryDefinitions() {
+    try {
+        const { data, error } = await supabaseClient
+            .from('category_definitions')
+            .select('*')
+            .order('group_name', { ascending: true });
+
+        if (error) throw error;
+
+        masterCategoryData = data;
+
+        categoryHierarchy = data.reduce((acc, row) => {
+            const { industry, group_name, ui_label, search_terms } = row;
+            
+            if (!acc[industry]) acc[industry] = {};
+            if (!acc[industry][group_name]) acc[industry][group_name] = [];
+            
+            acc[industry][group_name].push({
+                label: ui_label,
+                terms: search_terms, 
+                id: row.id
+            });
+            
+            return acc;
+        }, {});
+
+        console.log("[Data] Category Hierarchy loaded:", categoryHierarchy);
+        
+        return Object.keys(categoryHierarchy);
+    } catch (err) {
+        console.error("Error loading categories:", err);
+        return [];
+    }
+}
+
+function renderIndustryPills(industries) {
+    const container = document.getElementById('industryPillsContainer');
+    if (!container) return;
+    
+    container.innerHTML = industries.map(ind => `
+        <div class="industry-pill" data-industry="${ind}">${ind}</div>
+    `).join('');
+
+    container.querySelectorAll('.industry-pill').forEach(pill => {
+        pill.onclick = () => {
+            selectedIndustry = pill.dataset.industry;
+            container.querySelectorAll('.industry-pill').forEach(p => p.classList.remove('active'));
+            pill.classList.add('active');
+            
+            activeSelections = [];
+            renderExplorer();
+            updateSelectionPills();
+        };
+    });
+
+    if (industries.length > 0) container.querySelector('.industry-pill').click();
+}
+
+function renderExplorer(filterText = "") {
+    const container = document.getElementById('subCategoryCheckboxContainer');
+    if (!container || !selectedIndustry) return;
+
+    const groups = categoryHierarchy[selectedIndustry];
+    let html = "";
+
+    for (const [groupName, items] of Object.entries(groups)) {
+        const filteredItems = items.filter(item => 
+            item.label.toLowerCase().includes(filterText.toLowerCase()) || 
+            groupName.toLowerCase().includes(filterText.toLowerCase())
+        );
+
+        if (filteredItems.length === 0) continue;
+
+        if (items.length === 1 && items[0].label.toLowerCase() === groupName.toLowerCase()) {
+            const item = items[0];
+            const isChecked = activeSelections.some(s => s.id === item.id);
+            html += `
+                <div class="ui-label-item" style="padding: 10px 12px; border: 1px solid #e2e8f0; border-radius:8px; margin-bottom:8px; background:#fff;">
+                    <input type="checkbox" id="check_${item.id}" ${isChecked ? 'checked' : ''} onchange="window.rtrlApp.toggleCategory(${item.id})">
+                    <label for="check_${item.id}" style="margin:0; text-transform:none; font-size:0.85rem; color:#1e293b; font-weight:700; cursor:pointer;">${item.label}</label>
+                </div>
+            `;
+        } else {
+            html += `
+                <div class="explorer-group" id="group_${groupName.replace(/\s/g, '')}">
+                    <div class="explorer-group-header" onclick="this.parentElement.classList.toggle('open')">
+                        <div class="group-title-wrapper">
+                            <i class="fas fa-chevron-right group-arrow" style="transition:transform 0.2s; font-size:0.7rem;"></i>
+                            <span>${groupName}</span>
+                        </div>
+                        <button class="btn-select-group" onclick="event.stopPropagation(); window.rtrlApp.selectGroup('${groupName}')">Select Group</button>
+                    </div>
+                    <div class="explorer-group-content">
+                        ${filteredItems.map(item => {
+                            const isChecked = activeSelections.some(s => s.id === item.id);
+                            return `
+                                <div class="ui-label-item">
+                                    <input type="checkbox" id="check_${item.id}" ${isChecked ? 'checked' : ''} onchange="window.rtrlApp.toggleCategory(${item.id})">
+                                    <label for="check_${item.id}" style="margin:0; text-transform:none; cursor:pointer;">${item.label}</label>
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+                </div>
+            `;
+        }
+    }
+    container.innerHTML = html;
+}
+
+function updateSelectionPills() {
+    const container = document.getElementById('selectionPillsContainer');
+    const summary = document.getElementById('categorySummaryText');
+    if (!container) return;
+
+    container.innerHTML = activeSelections.map(sel => `
+        <span class="tag" style="background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd;">
+            <span>${sel.label}</span>
+            <span class="tag-close-btn" onclick="window.rtrlApp.toggleCategory(${sel.id})">&times;</span>
+        </span>
+    `).join('');
+
+    const totalLoops = activeSelections.reduce((acc, curr) => acc + (curr.terms?.length || 0), 0);
+    summary.textContent = `${activeSelections.length} Categories selected (${totalLoops} Search loops)`;
+}
+
+window.rtrlApp.toggleCategory = (id) => {
+    const item = masterCategoryData.find(d => d.id === id);
+    const index = activeSelections.findIndex(s => s.id === id);
+
+    if (index > -1) activeSelections.splice(index, 1);
+    else activeSelections.push({ id: item.id, label: item.ui_label, terms: item.search_terms });
+
+    updateSelectionPills();
+    renderExplorer(document.getElementById('categorySearchInput').value);
+};
+
+window.rtrlApp.selectGroup = (groupName) => {
+    if (!selectedIndustry || !categoryHierarchy[selectedIndustry]) return;
+    const items = categoryHierarchy[selectedIndustry][groupName];
+    if (!items) return;
+
+    items.forEach(item => {
+        if (!activeSelections.some(s => s.id === item.id)) {
+            activeSelections.push({ id: item.id, label: item.label, terms: item.terms });
+        }
+    });
+    updateSelectionPills();
+    renderExplorer(document.getElementById('categorySearchInput').value);
+};
+
+
+
     async function refreshUsageTracker() {
       if (!currentUserSession) return;
       const { data: profile, error } = await supabaseClient
@@ -94,6 +264,10 @@ let isSubscribed = false;
     const elements = {
       startButton: document.getElementById("startButton"),
       useAiToggle: document.getElementById("useAiToggle"),
+      industryPillsContainer: document.getElementById("industryPillsContainer"),
+      categorySearchInput: document.getElementById("categorySearchInput"),
+      selectionPillsContainer: document.getElementById("selectionPillsContainer"),
+      explorerScrollArea: document.getElementById("explorerScrollArea"),
       primaryCategorySelect: document.getElementById("primaryCategorySelect"),
       subCategoryGroup: document.getElementById("subCategoryGroup"),
       subCategoryCheckboxContainer: document.getElementById("subCategoryCheckboxContainer"),
@@ -156,6 +330,12 @@ let isSubscribed = false;
       elements.useAiToggle.addEventListener("change", (e) =>
         localStorage.setItem("rtrl_use_ai_enrichment", e.target.checked),
       );
+    }
+
+        if (document.getElementById('categorySearchInput')) {
+      document.getElementById('categorySearchInput').addEventListener('input', (e) => {
+        renderExplorer(e.target.value);
+      });
     }
 
     const socket = io(BACKEND_URL, {
@@ -610,77 +790,7 @@ socket.on("job_update", (data) => {
       });
     }
 
-    const categories = {
-      "Select Category": [],
-        "Bars & Pubs (Deep Search)": [
-    "ALL",
-    "Bar",
-    "Beer garden",
-    "Bistro pub",
-    "Family pub",
-    "Pub",
-    "Pub restaurant",
-    "Pub steakhouse",
-    "Brewpub",
-    "Microbrewery pub",
-    "Burger restaurant",
-    "Cocktail bar",
-    "Gastropub",
-    "Hotel pub",
-    "Lounge",
-    "Restaurant",
-    "Rooftop bar",
-    "Seafood restaurant",
-    "Sports bar",
-    "Sports pub",
-    "Steakhouse",
-    "Tavern",
-    "Wine bar"
-  ],
-      "Alterations and tailoring": [],
-      "Baby and nursery": ["ALL", "Baby and infant toys", "Baby bedding", "Nursery furniture", "Prams, strollers and carriers", "Tableware and feeding"],
-      "Banks": [],
-      "Beauty and wellness": ["ALL", "Bath and body", "Fragrance", "Hair and beauty", "Hair care", "Makeup", "Skincare", "Vitamins and supplements"],
-      "Books, stationery and gifts": ["ALL", "Book stores", "Cards and gift wrap", "Newsagencies", "Office supplies", "Stationery"],
-      "Car and auto": [],
-      "Childcare": [],
-      "Clothing and accessories": ["ALL", "Babies' and toddlers'", "Footwear", "Jewellery and watches", "Kids' and junior", "Men's fashion", "Sunglasses", "Women's fashion"],
-      "Community services": [],
-      "Department stores": [],
-      "Designer and boutique": [],
-      "Discount and variety": [],
-      "Dry cleaning": [],
-      "Electronics and technology": ["ALL", "Cameras", "Computers and tablets", "Gaming and consoles", "Mobile and accessories", "Navigation", "TV and audio"],
-      "Entertainment and activities": ["ALL", "Arcades and games", "Bowling", "Cinemas", "Kids activities", "Learning and education", "Music"],
-      "Florists": [],
-      "Food and drink": ["ALL", "Asian", "Bars and pubs", "Breakfast and brunch", "Cafes", "Casual dining", "Chocolate cafes", "Desserts", "Dietary requirements", "Fast food", "Fine dining", "Greek", "Grill houses", "Halal", "Healthy options", "Italian", "Juice bars", "Kid-friendly", "Lebanese", "Mexican and Latin American", "Middle Eastern", "Modern Australian", "Sandwiches and salads", "Takeaway"],
-      "Foreign currency exchange": [],
-      "Fresh food and groceries": ["ALL", "Bakeries", "Butchers", "Confectionery", "Delicatessens", "Fresh produce", "Liquor", "Patisseries", "Poultry", "Seafood", "Specialty foods", "Supermarkets"],
-      "Health and fitness": ["ALL", "Chemists", "Dentists", "Gyms and fitness studios", "Health insurers", "Medical centres", "Medicare", "Optometrists", "Specialty health providers"],
-      "Home": ["ALL", "Bath and home fragrances", "Bedding", "Furniture", "Gifts", "Hardware", "Home appliances", "Home decor", "Kitchen", "Pets", "Photography and art", "Picture frames"],
-      "Luggage and travel accessories": ["ALL", "Backpacks and gym duffle bags", "Laptop cases and sleeves", "Small leather goods", "Suitcases and travel accessories", "Work and laptop bags"],
-      "Luxury and premium": ["ALL", "Australian designer", "International designer", "Luxury", "Premium brands"],
-      "Pawn brokers": [],
-      "Phone repairs": [],
-      "Photographic services": [],
-      "Post office": [],
-      "Power, gas and communication services": [],
-      "Professional services": [],
-      "Real estate agents": [],
-      "Shoe repair and key cutting": [],
-      "Sporting goods": ["ALL", "Activewear", "Fitness and gym equipment", "Outdoors and camping", "Tech and wearables"],
-      "Tobacconists": [],
-      "Toys and hobbies": ["ALL", "Arts and crafts", "Games", "Hobbies", "Toys"],
-      "Travel agents": []
-    };
-    const countries = [
-      { value: "AU", text: "Australia" },
-      { value: "NZ", text: "New Zealand" },
-      { value: "US", text: "United States" },
-      { value: "GB", text: "United Kingdom" },
-      { value: "CA", text: "Canada" },
-      { value: "PH", text: "Philippines" },
-    ];
+
 
     async function getPlaceDetails(placeId) {
       return new Promise((resolve, reject) => {
@@ -992,17 +1102,18 @@ card.querySelector('.zone-slider-input').oninput = (e) => {
         });
     }
 
-    window.rtrlApp.startResearch = () => {
+window.rtrlApp.startResearch = () => {
         if (!currentUserSession) return;
 
         document.querySelectorAll(".collapsible-section").forEach(s => { s.style.borderColor = ""; s.style.boxShadow = ""; });
         const errorModal = document.getElementById("alert-modal");
         const errorText = document.getElementById("alert-modal-message");
 
-        const businessNames = elements.businessNamesInput.value.trim();
+        const businessNamesRaw = elements.businessNamesInput.value.trim();
+        const businessNamesArr = businessNamesRaw.split("\n").map((n) => n.trim()).filter(Boolean);
         const hasCustomKeywords = window.rtrlApp.customKeywords.length > 0;
-        const hasPrimaryCategory = elements.primaryCategorySelect.value !== "";
-        const hasBusinessDef = businessNames || hasCustomKeywords || hasPrimaryCategory;
+        const hasTieredSelection = activeSelections.length > 0;
+        const hasBusinessDef = businessNamesArr.length > 0 || hasCustomKeywords || hasTieredSelection;
 
         const hasLocationText = elements.locationInput.value.trim().length > 0;
         const hasPostcodes = window.rtrlApp.postalCodes.length > 0;
@@ -1046,21 +1157,36 @@ card.querySelector('.zone-slider-input').oninput = (e) => {
             errorModal.style.display = "flex"; return;
         }
 
-        const ns = businessNames.split("\n").map((n) => n.trim()).filter(Boolean);
-        const ss = Array.from(elements.subCategoryCheckboxContainer.querySelectorAll("input:checked")).map((c) => c.value).filter((v) => v !== "select_all");
+        let finalLoopList = [];
+        const modifier = elements.categoryModifierInput.value.trim();
+
+        if (businessNamesArr.length > 0) {
+            finalLoopList = businessNamesArr;
+        } else if (hasCustomKeywords) {
+            finalLoopList = window.rtrlApp.customKeywords;
+        } else {
+            activeSelections.forEach(sel => {
+                sel.terms.forEach(term => {
+                    finalLoopList.push(modifier ? `"${modifier}" ${term}` : term);
+                });
+            });
+        }
+
         const localToday = new Date();
-        
         const multiPoints = window.rtrlApp.state.anchors.map(a => ({ 
-    coords: `${a.lat},${a.lng}`, 
-    radius: a.radius, 
-    name: a.name 
-}));
+            coords: `${a.lat},${a.lng}`, 
+            radius: a.radius, 
+            name: a.name 
+        }));
         
         const p = {
-            country: elements.countryInput.value, businessNames: ns,
+            country: elements.countryInput.value,
+            businessNames: businessNamesArr,
             userEmail: elements.userEmailInput.value.trim(),
             exclusionList: window.rtrlApp.exclusionFeature.getExclusionList(),
             useAiEnrichment: elements.useAiToggle.checked,
+            categoriesToLoop: finalLoopList,
+            count: elements.findAllBusinessesCheckbox.checked || !elements.countInput.value.trim() ? -1 : parseInt(elements.countInput.value, 10)
         };
 
         if (multiPoints.length > 0) {
@@ -1071,37 +1197,26 @@ card.querySelector('.zone-slider-input').oninput = (e) => {
             p.postalCode = window.rtrlApp.postalCodes;
         }
 
-        if (ns.length > 0) { p.count = -1; } 
-        else if (window.rtrlApp.customKeywords.length > 0) { p.categoriesToLoop = window.rtrlApp.customKeywords; } 
-        else {
-            let b = ss.length > 0 ? ss : [elements.primaryCategorySelect.value];
-            p.categoriesToLoop = elements.categoryModifierInput.value.trim() ? b.map((c) => `"${elements.categoryModifierInput.value.trim()}" ${c}`) : b;
+        let areaKey = "";
+        if (window.rtrlApp.state.anchors.length > 0) {
+            const names = window.rtrlApp.state.anchors.map(a => a.name.split(',')[0].trim());
+            if (names.length === 1) areaKey = names[0];
+            else if (names.length === 2) areaKey = `${names[0]} and ${names[1]}`;
+            else areaKey = `${names[0]} and ${names.length - 1} others`;
+        } else if (window.rtrlApp.postalCodes.length > 0) {
+            areaKey = window.rtrlApp.postalCodes.join("_");
+        } else {
+            areaKey = elements.locationInput.value.split(",")[0];
         }
 
-        if (ns.length === 0) p.count = elements.findAllBusinessesCheckbox.checked || !elements.countInput.value.trim() ? -1 : parseInt(elements.countInput.value, 10);
-
-let areaKey = "";
-if (window.rtrlApp.state.anchors.length > 0) {
-    const names = window.rtrlApp.state.anchors.map(a => a.name.split(',')[0].trim());
-    if (names.length === 1) {
-        areaKey = names[0];
-    } else if (names.length === 2) {
-        areaKey = `${names[0]} and ${names[1]}`;
-    } else {
-        areaKey = `${names[0]} and ${names.length - 1} others`;
-    }
-} else if (window.rtrlApp.postalCodes.length > 0) {
-    areaKey = window.rtrlApp.postalCodes.join("_");
-} else {
-    areaKey = elements.locationInput.value.split(",")[0];
-}
-
         p.searchParamsForEmail = {
-            primaryCategory: elements.primaryCategorySelect.value,
-            subCategory: ss.length > 1 ? "multiple_subcategories" : ss[0] || "",
-            subCategoryList: ss,
-            customCategory: window.rtrlApp.customKeywords.length > 0 ? window.rtrlApp.customKeywords.join(", ") : elements.categoryModifierInput.value,
-            area: areaKey, postcodes: window.rtrlApp.postalCodes, country: elements.countryInput.value,
+            primaryCategory: selectedIndustry || "Custom Search",
+            subCategory: activeSelections.length > 1 ? "multiple_categories" : (activeSelections[0]?.label || ""),
+            subCategoryList: activeSelections.map(s => s.label),
+            customCategory: window.rtrlApp.customKeywords.length > 0 ? window.rtrlApp.customKeywords.join(", ") : modifier,
+            area: areaKey, 
+            postcodes: window.rtrlApp.postalCodes, 
+            country: elements.countryInput.value,
         };
 
         socket.emit("start_scrape_job", {
@@ -1115,7 +1230,7 @@ if (window.rtrlApp.state.anchors.length > 0) {
         elements.startButton.style.backgroundColor = "#10b981";
         elements.startButton.disabled = true; 
         
-        setTimeout(() => {
+setTimeout(() => {
             elements.startButton.innerHTML = originalText;
             elements.startButton.style.backgroundColor = "";
             elements.startButton.disabled = false; 
@@ -1123,32 +1238,47 @@ if (window.rtrlApp.state.anchors.length > 0) {
             elements.businessNamesInput.value = "";
             window.rtrlApp.postalCodes = [];
             
+            activeSelections = []; 
+            updateSelectionPills(); 
+            renderExplorer();      
+            
             document.querySelectorAll(".tag").forEach(t => t.remove());
-            
-            if (typeof window.rtrlApp.setRadiusInputsState === 'function') {
-                window.rtrlApp.setRadiusInputsState(true); 
-            }
-            
+            if (typeof window.rtrlApp.setRadiusInputsState === 'function') window.rtrlApp.setRadiusInputsState(true);
             localStorage.removeItem("rtrl_saved_zones");
         }, 2000);
     };
 
-    function initializeApp() {
-      window.rtrlApp.jobHistory.init(() => currentUserSession?.access_token, BACKEND_URL);
-      window.rtrlApp.review.init(() => currentUserSession?.access_token, BACKEND_URL);
-      window.rtrlApp.exclusionFeature.init(() => currentUserSession?.access_token);
-      if (localStorage.getItem("rtrl_last_used_email")) elements.userEmailInput.value = localStorage.getItem("rtrl_last_used_email");
-      if (elements.primaryCategorySelect) populatePrimaryCategories(elements.primaryCategorySelect, categories, "");
-      setupPostcodeListHandlers();
-      
-      if (typeof setupEventListeners === 'function') {
-          setupEventListeners(
-            elements, socket, categories, countries, window.rtrlApp.postalCodes,
-            window.rtrlApp.customKeywords, window.rtrlApp.map, window.rtrlApp.searchCircle,
-          );
-      }
-      loadGoogleMaps();
+async function initializeApp() {
+
+
+  
+    window.rtrlApp.jobHistory.init(() => currentUserSession?.access_token, BACKEND_URL);
+    window.rtrlApp.review.init(() => currentUserSession?.access_token, BACKEND_URL);
+    window.rtrlApp.exclusionFeature.init(() => currentUserSession?.access_token);
+
+    const industries = await fetchCategoryDefinitions();
+
+    if (industries.length > 0) {
+        const subGroup = document.getElementById('subCategoryGroup');
+        if (subGroup) subGroup.style.display = 'block';
+        renderIndustryPills(industries);
     }
+    
+
+    if (localStorage.getItem("rtrl_last_used_email")) {
+        elements.userEmailInput.value = localStorage.getItem("rtrl_last_used_email");
+    }
+
+    setupPostcodeListHandlers();
+    
+    if (typeof setupEventListeners === 'function') {
+        setupEventListeners(
+            elements, socket, categoryHierarchy, countries, window.rtrlApp.postalCodes,
+            window.rtrlApp.customKeywords, window.rtrlApp.map, window.rtrlApp.searchCircle,
+        );
+    }
+    loadGoogleMaps();
+}
 
     window.rtrlApp.loadPinsFromLocalStorage();
 

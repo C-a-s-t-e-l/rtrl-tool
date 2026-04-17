@@ -243,11 +243,17 @@ const runScrapeJob = async (jobId) => {
     const searchItems = isIndividualSearch ? businessNames : (categoriesToLoop && categoriesToLoop.length > 0 ? categoriesToLoop : []);
     const finalCount = businessNames && businessNames.length > 0 ? -1 : parameters.count || -1;
 
+    const totalTerms = searchItems.length;
+    let currentTermIndex = 0;
+
 // --- PHASE 1: DISCOVERY ---
     if (masterUrlMap.size === 0 || allProcessedBusinesses.length < finalCount || finalCount === -1) {
         for (const item of searchItems) {
-            browser = await launchBrowser(`[Phase 1] Searching Maps for: "${item}"`);
+
+            browser = await launchBrowser(`[Phase 1][Loop ${currentTermIndex}/${totalTerms}] Searching Maps for: "${item}"`);
             let collectionPage = await browser.newPage();
+
+
             
             let locationQueries = [];
             
@@ -1144,12 +1150,30 @@ const initSupabaseRealtime = () => {
         .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles' }, payload => {
             const updatedProfile = payload.new;
             console.log('[Realtime] Profile updated:', updatedProfile.id);
-
-            io.to(updatedProfile.id).emit('user_profile_updated'); 
+            io.to(updatedProfile.id).emit('user_profile_updated');
         })
         .subscribe();
 
-    console.log('[Supabase Realtime] Subscribed to profiles table changes.');
+    supabase.channel('jobs_changes')
+        .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'jobs' }, payload => {
+            const deletedJobId = payload.old.id;
+            console.log(`[Realtime] Job ${deletedJobId} DELETED from DB.`);
+            jobQueue = jobQueue.filter(j => j.id !== deletedJobId);
+            broadcastQueuePositions(); 
+            io.to(deletedJobId).emit("job_update", { id: deletedJobId, status: "cancelled_db" });
+            io.to(payload.old.user_id).emit("user_job_transition", { jobId: deletedJobId, status: "cancelled_db" });
+        })
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'jobs', filter: 'status=eq.cancelled' }, payload => {
+            const cancelledJobId = payload.new.id;
+            console.log(`[Realtime] Job ${cancelledJobId} cancelled via DB update.`);
+            jobQueue = jobQueue.filter(j => j.id !== cancelledJobId);
+            broadcastQueuePositions(); 
+            io.to(cancelledJobId).emit("job_update", { id: cancelledJobId, status: "cancelled" });
+            io.to(payload.new.user_id).emit("user_job_transition", { jobId: cancelledJobId, status: "cancelled" });
+        })
+        .subscribe();
+
+    console.log('[Supabase Realtime] Subscribed to profiles and jobs table changes.');
 };
 
 server.listen(PORT, () => {

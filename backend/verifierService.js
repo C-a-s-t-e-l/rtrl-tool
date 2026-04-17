@@ -4,7 +4,7 @@ const puppeteer = require('puppeteer-extra');
 
 //  TOGGLE THIS TO 'false' WHEN THE KAIJU SITE IS BACK UP
 
-const MAINTENANCE_MODE = false; 
+const MAINTENANCE_MODE = true; 
 
 let currentKaijuKey = "";
 let lastFailedAttempt = 0;

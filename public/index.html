@@ -41,10 +41,8 @@
     </script>
   </head>
   <body>
-    <!-- Login Overlay Omitted for brevity (same as your original) -->
     <div id="login-overlay" class="login-overlay">
       <div class="login-container">
-        <!-- Promo Panel -->
         <div class="login-promo-panel">
           <div class="promo-particle particle-1"></div>
           <div class="promo-particle particle-2"></div>
@@ -92,7 +90,7 @@
             <div class="promo-footer"><i class="fas fa-shield-alt"></i> The new standard for commercial real estate prospecting.</div>
           </div>
         </div>
-        <!-- Form Panel -->
+       
         <div class="login-form-panel">
           <div class="flip-container" id="flip-card">
             <div class="flipper">
@@ -198,7 +196,26 @@
                   <div id="customKeywordContainer" class="tag-container"><input type="text" id="customCategoryInput" placeholder="Add keywords then press enter..." /></div>
                 </div>
                 <div class="form-group"><label for="primaryCategorySelect">Business Category</label><select id="primaryCategorySelect"></select></div>
-                <div class="form-group" id="subCategoryGroup" style="display: none"><label>Sub-Categories</label><div id="subCategoryCheckboxContainer" class="checkbox-container"></div></div>
+                <div class="form-group" id="subCategoryGroup" style="display: none">
+    <label>Industry Dataset</label>
+    <div id="industryPillsContainer" class="industry-pills-container"></div>
+    
+    <div class="category-search-wrapper">
+        <i class="fas fa-search"></i>
+        <input type="text" id="categorySearchInput" class="category-search-input" placeholder="Search categories...">
+    </div>
+
+    <div id="selectionPillsContainer" class="selection-pills-container"></div>
+
+    <div id="explorerScrollArea" class="explorer-scroll-area">
+        <div id="subCategoryCheckboxContainer" class="checkbox-container" style="border:none; padding:0; max-height:none;">
+        </div>
+    </div>
+    
+    <div id="categorySummaryText" style="font-size: 0.75rem; color: #94a3b8; margin-top: 8px; font-weight: 600;">
+        0 Categories selected (0 Search loops)
+    </div>
+</div>
                 <div class="form-group" id="categoryModifierGroup" style="display: none"><label for="categoryModifierInput">Refine Category (Optional)</label><input type="text" id="categoryModifierInput" placeholder="e.g. Dog friendly, 24 Hour, Emergency..." /></div>
                 <div class="form-group">
                   <label for="countryInput">Country</label>
@@ -233,8 +250,6 @@
                 </div>
               </div>
             </div>
-
-            <!-- Enhanced Map Workspace Component -->
             <div class="collapsible-section">
               <div class="collapsible-header">
                 <h3><i class="fas fa-bullseye icon-radius-search"></i> Search by Radius</h3>
@@ -324,9 +339,7 @@
           </aside>
 
           <div class="results-display">
-            <!-- Dashboard, Queue, and History UI logic remains unchanged -->
             <div id="usage-dashboard-card" class="usage-dashboard-card">
-              <!-- Usage Content -->
               <div class="usage-dash-header">
                   <div class="usage-title-area">
                       <span class="usage-label">Daily Prospecting Quota</span>
