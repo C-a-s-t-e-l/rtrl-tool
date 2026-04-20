@@ -97,17 +97,13 @@ function renderIndustryPills(industries) {
         <div class="industry-pill" data-industry="${ind}">${ind}</div>
     `).join('');
 
-    container.querySelectorAll('.industry-pill').forEach(pill => {
+container.querySelectorAll('.industry-pill').forEach(pill => {
         pill.onclick = () => {
             selectedIndustry = pill.dataset.industry;
             container.querySelectorAll('.industry-pill').forEach(p => p.classList.remove('active'));
             pill.classList.add('active');
             
-            window.rtrlApp.customKeywords = []; 
-            const kwContainer = document.getElementById('customKeywordContainer');
-            if (kwContainer) {
-                kwContainer.querySelectorAll('.tag').forEach(t => t.remove());
-            }
+            clearCustomKeywords();
 
             activeSelections = [];
             renderExplorer();
@@ -117,6 +113,16 @@ function renderIndustryPills(industries) {
 
     if (industries.length > 0) container.querySelector('.industry-pill').click();
 }
+
+    function clearCustomKeywords() {
+        window.rtrlApp.customKeywords = [];
+        const kwContainer = document.getElementById('customKeywordContainer');
+        if (kwContainer) {
+            kwContainer.querySelectorAll('.tag').forEach(t => t.remove());
+            const input = kwContainer.querySelector('input');
+            if (input) input.value = '';
+        }
+    }
 
 function renderExplorer(filterText = "") {
     const container = document.getElementById('subCategoryCheckboxContainer');
@@ -194,11 +200,14 @@ window.rtrlApp.toggleCategory = (id) => {
     const item = masterCategoryData.find(d => d.id === id);
     const index = activeSelections.findIndex(s => s.id === id);
 
-    if (index > -1) activeSelections.splice(index, 1);
-    else activeSelections.push({ id: item.id, label: item.ui_label, terms: item.search_terms });
+    if (index > -1) {
+        activeSelections.splice(index, 1);
+    } else {
+        clearCustomKeywords();
+        activeSelections.push({ id: item.id, label: item.ui_label, terms: item.search_terms });
+    }
 
     updateSelectionPills();
-  
     renderExplorer(document.getElementById('categorySearchInput')?.value || "");
 };
 
@@ -206,6 +215,8 @@ window.rtrlApp.selectGroup = (groupName) => {
     if (!selectedIndustry || !categoryHierarchy[selectedIndustry]) return;
     const items = categoryHierarchy[selectedIndustry][groupName];
     if (!items) return;
+
+    clearCustomKeywords();
 
     items.forEach(item => {
         if (!activeSelections.some(s => s.id === item.id)) {
