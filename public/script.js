@@ -103,6 +103,12 @@ function renderIndustryPills(industries) {
             container.querySelectorAll('.industry-pill').forEach(p => p.classList.remove('active'));
             pill.classList.add('active');
             
+            window.rtrlApp.customKeywords = []; 
+            const kwContainer = document.getElementById('customKeywordContainer');
+            if (kwContainer) {
+                kwContainer.querySelectorAll('.tag').forEach(t => t.remove());
+            }
+
             activeSelections = [];
             renderExplorer();
             updateSelectionPills();
@@ -329,11 +335,22 @@ window.rtrlApp.selectGroup = (groupName) => {
       btnOpenMapWorkspace: document.getElementById("btn-open-map-workspace")
     };
 
-    if (elements.useAiToggle) {
-      elements.useAiToggle.checked = localStorage.getItem("rtrl_use_ai_enrichment") !== "false";
-      elements.useAiToggle.addEventListener("change", (e) =>
-        localStorage.setItem("rtrl_use_ai_enrichment", e.target.checked),
-      );
+        if (elements.useAiToggle) {
+          elements.useAiToggle.checked = localStorage.getItem("rtrl_use_ai_enrichment") !== "false";
+          elements.useAiToggle.addEventListener("change", (e) =>
+            localStorage.setItem("rtrl_use_ai_enrichment", e.target.checked),
+          );
+        }
+
+        if (elements.customCategoryInput) {
+        elements.customCategoryInput.addEventListener('input', () => {
+            if (elements.customCategoryInput.value.trim() !== "" && activeSelections.length > 0) {
+                activeSelections = [];
+                updateSelectionPills();
+                renderExplorer();
+                console.log("[UI] Tiered selections cleared because custom keyword input detected.");
+            }
+        });
     }
 
         if (document.getElementById('categorySearchInput')) {
@@ -1249,11 +1266,14 @@ setTimeout(() => {
             elements.businessNamesInput.value = "";
             window.rtrlApp.postalCodes = [];
             
-            activeSelections = []; 
+            window.rtrlApp.customKeywords = []; 
+            activeSelections = [];              
+            
             updateSelectionPills(); 
             renderExplorer();      
             
             document.querySelectorAll(".tag").forEach(t => t.remove());
+            
             if (typeof window.rtrlApp.setRadiusInputsState === 'function') window.rtrlApp.setRadiusInputsState(true);
             localStorage.removeItem("rtrl_saved_zones");
         }, 2000);

@@ -150,20 +150,17 @@ function setupEventListeners(
   function setupKeywordTagInput() {
     if(!elements.customKeywordContainer || !elements.customCategoryInput) return;
 
-    elements.customKeywordContainer.addEventListener("click", (e) => {
+elements.customKeywordContainer.addEventListener("click", (e) => {
       if (e.target.classList.contains("tag-close-btn")) {
         const keyword = e.target.dataset.value;
+        
         const index = customKeywords.indexOf(keyword);
         if (index > -1) customKeywords.splice(index, 1);
+        
         e.target.parentElement.remove();
 
         const hasCustomText = customKeywords.length > 0;
-        elements.primaryCategorySelect.disabled = hasCustomText;
-        if(elements.subCategoryCheckboxContainer) {
-            elements.subCategoryCheckboxContainer
-              .querySelectorAll("input")
-              .forEach((cb) => (cb.disabled = hasCustomText));
-        }
+        if (elements.categoryModifierInput) elements.categoryModifierInput.disabled = hasCustomText;
       } else {
         elements.customCategoryInput.focus();
       }
@@ -238,34 +235,7 @@ function setupEventListeners(
   setupTagInput();
   setupKeywordTagInput();
 
-  // if(elements.primaryCategorySelect) {
-  //     elements.primaryCategorySelect.addEventListener("change", (event) => {
-  //       const selectedCategory = event.target.value;
-  //       populateSubCategories(
-  //         elements.subCategoryCheckboxContainer,
-  //         elements.subCategoryGroup,
-  //         selectedCategory,
-  //         categories
-  //       );
 
-  //       const hasCategorySelection = selectedCategory !== "";
-  //       elements.customCategoryInput.disabled = hasCategorySelection;
-  //       if (elements.categoryModifierGroup) {
-  //         elements.categoryModifierGroup.style.display = hasCategorySelection
-  //           ? "block"
-  //           : "none";
-  //         if (!hasCategorySelection) elements.categoryModifierInput.value = "";
-  //       }
-
-  //       if (hasCategorySelection && elements.customKeywordContainer) {
-  //         elements.customCategoryInput.value = "";
-  //         customKeywords.length = 0;
-  //         elements.customKeywordContainer
-  //           .querySelectorAll(".tag")
-  //           .forEach((tag) => tag.remove());
-  //       }
-  //     });
-  // }
 
   if(elements.findAllBusinessesCheckbox) {
       elements.findAllBusinessesCheckbox.addEventListener("change", (e) => {
