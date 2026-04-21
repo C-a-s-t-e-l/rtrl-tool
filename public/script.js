@@ -189,9 +189,9 @@ window.rtrlApp.deleteLocation = async (id) => {
             });
             if (res.ok) {
                 if (window.rtrlApp.state.activeLocationId === id) {
-                    window.rtrlApp.state.activeLocationId = null;
-                    window.rtrlApp.state.isDirty = false;
+                    window.rtrlApp.clearAllPins(); 
                 }
+                
                 await window.rtrlApp.fetchLocations();
                 window.rtrlApp.showToast("Location deleted permanently");
             }
