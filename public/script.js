@@ -73,8 +73,8 @@ document.addEventListener("DOMContentLoaded", () => {
                     <p>Give this collection of pins a name for future searches.</p>
                     <input type="text" id="loc-name-input" placeholder="e.g. Albury_Wodonga" value="${currentName}">
                     <div class="rtrl-modal-actions">
-                        <button class="btn-ghost" id="modal-cancel-btn">Cancel</button>
-                        <button class="btn-primary-blue" id="modal-save-btn">Save Location</button>
+                        <button class="btn btn-secondary" id="modal-cancel-btn" style="margin:0">Cancel</button>
+                        <button class="btn btn-primary" id="modal-save-btn" style="margin:0; width:auto; padding: 0.65rem 1.5rem;">Save Location</button>
                     </div>
                 </div>`;
             document.body.appendChild(modal);
@@ -82,6 +82,27 @@ document.addEventListener("DOMContentLoaded", () => {
             input.focus();
             modal.querySelector('#modal-cancel-btn').onclick = () => { modal.remove(); resolve(null); };
             modal.querySelector('#modal-save-btn').onclick = () => { const val = input.value.trim(); modal.remove(); resolve(val || null); };
+        });
+    };
+
+    window.rtrlApp.confirmDiscard = () => {
+        return new Promise((resolve) => {
+            const modal = document.createElement('div');
+            modal.className = 'rtrl-modal-overlay';
+            modal.style.zIndex = "110002"; 
+            modal.innerHTML = `
+                <div class="rtrl-modal-window" style="text-align:center;">
+                    <div style="color: #ef4444; font-size: 2rem; margin-bottom: 1rem;"><i class="fas fa-exclamation-triangle"></i></div>
+                    <h3>Unsaved Changes</h3>
+                    <p>You have unsaved modifications to this location. Are you sure you want to discard them?</p>
+                    <div class="rtrl-modal-actions" style="justify-content: center; margin-top: 20px;">
+                        <button class="btn btn-secondary" id="discard-no" style="margin:0">Keep Editing</button>
+                        <button class="btn btn-primary" id="discard-yes" style="margin:0; width:auto; background:#ef4444;">Discard Changes</button>
+                    </div>
+                </div>`;
+            document.body.appendChild(modal);
+            modal.querySelector('#discard-no').onclick = () => { modal.remove(); resolve(false); };
+            modal.querySelector('#discard-yes').onclick = () => { modal.remove(); resolve(true); };
         });
     };
 
@@ -102,8 +123,15 @@ document.addEventListener("DOMContentLoaded", () => {
         } catch (e) { console.error(e); }
     };
 
-    window.rtrlApp.loadLocation = (id) => {
-        if (window.rtrlApp.state.isDirty && !confirm("Discard unsaved changes?")) return;
+    window.rtrlApp.loadLocation = async (id) => {
+        if (window.rtrlApp.state.isDirty) {
+            const confirmed = await window.rtrlApp.confirmDiscard();
+            if (!confirmed) {
+                window.rtrlApp.renderZoneList();
+                return;
+            }
+        }
+        
         const loc = window.rtrlApp.state.locations.find(l => l.id === id);
         if (!loc) return;
         
@@ -663,6 +691,17 @@ document.addEventListener("DOMContentLoaded", () => {
       if (!savedId) { window.rtrlApp.setLocationDirty(true); }
     };
 
+    window.rtrlApp.clearAllPins = () => {
+        window.rtrlApp.state.anchors.forEach(a => {
+            if(a.marker) window.rtrlApp.map.removeLayer(a.marker);
+            if(a.circle) window.rtrlApp.map.removeLayer(a.circle);
+        });
+        window.rtrlApp.state.anchors = [];
+        window.rtrlApp.state.activeLocationId = null;
+        window.rtrlApp.state.isDirty = false;
+        window.rtrlApp.renderZoneList();
+    };
+
     function renderZoneList() {
       const list = document.getElementById('zone-list');
       if (!list) return;
@@ -683,7 +722,7 @@ document.addEventListener("DOMContentLoaded", () => {
             <div class="loc-status-row">
                 <i class="fas ${statusIcon} ${isDirty && activeId ? 'fa-spin' : ''}"></i>
                 <span class="loc-name-display">${statusLabel}</span>
-                ${activeId ? `<button onclick="window.rtrlApp.state.activeLocationId=null; window.rtrlApp.renderZoneList();" class="btn-unload" title="Unload">&times;</button>` : ''}
+                ${activeId || window.rtrlApp.state.anchors.length > 0 ? `<button onclick="window.rtrlApp.clearAllPins()" class="btn-unload" title="Clear Map">&times;</button>` : ''}
             </div>
             <div class="loc-controls">
                 <select id="location-preset-dropdown" class="loc-select">
@@ -719,6 +758,7 @@ document.addEventListener("DOMContentLoaded", () => {
       });
       updateMapPreviewText();
     }
+
 
     window.rtrlApp.updateRadius = (id, val) => {
         const a = window.rtrlApp.state.anchors.find(x => x.id == id);
