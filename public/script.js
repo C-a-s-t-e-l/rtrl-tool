@@ -887,6 +887,7 @@ let areaKey = "";
       
       const originalText = elements.startButton.innerHTML; elements.startButton.innerHTML = '<i class="fas fa-check"></i> Added to Queue!'; elements.startButton.style.backgroundColor = "#10b981"; elements.startButton.disabled = true;
       setTimeout(() => {
+        elements.locationInput.value = "";
         elements.startButton.innerHTML = originalText; elements.startButton.style.backgroundColor = ""; elements.startButton.disabled = false; elements.locationInput.value = ""; elements.businessNamesInput.value = ""; window.rtrlApp.postalCodes = []; window.rtrlApp.customKeywords = []; activeSelections = []; updateSelectionPills(); renderExplorer(); document.querySelectorAll(".tag").forEach(t => t.remove()); if (typeof window.rtrlApp.setRadiusInputsState === 'function') window.rtrlApp.setRadiusInputsState(true);
       }, 2000);
     };
@@ -907,6 +908,8 @@ let areaKey = "";
   initializeMainApp();
 
   window.rtrlApp.cloneJobIntoForm = (p) => {
+    window.rtrlApp.state.activeLocationId = null;
+    window.rtrlApp.state.isDirty = false;
     const el = { primaryCat: document.getElementById("primaryCategorySelect"), customCat: document.getElementById("customCategoryInput"), location: document.getElementById("locationInput"), country: document.getElementById("countryInput"), count: document.getElementById("count"), findAll: document.getElementById("findAllBusinesses"), names: document.getElementById("businessNamesInput"), aiToggle: document.getElementById("useAiToggle"), };
     if (window.rtrlApp.state.anchors && window.rtrlApp.state.anchors.length > 0) { window.rtrlApp.state.anchors.forEach(a => { if (a.marker) window.rtrlApp.map.removeLayer(a.marker); if (a.circle) window.rtrlApp.map.removeLayer(a.circle); }); }
     window.rtrlApp.state.anchors = []; window.rtrlApp.postalCodes = []; window.rtrlApp.customKeywords = [];
