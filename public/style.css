@@ -1043,3 +1043,43 @@ input:checked + .slider:before {
     gap: 1rem;
   }
 }
+
+/* Territory Manager Styling */
+.territory-manager-section {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    box-shadow: 0 4px 6px -2px rgba(0,0,0,0.05);
+}
+
+.territory-manager-section .limit-select {
+    width: 100%;
+    border-radius: 8px;
+    border: 1px solid #cbd5e1;
+    font-size: 0.85rem;
+    padding: 8px 12px;
+}
+
+.territory-manager-section .btn-secondary {
+    font-weight: 700;
+    padding: 8px 4px;
+    border-radius: 6px;
+    transition: all 0.2s;
+    cursor: pointer;
+}
+
+.territory-manager-section .btn-secondary:hover {
+    transform: translateY(-1px);
+    filter: brightness(0.95);
+}
+
+/* Ensure the zone list header looks right when territories aren't injected */
+.zone-list-header-label {
+    padding: 1.25rem 1rem 0.75rem;
+    font-weight: 800;
+    font-size: 0.7rem;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    background: #f8fafc;
+}

@@ -792,6 +792,92 @@ app.delete("/api/postcode-lists/:id", async (req, res) => {
     }
 });
 
+// --- SAVED TERRITORIES API ---
+
+app.get("/api/territories", async (req, res) => {
+    try {
+        const authHeader = req.headers.authorization;
+        const token = authHeader.split(' ')[1];
+        const { data: { user }, error: userError } = await supabase.auth.getUser(token);
+        if (userError || !user) return res.status(401).json({ error: 'Auth failed' });
+
+        const { data, error } = await supabase
+            .from('saved_territories')
+            .select('*')
+            .eq('user_id', user.id)
+            .order('updated_at', { ascending: false });
+
+        if (error) throw error;
+        res.json(data || []);
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to fetch territories' });
+    }
+});
+
+app.post("/api/territories", async (req, res) => {
+    try {
+        const authHeader = req.headers.authorization;
+        const token = authHeader.split(' ')[1];
+        const { data: { user }, error: userError } = await supabase.auth.getUser(token);
+        if (userError || !user) return res.status(401).json({ error: 'Auth failed' });
+
+        const { name, zone_data } = req.body;
+        const { data, error } = await supabase
+            .from('saved_territories')
+            .insert({ user_id: user.id, name, zone_data })
+            .select()
+            .single();
+
+        if (error) throw error;
+        res.status(201).json(data);
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to save territory' });
+    }
+});
+
+app.put("/api/territories/:id", async (req, res) => {
+    try {
+        const authHeader = req.headers.authorization;
+        const token = authHeader.split(' ')[1];
+        const { data: { user }, error: userError } = await supabase.auth.getUser(token);
+        if (userError || !user) return res.status(401).json({ error: 'Auth failed' });
+
+        const { name, zone_data } = req.body;
+        const { data, error } = await supabase
+            .from('saved_territories')
+            .update({ name, zone_data, updated_at: new Date() })
+            .eq('id', req.params.id)
+            .eq('user_id', user.id)
+            .select()
+            .single();
+
+        if (error) throw error;
+        res.json(data);
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to update territory' });
+    }
+});
+
+app.delete("/api/territories/:id", async (req, res) => {
+    try {
+        const authHeader = req.headers.authorization;
+        const token = authHeader.split(' ')[1];
+        const { data: { user }, error: userError } = await supabase.auth.getUser(token);
+        if (userError || !user) return res.status(401).json({ error: 'Auth failed' });
+
+        const { error } = await supabase
+            .from('saved_territories')
+            .delete()
+            .eq('id', req.params.id)
+            .eq('user_id', user.id);
+
+        if (error) throw error;
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to delete territory' });
+    }
+});
+
 app.get("/api/jobs/:jobId/download/:fileType", async (req, res) => {
     try {
         const { jobId, fileType } = req.params;
