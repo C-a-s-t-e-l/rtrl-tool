@@ -865,16 +865,22 @@ window.rtrlApp.deleteLocation = async (id) => {
       
       if (multiPoints.length > 0) { p.multiRadiusPoints = multiPoints; p.anchorPoint = null; } else { p.location = elements.locationInput.value.trim(); p.postalCode = window.rtrlApp.postalCodes; }
       
-      let areaKey = ""; 
+let areaKey = ""; 
       if (window.rtrlApp.state.anchors.length > 0) {
-        const activeId = window.rtrlApp.state.activeLocationId;
-        const locationObj = window.rtrlApp.state.locations.find(l => l.id === activeId);
-        if (locationObj) { areaKey = locationObj.name; } 
-        else {
-          const names = window.rtrlApp.state.anchors.map(a => a.name.split(',')[0].trim());
-          if (names.length === 1) areaKey = names[0]; else if (names.length === 2) areaKey = `${names[0]} and ${names[1]}`; else areaKey = `${names[0]} and ${names.length - 1} others`;
-        }
-      } else if (window.rtrlApp.postalCodes.length > 0) { areaKey = window.rtrlApp.postalCodes.join("_"); } else { areaKey = elements.locationInput.value.split(",")[0]; }
+          areaKey = window.rtrlApp.state.anchors
+              .map(a => `${a.name.split(',')[0].trim()} (${a.radius}km)`)
+              .join(', ');
+          
+          const activeId = window.rtrlApp.state.activeLocationId;
+          const locationObj = window.rtrlApp.state.locations.find(l => l.id === activeId);
+          if (locationObj) {
+              areaKey = `${locationObj.name}: ${areaKey}`;
+          }
+      } else if (window.rtrlApp.postalCodes.length > 0) { 
+          areaKey = `Postcodes: ${window.rtrlApp.postalCodes.join(", ")}`; 
+      } else { 
+          areaKey = elements.locationInput.value.split(",")[0]; 
+      } if (areaKey.length > 100) areaKey = areaKey.substring(0, 97) + "...";
       
       p.searchParamsForEmail = { primaryCategory: selectedIndustry || "Custom Search", subCategory: activeSelections.length > 1 ? "multiple_categories" : (activeSelections[0]?.label || ""), subCategoryList: activeSelections.map(s => s.label), customCategory: window.rtrlApp.customKeywords.length > 0 ? window.rtrlApp.customKeywords.join(", ") : modifier, area: areaKey, postcodes: window.rtrlApp.postalCodes, country: elements.countryInput.value, };
       socket.emit("start_scrape_job", { authToken: currentUserSession.access_token, clientLocalDate: `${localToday.getFullYear()}-${String(localToday.getMonth() + 1).padStart(2, "0")}-${String(localToday.getDate()).padStart(2, "0")}`, ...p, });
