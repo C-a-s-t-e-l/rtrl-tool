@@ -10,6 +10,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
   let currentUserSession = null;
   let currentJobId = null;
+  let lastAuthenticatedSocketId = null;
+  let lastAuthenticatedToken = null;
 
   window.rtrlApp = {
     ...window.rtrlApp,
@@ -557,21 +559,47 @@ window.rtrlApp.deleteLocation = async (id) => {
 
     elements.logoutButton?.addEventListener("click", async (e) => { e.preventDefault(); await supabaseClient.auth.signOut(); window.location.reload(); });
 
-    supabaseClient.auth.onAuthStateChange(async (event, session) => {
+supabaseClient.auth.onAuthStateChange(async (event, session) => {
       currentUserSession = session;
       if (session) {
-        if (socket.connected) socket.emit("authenticate_socket", session.access_token);
-        elements.loginOverlay.style.display = "none"; elements.appContent.style.display = "block"; elements.userMenu.style.display = "block";
-        elements.userInfoSpan.textContent = session.user.user_metadata.full_name || "User"; elements.userEmailDisplay.textContent = session.user.email;
+        const currentSocketId = socket.id;
+        const currentToken = session.access_token;
+
+        if (socket.connected && (currentSocketId !== lastAuthenticatedSocketId || currentToken !== lastAuthenticatedToken)) {
+            socket.emit("authenticate_socket", currentToken);
+            lastAuthenticatedSocketId = currentSocketId;
+            lastAuthenticatedToken = currentToken;
+        }
+
+        elements.loginOverlay.style.display = "none"; 
+        elements.appContent.style.display = "block"; 
+        elements.userMenu.style.display = "block";
+        elements.userInfoSpan.textContent = session.user.user_metadata.full_name || "User"; 
+        elements.userEmailDisplay.textContent = session.user.email;
+        
         refreshUsageTracker();
-        supabaseClient.from("profiles").select("role").eq("id", session.user.id).single().then(({ data: profile }) => { if (profile?.role === "admin") document.getElementById("admin-control-link").style.display = "flex"; });
+        
+        supabaseClient.from("profiles").select("role").eq("id", session.user.id).single().then(({ data: profile }) => { 
+            if (profile?.role === "admin") document.getElementById("admin-control-link").style.display = "flex"; 
+        });
+
         if (elements.userEmailInput.value === "") elements.userEmailInput.value = session.user.email;
+        
         fetchPostcodeLists();
         window.rtrlApp.fetchLocations(); 
         window.rtrlApp.jobHistory.fetchAndRenderJobs();
-        fetch(`${BACKEND_URL}/api/exclusions`, { headers: { Authorization: `Bearer ${session.access_token}` } }).then((res) => (res.ok ? res.json() : null)).then((data) => { if (data) window.rtrlApp.exclusionFeature.populateTags(data.exclusionList); });
+
+        fetch(`${BACKEND_URL}/api/exclusions`, { headers: { Authorization: `Bearer ${session.access_token}` } })
+            .then((res) => (res.ok ? res.json() : null))
+            .then((data) => { 
+                if (data) window.rtrlApp.exclusionFeature.populateTags(data.exclusionList); 
+            });
       } else {
-        elements.loginOverlay.style.display = "flex"; elements.appContent.style.display = "none"; elements.userMenu.style.display = "none";
+        elements.loginOverlay.style.display = "flex"; 
+        elements.appContent.style.display = "none"; 
+        elements.userMenu.style.display = "none";
+        lastAuthenticatedSocketId = null;
+        lastAuthenticatedToken = null;
       }
     });
 

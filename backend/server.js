@@ -475,8 +475,8 @@ io.on("connection", (socket) => {
   const connectTime = new Date().toLocaleString('en-AU', { timeZone: 'Australia/Sydney' });
   console.log(`[${connectTime}] [Socket] New connection established: ${socket.id}`);
 
-  socket.on("authenticate_socket", async (authToken) => {
-    if (!authToken) return;
+socket.on("authenticate_socket", async (authToken) => {
+    if (!authToken || socket.user) return;
     try {
       const { data: { user }, error } = await supabase.auth.getUser(authToken);
       if (user && !error) {
