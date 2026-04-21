@@ -175,16 +175,29 @@ document.addEventListener("DOMContentLoaded", () => {
         } catch (e) { window.rtrlApp.showToast("Server error", "error"); }
     };
 
-    window.rtrlApp.deleteLocation = async (id) => {
-        if (!confirm("Delete this saved location?")) return;
+window.rtrlApp.deleteLocation = async (id) => {
+        const loc = window.rtrlApp.state.locations.find(l => l.id === id);
+        if (!loc) return;
+
+        const confirmed = await window.rtrlApp.confirmDelete(loc.name);
+        if (!confirmed) return;
+
         try {
-            const res = await fetch(`${BACKEND_URL}/api/territories/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${currentUserSession.access_token}` } });
+            const res = await fetch(`${BACKEND_URL}/api/territories/${id}`, { 
+                method: 'DELETE', 
+                headers: { Authorization: `Bearer ${currentUserSession.access_token}` } 
+            });
             if (res.ok) {
-                if (window.rtrlApp.state.activeLocationId === id) window.rtrlApp.state.activeLocationId = null;
+                if (window.rtrlApp.state.activeLocationId === id) {
+                    window.rtrlApp.state.activeLocationId = null;
+                    window.rtrlApp.state.isDirty = false;
+                }
                 await window.rtrlApp.fetchLocations();
-                window.rtrlApp.showToast("Location deleted");
+                window.rtrlApp.showToast("Location deleted permanently");
             }
-        } catch (e) { console.error(e); }
+        } catch (e) { 
+            window.rtrlApp.showToast("Failed to delete", "error");
+        }
     };
 
     async function fetchCategoryDefinitions() {
@@ -276,6 +289,27 @@ document.addEventListener("DOMContentLoaded", () => {
       items.forEach(item => { if (!activeSelections.some(s => s.id === item.id)) { activeSelections.push({ id: item.id, label: item.label, terms: item.search_terms }); } });
       updateSelectionPills();
       renderExplorer(document.getElementById('categorySearchInput')?.value || "");
+    };
+
+    window.rtrlApp.confirmDelete = (name) => {
+        return new Promise((resolve) => {
+            const modal = document.createElement('div');
+            modal.className = 'rtrl-modal-overlay';
+            modal.style.zIndex = "110003"; // Top layer
+            modal.innerHTML = `
+                <div class="rtrl-modal-window" style="text-align:center;">
+                    <div style="color: #ef4444; font-size: 2rem; margin-bottom: 1rem;"><i class="fas fa-trash-alt"></i></div>
+                    <h3>Delete Location?</h3>
+                    <p>Are you sure you want to permanently delete <b>"${name}"</b>? This action cannot be undone.</p>
+                    <div class="rtrl-modal-actions" style="justify-content: center; margin-top: 20px;">
+                        <button class="btn btn-secondary" id="delete-no" style="margin:0">Cancel</button>
+                        <button class="btn btn-primary" id="delete-yes" style="margin:0; width:auto; background:#ef4444;">Delete Permanently</button>
+                    </div>
+                </div>`;
+            document.body.appendChild(modal);
+            modal.querySelector('#delete-no').onclick = () => { modal.remove(); resolve(false); };
+            modal.querySelector('#delete-yes').onclick = () => { modal.remove(); resolve(true); };
+        });
     };
 
     async function refreshUsageTracker() {
@@ -725,10 +759,19 @@ document.addEventListener("DOMContentLoaded", () => {
                 ${activeId || window.rtrlApp.state.anchors.length > 0 ? `<button onclick="window.rtrlApp.clearAllPins()" class="btn-unload" title="Clear Map">&times;</button>` : ''}
             </div>
             <div class="loc-controls">
-                <select id="location-preset-dropdown" class="loc-select">
-                    <option value="">-- Load Saved Location --</option>
-                    ${window.rtrlApp.state.locations.map(l => `<option value="${l.id}" ${activeId === l.id ? 'selected' : ''}>${l.name}</option>`).join('')}
-                </select>
+                <div style="display: flex; gap: 8px; margin-bottom: 10px;">
+                    <select id="location-preset-dropdown" class="loc-select" style="margin-bottom:0; flex:1;">
+                        <option value="">-- Load Saved Location --</option>
+                        ${window.rtrlApp.state.locations.map(l => `<option value="${l.id}" ${activeId === l.id ? 'selected' : ''}>${l.name}</option>`).join('')}
+                    </select>
+                    
+                    ${activeId ? `
+                        <button onclick="window.rtrlApp.deleteLocation('${activeId}')" class="zone-delete-btn" style="height: 34px; width: 34px; background: #fee2e2; border-radius: 6px; flex-shrink:0; display:flex; align-items:center; justify-content:center; color:#ef4444; border:none; cursor:pointer;" title="Delete Preset Permanently">
+                            <i class="fas fa-trash-alt"></i>
+                        </button>
+                    ` : ''}
+                </div>
+                
                 <div class="loc-action-btns" style="display:flex; gap:8px;">
                     <button onclick="window.rtrlApp.saveLocation(false)" class="btn-save-new" style="flex:1">Save New</button>
                     ${activeId && isDirty ? `<button onclick="window.rtrlApp.saveLocation(true)" class="btn-update" style="flex:1">Update '${activeLoc.name}'</button>` : ''}
