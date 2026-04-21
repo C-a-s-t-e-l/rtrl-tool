@@ -18,8 +18,9 @@ document.addEventListener("DOMContentLoaded", () => {
       currentSearchParameters: {},
       googleMapsService: null,
       googleMapsGeocoder: null,
-      activeTerritoryId: null, // Tracks if we have a saved territory loaded
-      territories: []          // Local cache of user's saved territories
+      activeLocationId: null, 
+      isDirty: false,          
+      locations: []           
     },
     timers: {},
     postalCodes: [],
@@ -52,120 +53,115 @@ document.addEventListener("DOMContentLoaded", () => {
       { value: "PH", text: "Philippines" },
     ];
 
-    // --- NEW TERRITORY MANAGEMENT FUNCTIONS ---
+    // --- LOCATION UI HELPERS ---
+    window.rtrlApp.showToast = (msg, type = 'success') => {
+        const toast = document.createElement('div');
+        toast.className = `rtrl-toast toast-${type}`;
+        toast.innerHTML = `<i class="fas ${type==='success'?'fa-check-circle':'fa-exclamation-circle'}"></i><span>${msg}</span>`;
+        document.body.appendChild(toast);
+        setTimeout(() => toast.classList.add('visible'), 100);
+        setTimeout(() => { toast.classList.remove('visible'); setTimeout(() => toast.remove(), 300); }, 3000);
+    };
 
-    window.rtrlApp.fetchTerritories = async () => {
-      if (!currentUserSession) return;
-      try {
-        const response = await fetch(`${BACKEND_URL}/api/territories`, {
-          headers: { Authorization: `Bearer ${currentUserSession.access_token}` }
+    window.rtrlApp.promptLocationName = (currentName = "") => {
+        return new Promise((resolve) => {
+            const modal = document.createElement('div');
+            modal.className = 'rtrl-modal-overlay';
+            modal.innerHTML = `
+                <div class="rtrl-modal-window">
+                    <h3><i class="fas fa-map-marker-alt"></i> Save Search Location</h3>
+                    <p>Give this collection of pins a name for future searches.</p>
+                    <input type="text" id="loc-name-input" placeholder="e.g. Albury_Wodonga" value="${currentName}">
+                    <div class="rtrl-modal-actions">
+                        <button class="btn-ghost" id="modal-cancel-btn">Cancel</button>
+                        <button class="btn-primary-blue" id="modal-save-btn">Save Location</button>
+                    </div>
+                </div>`;
+            document.body.appendChild(modal);
+            const input = modal.querySelector('#loc-name-input');
+            input.focus();
+            modal.querySelector('#modal-cancel-btn').onclick = () => { modal.remove(); resolve(null); };
+            modal.querySelector('#modal-save-btn').onclick = () => { const val = input.value.trim(); modal.remove(); resolve(val || null); };
         });
-        if (response.ok) {
-          window.rtrlApp.state.territories = await response.json();
-          window.rtrlApp.renderZoneList(); // Refresh the sidebar UI
-        }
-      } catch (e) {
-        console.error("Failed to fetch territories", e);
-      }
     };
 
-    window.rtrlApp.saveTerritory = async (isUpdate = false) => {
-      if (!currentUserSession) return;
-      if (window.rtrlApp.state.anchors.length === 0) return alert("Add some zones to the map first.");
+    // --- CORE LOCATION LOGIC ---
+    window.rtrlApp.setLocationDirty = (val) => {
+        window.rtrlApp.state.isDirty = val;
+        window.rtrlApp.renderZoneList(); 
+    };
 
-      let name = "";
-      if (isUpdate && window.rtrlApp.state.activeTerritoryId) {
-        const current = window.rtrlApp.state.territories.find(t => t.id === window.rtrlApp.state.activeTerritoryId);
-        name = current.name;
-      } else {
-        name = prompt("Enter a name for this territory (e.g. Albury_Wodonga):");
-        if (!name) return;
-      }
+    window.rtrlApp.fetchLocations = async () => {
+        if (!currentUserSession) return;
+        try {
+            const response = await fetch(`${BACKEND_URL}/api/territories`, { headers: { Authorization: `Bearer ${currentUserSession.access_token}` } });
+            if (response.ok) { 
+                window.rtrlApp.state.locations = await response.json(); 
+                window.rtrlApp.renderZoneList(); 
+            }
+        } catch (e) { console.error(e); }
+    };
 
-      const zoneData = window.rtrlApp.state.anchors.map(a => ({
-        lat: a.lat,
-        lng: a.lng,
-        radius: a.radius,
-        name: a.name
-      }));
+    window.rtrlApp.loadLocation = (id) => {
+        if (window.rtrlApp.state.isDirty && !confirm("Discard unsaved changes?")) return;
+        const loc = window.rtrlApp.state.locations.find(l => l.id === id);
+        if (!loc) return;
+        
+        window.rtrlApp.state.anchors.forEach(a => { 
+            if(a.marker) window.rtrlApp.map.removeLayer(a.marker); 
+            if(a.circle) window.rtrlApp.map.removeLayer(a.circle); 
+        });
+        window.rtrlApp.state.anchors = [];
 
-      const method = isUpdate ? 'PUT' : 'POST';
-      const url = isUpdate 
-        ? `${BACKEND_URL}/api/territories/${window.rtrlApp.state.activeTerritoryId}` 
-        : `${BACKEND_URL}/api/territories`;
-
-      try {
-        const response = await fetch(url, {
-          method: method,
-          headers: { 
-            "Content-Type": "application/json", 
-            Authorization: `Bearer ${currentUserSession.access_token}` 
-          },
-          body: JSON.stringify({ name, zone_data: zoneData }),
+        loc.zone_data.forEach(z => { 
+            window.rtrlApp.addAnchor({ lat: z.lat, lng: z.lng }, z.name, z.radius, Date.now() + Math.random()); 
         });
 
-        if (response.ok) {
-          const result = await response.json();
-          if (!isUpdate) window.rtrlApp.state.activeTerritoryId = result.id;
-          await window.rtrlApp.fetchTerritories();
-          alert(isUpdate ? "Territory updated!" : "Territory saved!");
+        window.rtrlApp.state.activeLocationId = id;
+        window.rtrlApp.state.isDirty = false;
+        window.rtrlApp.renderZoneList();
+        window.rtrlApp.showToast(`Loaded: ${loc.name}`);
+    };
+
+    window.rtrlApp.saveLocation = async (isUpdate = false) => {
+        if (window.rtrlApp.state.anchors.length === 0) return window.rtrlApp.showToast("Add some pins first!", "error");
+        let name = "";
+        if (isUpdate && window.rtrlApp.state.activeLocationId) {
+            name = window.rtrlApp.state.locations.find(l => l.id === window.rtrlApp.state.activeLocationId).name;
+        } else {
+            name = await window.rtrlApp.promptLocationName();
+            if (!name) return;
         }
-      } catch (e) {
-        alert("Failed to save territory.");
-      }
+        const zoneData = window.rtrlApp.state.anchors.map(a => ({ lat: a.lat, lng: a.lng, radius: a.radius, name: a.name }));
+        const method = isUpdate ? 'PUT' : 'POST';
+        const url = isUpdate ? `${BACKEND_URL}/api/territories/${window.rtrlApp.state.activeLocationId}` : `${BACKEND_URL}/api/territories`;
+        try {
+            const res = await fetch(url, { method, headers: { "Content-Type": "application/json", Authorization: `Bearer ${currentUserSession.access_token}` }, body: JSON.stringify({ name, zone_data: zoneData }) });
+            if (res.ok) {
+                const result = await res.json();
+                if (!isUpdate) window.rtrlApp.state.activeLocationId = result.id;
+                window.rtrlApp.state.isDirty = false;
+                await window.rtrlApp.fetchLocations();
+                window.rtrlApp.showToast(isUpdate ? "Location updated" : "Location saved");
+            }
+        } catch (e) { window.rtrlApp.showToast("Server error", "error"); }
     };
 
-    window.rtrlApp.loadTerritory = (id) => {
-      const territory = window.rtrlApp.state.territories.find(t => t.id === id);
-      if (!territory) return;
-
-      // Clear existing map layers
-      window.rtrlApp.state.anchors.forEach(a => {
-        window.rtrlApp.map.removeLayer(a.marker);
-        window.rtrlApp.map.removeLayer(a.circle);
-      });
-      window.rtrlApp.state.anchors = [];
-
-      // Load saved zones
-      territory.zone_data.forEach(z => {
-        window.rtrlApp.addAnchor({ lat: z.lat, lng: z.lng }, z.name, z.radius, Date.now() + Math.random());
-      });
-
-      window.rtrlApp.state.activeTerritoryId = id;
-      window.rtrlApp.renderZoneList();
-
-      // Fit bounds
-      if (window.rtrlApp.state.anchors.length > 0) {
-        const group = new L.featureGroup(window.rtrlApp.state.anchors.map(a => a.circle));
-        window.rtrlApp.map.fitBounds(group.getBounds().pad(0.1));
-      }
+    window.rtrlApp.deleteLocation = async (id) => {
+        if (!confirm("Delete this saved location?")) return;
+        try {
+            const res = await fetch(`${BACKEND_URL}/api/territories/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${currentUserSession.access_token}` } });
+            if (res.ok) {
+                if (window.rtrlApp.state.activeLocationId === id) window.rtrlApp.state.activeLocationId = null;
+                await window.rtrlApp.fetchLocations();
+                window.rtrlApp.showToast("Location deleted");
+            }
+        } catch (e) { console.error(e); }
     };
-
-    window.rtrlApp.deleteTerritory = async (id) => {
-      if (!confirm("Are you sure you want to delete this saved territory?")) return;
-      try {
-        const response = await fetch(`${BACKEND_URL}/api/territories/${id}`, {
-          method: 'DELETE',
-          headers: { Authorization: `Bearer ${currentUserSession.access_token}` }
-        });
-        if (response.ok) {
-          if (window.rtrlApp.state.activeTerritoryId === id) window.rtrlApp.state.activeTerritoryId = null;
-          await window.rtrlApp.fetchTerritories();
-        }
-      } catch (e) {
-        console.error("Delete failed", e);
-      }
-    };
-
-    // --- END NEW TERRITORY FUNCTIONS ---
 
     async function fetchCategoryDefinitions() {
       try {
-        const { data, error } = await supabaseClient
-          .from('category_definitions')
-          .select('*')
-          .order('group_name', { ascending: true });
-
+        const { data, error } = await supabaseClient.from('category_definitions').select('*').order('group_name', { ascending: true });
         if (error) throw error;
         masterCategoryData = data;
         categoryHierarchy = data.reduce((acc, row) => {
@@ -176,10 +172,7 @@ document.addEventListener("DOMContentLoaded", () => {
           return acc;
         }, {});
         return Object.keys(categoryHierarchy);
-      } catch (err) {
-        console.error("Error loading categories:", err);
-        return [];
-      }
+      } catch (err) { console.error("Error loading categories:", err); return []; }
     }
 
     function renderIndustryPills(industries) {
@@ -191,10 +184,7 @@ document.addEventListener("DOMContentLoaded", () => {
           selectedIndustry = pill.dataset.industry;
           container.querySelectorAll('.industry-pill').forEach(p => p.classList.remove('active'));
           pill.classList.add('active');
-          clearCustomKeywords();
-          activeSelections = [];
-          renderExplorer();
-          updateSelectionPills();
+          clearCustomKeywords(); activeSelections = []; renderExplorer(); updateSelectionPills();
         };
       });
       if (industries.length > 0) container.querySelector('.industry-pill').click();
@@ -362,9 +352,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (elements.customCategoryInput) {
       elements.customCategoryInput.addEventListener('input', () => {
         if (elements.customCategoryInput.value.trim() !== "" && activeSelections.length > 0) {
-          activeSelections = [];
-          updateSelectionPills();
-          renderExplorer();
+          activeSelections = []; updateSelectionPills(); renderExplorer();
         }
       });
     }
@@ -517,7 +505,7 @@ document.addEventListener("DOMContentLoaded", () => {
         supabaseClient.from("profiles").select("role").eq("id", session.user.id).single().then(({ data: profile }) => { if (profile?.role === "admin") document.getElementById("admin-control-link").style.display = "flex"; });
         if (elements.userEmailInput.value === "") elements.userEmailInput.value = session.user.email;
         fetchPostcodeLists();
-        window.rtrlApp.fetchTerritories(); // Fetch territories on login
+        window.rtrlApp.fetchLocations(); 
         window.rtrlApp.jobHistory.fetchAndRenderJobs();
         fetch(`${BACKEND_URL}/api/exclusions`, { headers: { Authorization: `Bearer ${session.access_token}` } }).then((res) => (res.ok ? res.json() : null)).then((data) => { if (data) window.rtrlApp.exclusionFeature.populateTags(data.exclusionList); });
       } else {
@@ -612,8 +600,8 @@ document.addEventListener("DOMContentLoaded", () => {
     window.rtrlApp.setRadiusInputsState = (d) => {
       if (elements.btnOpenMapWorkspace) elements.btnOpenMapWorkspace.disabled = d;
       if (d) {
-        window.rtrlApp.state.anchors.forEach(a => { if (window.rtrlApp.map) { window.rtrlApp.map.removeLayer(a.marker); window.rtrlApp.map.removeLayer(a.circle); } });
-        window.rtrlApp.state.anchors = []; window.rtrlApp.state.activeTerritoryId = null;
+        window.rtrlApp.state.anchors.forEach(a => { if (window.rtrlApp.map && a.marker && a.circle) { window.rtrlApp.map.removeLayer(a.marker); window.rtrlApp.map.removeLayer(a.circle); } });
+        window.rtrlApp.state.anchors = []; window.rtrlApp.state.activeLocationId = null;
         updateMapPreviewText(); renderZoneList();
       }
     };
@@ -653,6 +641,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const circle = L.circle(latlng, { radius: radius * 1000, color: "#3b82f6", weight: 2, fillColor: "#3b82f6", fillOpacity: 0.15 }).addTo(window.rtrlApp.map);
       const anchor = { id, marker, circle, radius: radius, name, lat: latlng.lat, lng: latlng.lng };
       window.rtrlApp.state.anchors.push(anchor);
+      
       marker.on('drag', (e) => { const pos = e.target.getLatLng(); circle.setLatLng(pos); anchor.lat = pos.lat; anchor.lng = pos.lng; });
       marker.on('dragend', async (e) => {
         const pos = e.target.getLatLng();
@@ -661,96 +650,93 @@ document.addEventListener("DOMContentLoaded", () => {
             const results = await new Promise((resolve, reject) => { window.rtrlApp.state.googleMapsGeocoder.geocode({ location: pos }, (res, status) => { if (status === "OK" && res[0]) resolve(res); else reject(status); }); });
             let locality = results[0].address_components.find(c => c.types.includes("locality"));
             if (locality) anchor.name = locality.long_name; else anchor.name = results[0].formatted_address.split(',')[0];
-            renderZoneList();
           } catch (err) { }
         }
+        window.rtrlApp.setLocationDirty(true);
       });
-      renderZoneList();
+      
+      window.rtrlApp.renderZoneList();
+      
       if (window.rtrlApp.state.anchors.length === 1 && !savedId) { window.rtrlApp.map.setView(latlng, 12); }
       else if (!savedId) { const group = new L.featureGroup(window.rtrlApp.state.anchors.map(a => a.circle)); window.rtrlApp.map.fitBounds(group.getBounds().pad(0.1)); }
+      
+      if (!savedId) { window.rtrlApp.setLocationDirty(true); }
     };
 
     function renderZoneList() {
       const list = document.getElementById('zone-list');
       if (!list) return;
 
-      // 1. Territory Management Header (UI Injected into the sidebar)
-      let territoryHtml = `
-          <div class="territory-manager-section" style="padding: 1rem; background: #fff; border-bottom: 2px solid #e2e8f0; margin-bottom: 1rem;">
-              <label style="font-weight: 800; font-size: 0.7rem; color: #64748b; text-transform: uppercase; margin-bottom: 8px; display: block;">Saved Territories</label>
-              <div style="display: flex; gap: 8px; margin-bottom: 12px;">
-                  <select id="territory-select" class="limit-select" style="flex: 1; min-width: 0; background-color: #f8fafc;">
-                      <option value="">-- Load a Territory --</option>
-                      ${window.rtrlApp.state.territories.map(t => `<option value="${t.id}" ${window.rtrlApp.state.activeTerritoryId === t.id ? 'selected' : ''}>${t.name}</option>`).join('')}
-                  </select>
-                  ${window.rtrlApp.state.activeTerritoryId ? `
-                      <button onclick="window.rtrlApp.deleteTerritory('${window.rtrlApp.state.activeTerritoryId}')" class="zone-delete-btn" style="flex-shrink:0;"><i class="fas fa-trash-alt"></i></button>
-                  ` : ''}
-              </div>
-              <div style="display: flex; gap: 8px;">
-                  <button onclick="window.rtrlApp.saveTerritory(false)" class="btn-secondary" style="flex: 1; font-size: 0.75rem; background: #f0fdf4; border-color: #bbf7d0; color: #166534;">Save New</button>
-                  ${window.rtrlApp.state.activeTerritoryId ? `
-                      <button onclick="window.rtrlApp.saveTerritory(true)" class="btn-secondary" style="flex: 1; font-size: 0.75rem; background: #eff6ff; border-color: #bfdbfe; color: #1e40af;">Update Existing</button>
-                  ` : ''}
-              </div>
-          </div>
+      const activeId = window.rtrlApp.state.activeLocationId;
+      const isDirty = window.rtrlApp.state.isDirty;
+      const activeLoc = window.rtrlApp.state.locations.find(l => l.id === activeId);
+
+      let statusClass = "state-draft", statusLabel = "New Search Layout", statusIcon = "fa-pencil-ruler";
+      if (activeId) {
+        statusClass = isDirty ? "state-modified" : "state-synced";
+        statusLabel = isDirty ? `${activeLoc.name}* (Modified)` : activeLoc.name;
+        statusIcon = isDirty ? "fa-sync-alt" : "fa-check-circle";
+      }
+
+      list.innerHTML = `
+        <div class="loc-manager-header ${statusClass}">
+            <div class="loc-status-row">
+                <i class="fas ${statusIcon} ${isDirty && activeId ? 'fa-spin' : ''}"></i>
+                <span class="loc-name-display">${statusLabel}</span>
+                ${activeId ? `<button onclick="window.rtrlApp.state.activeLocationId=null; window.rtrlApp.renderZoneList();" class="btn-unload" title="Unload">&times;</button>` : ''}
+            </div>
+            <div class="loc-controls">
+                <select id="location-preset-dropdown" class="loc-select">
+                    <option value="">-- Load Saved Location --</option>
+                    ${window.rtrlApp.state.locations.map(l => `<option value="${l.id}" ${activeId === l.id ? 'selected' : ''}>${l.name}</option>`).join('')}
+                </select>
+                <div class="loc-action-btns" style="display:flex; gap:8px;">
+                    <button onclick="window.rtrlApp.saveLocation(false)" class="btn-save-new" style="flex:1">Save New</button>
+                    ${activeId && isDirty ? `<button onclick="window.rtrlApp.saveLocation(true)" class="btn-update" style="flex:1">Update '${activeLoc.name}'</button>` : ''}
+                </div>
+            </div>
+        </div>
       `;
 
-      list.innerHTML = territoryHtml;
-
-      // Add event listener to the dropdown we just injected
       setTimeout(() => {
-          const sel = document.getElementById('territory-select');
-          if(sel) sel.onchange = (e) => { if(e.target.value) window.rtrlApp.loadTerritory(e.target.value); };
+          const sel = document.getElementById('location-preset-dropdown');
+          if(sel) sel.onchange = (e) => { if(e.target.value) window.rtrlApp.loadLocation(e.target.value); };
       }, 0);
 
-      // 2. Render standard Zone Cards
       window.rtrlApp.state.anchors.forEach(a => {
         const card = document.createElement('div');
         card.className = "zone-card";
         card.innerHTML = `
-              <div class="zone-card-header">
-                  <div class="zone-card-title-wrapper">
-                      <div class="zone-card-icon"><i class="fas fa-map-marker-alt"></i></div>
-                      <span class="zone-card-title" title="${a.name}">${a.name}</span>
-                  </div>
-                  <button class="zone-delete-btn" title="Remove Zone"><i class="fas fa-trash-alt"></i></button>
-              </div>
-              <div class="zone-slider-container">
-                  <input type="range" class="zone-slider-input" min="1" max="25" value="${a.radius}">
-                  <span class="zone-radius-display">${a.radius}km</span>
-              </div>
-          `;
-        card.querySelector('.zone-slider-input').oninput = (e) => {
-          const val = parseInt(e.target.value);
-          a.radius = val;
-          a.circle.setRadius(val * 1000);
-          card.querySelector('.zone-radius-display').textContent = val + "km";
-        };
-        card.querySelector('.zone-delete-btn').onclick = () => {
-          window.rtrlApp.map.removeLayer(a.marker);
-          window.rtrlApp.map.removeLayer(a.circle);
-          window.rtrlApp.state.anchors = window.rtrlApp.state.anchors.filter(x => x.id !== a.id);
-          renderZoneList();
-          updateMapPreviewText();
-        };
+            <div class="zone-card-header">
+                <span class="zone-card-title">${a.name}</span>
+                <button class="zone-delete-btn" onclick="window.rtrlApp.deleteZone('${a.id}')"><i class="fas fa-trash-alt"></i></button>
+            </div>
+            <div class="zone-slider-container">
+                <input type="range" class="zone-slider-input" min="1" max="25" value="${a.radius}" oninput="window.rtrlApp.updateRadius('${a.id}', this.value)">
+                <span class="zone-radius-display">${a.radius}km</span>
+            </div>`;
         list.appendChild(card);
       });
       updateMapPreviewText();
     }
 
+    window.rtrlApp.updateRadius = (id, val) => {
+        const a = window.rtrlApp.state.anchors.find(x => x.id == id);
+        if(a) { a.radius = parseInt(val); a.circle.setRadius(a.radius * 1000); window.rtrlApp.setLocationDirty(true); }
+    };
+
+    window.rtrlApp.deleteZone = (id) => {
+        const a = window.rtrlApp.state.anchors.find(x => x.id == id);
+        if(a) { window.rtrlApp.map.removeLayer(a.marker); window.rtrlApp.map.removeLayer(a.circle); window.rtrlApp.state.anchors = window.rtrlApp.state.anchors.filter(x => x.id != id); window.rtrlApp.setLocationDirty(true); }
+    };
+
     function updateMapPreviewText() {
       const txt = document.getElementById('map-preview-text');
       if (!txt) return;
-
-      const activeId = window.rtrlApp.state.activeTerritoryId;
-      const territory = window.rtrlApp.state.territories.find(t => t.id === activeId);
-      
-      if (territory) {
-          txt.innerHTML = `Target Area: <strong style="color: #3b82f6;">${territory.name}</strong> (${window.rtrlApp.state.anchors.length} zones active).`;
-      } else {
-          txt.textContent = `${window.rtrlApp.state.anchors.length} active search zone(s) defined.`;
-      }
+      const activeId = window.rtrlApp.state.activeLocationId;
+      const location = window.rtrlApp.state.locations.find(l => l.id === activeId);
+      if (location) { txt.innerHTML = `Target Area: <strong style="color: #3b82f6;">${location.name}</strong> (${window.rtrlApp.state.anchors.length} zones active).`; } 
+      else { txt.textContent = `${window.rtrlApp.state.anchors.length} active search zone(s) defined.`; }
     }
 
     window.rtrlApp.renderZoneList = renderZoneList;
@@ -787,21 +773,29 @@ document.addEventListener("DOMContentLoaded", () => {
       if (!hasBusinessDef && !hasLocationDef) { errorText.innerHTML = "You haven't defined <b>what</b> to search for or <b>where</b> to search. Please complete the highlighted sections."; expandAndHighlight("bulkSearchContainer"); expandAndHighlight("locationSearchContainer"); expandAndHighlight("radiusSearchContainer"); errorModal.style.display = "flex"; return; }
       if (!hasBusinessDef) { errorText.innerHTML = "Please specify a <b>Category</b> or enter <b>Business Names</b> so the system knows what to look for."; expandAndHighlight("bulkSearchContainer"); expandAndHighlight("individualSearchContainer"); errorModal.style.display = "flex"; return; }
       if (!hasLocationDef) { errorText.innerHTML = "The system needs a <b>Location</b>. Please provide a Suburb or define a Search Radius."; expandAndHighlight("locationSearchContainer"); expandAndHighlight("radiusSearchContainer"); errorModal.style.display = "flex"; return; }
+      
       let finalLoopList = []; const modifier = elements.categoryModifierInput.value.trim();
       if (businessNamesArr.length > 0) { finalLoopList = businessNamesArr; } else if (hasCustomKeywords) { finalLoopList = window.rtrlApp.customKeywords; } else { activeSelections.forEach(sel => { sel.terms.forEach(term => { finalLoopList.push(modifier ? `"${modifier}" ${term}` : term); }); }); }
+      
       const localToday = new Date(); const multiPoints = window.rtrlApp.state.anchors.map(a => ({ coords: `${a.lat},${a.lng}`, radius: a.radius, name: a.name }));
       const p = { country: elements.countryInput.value, businessNames: businessNamesArr, userEmail: elements.userEmailInput.value.trim(), exclusionList: window.rtrlApp.exclusionFeature.getExclusionList(), useAiEnrichment: elements.useAiToggle.checked, categoriesToLoop: finalLoopList, count: elements.findAllBusinessesCheckbox.checked || !elements.countInput.value.trim() ? -1 : parseInt(elements.countInput.value, 10) };
+      
       if (multiPoints.length > 0) { p.multiRadiusPoints = multiPoints; p.anchorPoint = null; } else { p.location = elements.locationInput.value.trim(); p.postalCode = window.rtrlApp.postalCodes; }
-      let areaKey = ""; if (window.rtrlApp.state.anchors.length > 0) {
-        const activeId = window.rtrlApp.state.activeTerritoryId;
-        const territory = window.rtrlApp.state.territories.find(t => t.id === activeId);
-        if (territory) { areaKey = territory.name; } else {
+      
+      let areaKey = ""; 
+      if (window.rtrlApp.state.anchors.length > 0) {
+        const activeId = window.rtrlApp.state.activeLocationId;
+        const locationObj = window.rtrlApp.state.locations.find(l => l.id === activeId);
+        if (locationObj) { areaKey = locationObj.name; } 
+        else {
           const names = window.rtrlApp.state.anchors.map(a => a.name.split(',')[0].trim());
           if (names.length === 1) areaKey = names[0]; else if (names.length === 2) areaKey = `${names[0]} and ${names[1]}`; else areaKey = `${names[0]} and ${names.length - 1} others`;
         }
       } else if (window.rtrlApp.postalCodes.length > 0) { areaKey = window.rtrlApp.postalCodes.join("_"); } else { areaKey = elements.locationInput.value.split(",")[0]; }
+      
       p.searchParamsForEmail = { primaryCategory: selectedIndustry || "Custom Search", subCategory: activeSelections.length > 1 ? "multiple_categories" : (activeSelections[0]?.label || ""), subCategoryList: activeSelections.map(s => s.label), customCategory: window.rtrlApp.customKeywords.length > 0 ? window.rtrlApp.customKeywords.join(", ") : modifier, area: areaKey, postcodes: window.rtrlApp.postalCodes, country: elements.countryInput.value, };
       socket.emit("start_scrape_job", { authToken: currentUserSession.access_token, clientLocalDate: `${localToday.getFullYear()}-${String(localToday.getMonth() + 1).padStart(2, "0")}-${String(localToday.getDate()).padStart(2, "0")}`, ...p, });
+      
       const originalText = elements.startButton.innerHTML; elements.startButton.innerHTML = '<i class="fas fa-check"></i> Added to Queue!'; elements.startButton.style.backgroundColor = "#10b981"; elements.startButton.disabled = true;
       setTimeout(() => {
         elements.startButton.innerHTML = originalText; elements.startButton.style.backgroundColor = ""; elements.startButton.disabled = false; elements.locationInput.value = ""; elements.businessNamesInput.value = ""; window.rtrlApp.postalCodes = []; window.rtrlApp.customKeywords = []; activeSelections = []; updateSelectionPills(); renderExplorer(); document.querySelectorAll(".tag").forEach(t => t.remove()); if (typeof window.rtrlApp.setRadiusInputsState === 'function') window.rtrlApp.setRadiusInputsState(true);
