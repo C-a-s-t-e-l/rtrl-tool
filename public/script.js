@@ -610,7 +610,7 @@ supabaseClient.auth.onAuthStateChange(async (event, session) => {
         const response = await fetch(`${BACKEND_URL}/api/postcode-lists`, { headers: { Authorization: `Bearer ${currentUserSession.access_token}` } });
         if (response.ok) {
           savedPostcodeLists = await response.json();
-          elements.postcodeListSelect.innerHTML = '<option value="" disabled selected>-- Select a Saved Location --</option>';
+          elements.postcodeListSelect.innerHTML = '<option value="" disabled selected hidden>-- Load Saved Location --</option>';
           savedPostcodeLists.forEach((list) => { const option = document.createElement("option"); option.value = list.id; option.textContent = list.list_name; elements.postcodeListSelect.appendChild(option); });
         }
       } catch (e) { }
