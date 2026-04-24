@@ -97,7 +97,7 @@ async function sendResultsByEmail(recipientEmail, rawData, searchParams, duplica
 
         // SEND VIA RESEND
         const { data, error } = await resend.emails.send({
-            from: 'RTRL Prospector <reports@rtrlprospector.space>',
+            from: 'RTRL Prospector <reports@backend.rtrlprospector.space>',
             to: recipientEmail,
             subject: `${searchParams.subjectPrefix || ''}Your RTRL Results: ${subjectCategory} in ${subjectArea}`,
             text: `Hi,\n\n${searchParams.bodyPrefix || 'Please find the results of your recent search attached.'}\n\n${searchSummary}\n\n- The RTRL Property Prospector Team`,
@@ -142,7 +142,7 @@ async function sendAdminStatsSummary(jobId, rawData, searchParams) {
 
     try {
         await resend.emails.send({
-            from: 'RTRL Stats <reports@rtrlprospector.space>',
+            from: 'RTRL Stats <reports@backend.rtrlprospector.space>',
             to: adminEmail,
             subject: `STATS: ${total} leads - ${searchParams.area}`,
             text: statsText,
