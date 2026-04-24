@@ -567,7 +567,7 @@ window.rtrlApp.deleteLocation = async (id) => {
       e.preventDefault();
       elements.flipCardContainer.classList.remove("flipped");
     });
-
+//loginFx
 
     elements.loginEmailBtn?.addEventListener("click", async () => {
       const email = elements.emailInputAuth.value, password = elements.passwordInputAuth.value;
