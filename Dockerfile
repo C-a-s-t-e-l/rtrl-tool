@@ -4,6 +4,8 @@ FROM ghcr.io/puppeteer/puppeteer:22.6.3
 # The image's default working directory is /home/pptruser. We will put our app there.
 WORKDIR /home/pptruser
 
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable
+
 # Set this environment variable to tell Puppeteer's install script
 # NOT to download a browser, because one is already included in this image.
 ENV PUPPETEER_SKIP_DOWNLOAD=true

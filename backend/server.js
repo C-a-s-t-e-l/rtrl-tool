@@ -1266,8 +1266,9 @@ const initSupabaseRealtime = () => {
     console.log('[Supabase Realtime] Subscribed to profiles and jobs table changes.');
 };
 
-server.listen(PORT, () => {
-  console.log(`Scraping server running on http://localhost:${PORT}`);
+// Railway (and most cloud providers) require 0.0.0.0 to expose the port
+server.listen(PORT, "0.0.0.0", () => {
+  console.log(`Scraping server running on port ${PORT}`);
   recoverStuckJobs();
   initSupabaseRealtime();
 });
