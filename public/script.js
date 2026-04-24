@@ -541,6 +541,34 @@ window.rtrlApp.deleteLocation = async (id) => {
     setupPasswordToggle("toggle-login-password", "password-input");
     setupPasswordToggle("toggle-signup-password", "signup-password-input");
 
+        document.getElementById("login-google")?.addEventListener("click", () =>
+      supabaseClient.auth.signInWithOAuth({ 
+        provider: "google", 
+        options: { redirectTo: window.location.origin } 
+      })
+    );
+
+    // Microsoft Login
+    document.getElementById("login-microsoft")?.addEventListener("click", () =>
+      supabaseClient.auth.signInWithOAuth({ 
+        provider: "azure", 
+        options: { scopes: "email", redirectTo: window.location.origin } 
+      })
+    );
+
+    // Navigation: Switch to Signup
+    document.getElementById("to-signup-btn")?.addEventListener("click", (e) => {
+      e.preventDefault();
+      elements.flipCardContainer.classList.add("flipped");
+    });
+
+    // Navigation: Switch to Signin
+    document.getElementById("to-signin-btn")?.addEventListener("click", (e) => {
+      e.preventDefault();
+      elements.flipCardContainer.classList.remove("flipped");
+    });
+
+
     elements.loginEmailBtn?.addEventListener("click", async () => {
       const email = elements.emailInputAuth.value, password = elements.passwordInputAuth.value;
       if (!email || !password) return alert("Please enter credentials.");
