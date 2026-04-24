@@ -4,16 +4,17 @@ const { generateFileData } = require('./fileGenerator');
 
 const transporter = nodemailer.createTransport({
     host: "smtp.gmail.com",
-    port: 465,
-    secure: true, // Use SSL
+    port: 587,
+    secure: false, // Use STARTTLS
     auth: {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASS,
     },
-    // Add these timeout settings to prevent the hang
-    connectionTimeout: 10000, // 10 seconds
-    greetingTimeout: 10000,
-    socketTimeout: 10000,
+    tls: {
+        // This helps if the cloud network has strict handshake rules
+        rejectUnauthorized: false 
+    },
+    connectionTimeout: 20000, // Increase to 20s
 });
 
 async function sendResultsByEmail(recipientEmail, rawData, searchParams, duplicatesData = []) {
