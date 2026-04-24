@@ -1,7 +1,7 @@
 document.addEventListener("DOMContentLoaded", () => {
   let isSubscribed = false;
 
-  const BACKEND_URL = "rtrl-tool-production.up.railway.app";
+  const BACKEND_URL = "https://rtrl-tool-production.up.railway.app";
   const SUPABASE_URL = window.CONFIG.SUPABASE_URL;
   const SUPABASE_ANON_KEY = window.CONFIG.SUPABASE_ANON_KEY;
 

@@ -1196,7 +1196,10 @@ app.post("/api/jobs/merge", async (req, res) => {
     }
 });
 
-const containerPublicPath = path.join(__dirname, "..", "public");
+// This checks if the public folder is one level up (local) or same level (Docker)
+const containerPublicPath = fs.existsSync(path.join(__dirname, "..", "public")) 
+  ? path.join(__dirname, "..", "public") 
+  : path.join(__dirname, "public");
 app.use(express.static(containerPublicPath, { index: false }));
 app.get(/(.*)/, (req, res) => {
   const requestedPath = req.params[0];
