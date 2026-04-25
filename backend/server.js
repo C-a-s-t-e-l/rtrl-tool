@@ -367,6 +367,71 @@ discovered.forEach(url => {
             } catch (err) { return null; } finally { if (detailPage) await detailPage.close(); }
         });
 
+            const isUK = country.toLowerCase() === 'united kingdom'; // Add this line here
+
+    const promises = batch.map(async (processItem) => {
+        let detailPage = null;
+        try {
+            const task = async () => {
+                detailPage = await browser.newPage();
+                await detailPage.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36");
+                
+                // 1. Google Maps Scrape (Updated to be country-aware)
+                let googleData = await scrapeGoogleMapsDetails(detailPage, processItem.url, jobId, country);
+                if (!googleData || !googleData.BusinessName) return null;
+                
+                let websiteData = { foundEmails: [], foundPhones: [], OwnerName: "", InstagramURL: "", FacebookURL: "", rawText: "" };
+                
+                // 2. Website Scrape (Skip sub-pages if UK to speed up)
+                if (googleData.Website) {
+                    websiteData = await scrapeWebsiteForGoldData(detailPage, googleData.Website, isUK);
+                }
+
+                // 3. AI Enrichment (FORCED DISABLE FOR UK)
+                let aiResult = { ownerName: "", aiEmail: "", aiPhone: "" };
+                const shouldRunAI = !isUK && useAiEnrichment !== false;
+                
+                if (shouldRunAI) {
+                    aiResult = await findBusinessOwnerWithAI(googleData.BusinessName, googleData.Suburb || country, googleData.Website, jobId);
+                }
+
+                // 4. Data Merging with Country-Aware Phone Logic
+                const uniqueEmails = Array.from(new Set([...websiteData.foundEmails, aiResult.aiEmail].filter(e => e && e.includes('@')).map(e => e.toLowerCase().trim())));
+                
+                // Use the new country-aware phone helper
+                const uniquePhones = Array.from(new Set([aiResult.aiPhone, ...websiteData.foundPhones, googleData.Phone]
+                    .map(p => normalizePhoneNumber(p, country))
+                    .filter(Boolean)));
+                
+                const mPrefix = isUK ? '447' : '614';
+                const finalPhone = uniquePhones.find(p => p.startsWith(mPrefix)) || uniquePhones[0] || "";
+                
+                let finalOwner = (aiResult.ownerName && aiResult.ownerName !== "Private Owner") ? aiResult.ownerName : (websiteData.OwnerName || "Private Owner");
+                
+                const res = { 
+                    ...googleData, 
+                    OwnerName: finalOwner, 
+                    Email1: uniqueEmails[0] || "", 
+                    Email2: uniqueEmails[1] || "", 
+                    Email3: uniqueEmails[2] || "", 
+                    Phone: finalPhone, 
+                    InstagramURL: websiteData.InstagramURL || googleData.InstagramURL || "", 
+                    FacebookURL: websiteData.FacebookURL || googleData.FacebookURL || "", 
+                    rawText: websiteData.rawText || googleData.BusinessName 
+                };
+                
+                if (res.Email1) { 
+                    const isDeliverable = await verifyEmail(res.Email1); 
+                    if (!isDeliverable) { res.Email1 = res.Email2; res.Email2 = res.Email3; res.Email3 = ""; } 
+                }
+                
+                res.Category = (processItem.category || "N/A").replace(/"/g, "");
+                return res;
+            };
+            return await promiseWithRetry(task, 2, 5000, jobId, processItem.url);
+        } catch (err) { return null; } finally { if (detailPage) await detailPage.close(); }
+    });
+
         const results = await Promise.all(promises);
         for (const businessData of results) {
             if (businessData) {
@@ -1849,6 +1914,8 @@ async function scrapeWebsiteForGoldData(page, websiteUrl) {
     data.foundPhones.push(...landing.rawPhones);
     data.OwnerName = landing.ownerName;
     data.rawText = landing.pageText;
+
+    if (isUK) return data;
 
     const subPageLinks = await page.evaluate(() => {
         const keywords = /contact|about|team|staff|meet|connect|info/i;
