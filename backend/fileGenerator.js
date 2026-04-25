@@ -60,6 +60,9 @@ async function generateFileData(rawData, searchParams, duplicatesData = [], crea
         categoryString = searchParams.primaryCategory?.replace(/[\s/&]/g, "_") || 'general';
     }
 
+    const isUK = (searchParams.country || "").toLowerCase() === 'united kingdom';
+    const mobilePrefix = isUK ? "447" : "614";
+
     const locationString = (searchParams.area || 'location').replace(/[\s/]/g, "_").toLowerCase();
     const notesContent = `${date}_${categoryString}_${locationString}`;
 
@@ -81,30 +84,30 @@ async function generateFileData(rawData, searchParams, duplicatesData = [], crea
         ReviewCount: item.ReviewCount
     }));
 
-    const smsData = rawData
-        .filter(b => b.Phone && b.Phone.startsWith("614"))
-        .map(b => {
-            let firstName = "";
-            let lastName = "";
-            if (b.OwnerName && b.OwnerName.trim() !== "") {
-                const nameParts = b.OwnerName.trim().split(" ");
-                firstName = nameParts.shift();
-                lastName = nameParts.join(" ");
-            }
-            return {
-                FirstName: firstName,
-                LastName: lastName,
-                Organization: b.BusinessName || "",
-                Email: b.Email1 || "",
-                FaxNumber: "",
-                MobileNumber: b.Phone || "",
-                CustomField1: b.Category || "",
-                CustomField2: b.Suburb || "", 
-                CustomField3: "",
-                CustomField4: "",
-                Unsubscribed: ""
-            };
-        });
+const smsData = rawData
+    .filter(b => b.Phone && b.Phone.startsWith(mobilePrefix))
+    .map(b => {
+        let firstName = "";
+        let lastName = "";
+        if (b.OwnerName && b.OwnerName.trim() !== "") {
+            const nameParts = b.OwnerName.trim().split(" ");
+            firstName = nameParts.shift();
+            lastName = nameParts.join(" ");
+        }
+        return {
+            FirstName: firstName,
+            LastName: lastName,
+            Organization: b.BusinessName || "",
+            Email: b.Email1 || "",
+            FaxNumber: "",
+            MobileNumber: b.Phone || "",
+            CustomField1: b.Category || "",
+            CustomField2: b.Suburb || "", 
+            CustomField3: "",
+            CustomField4: "",
+            Unsubscribed: ""
+        };
+    });
     
     const contactsData = rawData
         .filter(d => 
@@ -173,19 +176,23 @@ async function generateFileData(rawData, searchParams, duplicatesData = [], crea
         txtZipBuffer = await txtZip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" });
     }
 
-    const mobileZip = new JSZip();
-    const mobilesByCategory = rawData.reduce((acc, item) => {
-        if (item.Phone) {
-            let num = String(item.Phone).replace(/\D/g, '');
-            if (num.startsWith('614')) num = '0' + num.substring(2);
-            if (num.startsWith('04')) {
-                const cat = item.Category || 'General';
-                if (!acc[cat]) acc[cat] = new Set();
-                acc[cat].add(num);
-            }
+const mobileZip = new JSZip();
+const mobilesByCategory = rawData.reduce((acc, item) => {
+    if (item.Phone) {
+        let num = String(item.Phone).replace(/\D/g, '');
+        // Standardize display for TXT files (07... for UK, 04... for AU)
+        if (isUK && num.startsWith('447')) num = '0' + num.substring(2);
+        if (!isUK && num.startsWith('614')) num = '0' + num.substring(2);
+
+        const targetStart = isUK ? '07' : '04';
+        if (num.startsWith(targetStart)) {
+            const cat = item.Category || 'General';
+            if (!acc[cat]) acc[cat] = new Set();
+            acc[cat].add(num);
         }
-        return acc;
-    }, {});
+    }
+    return acc;
+}, {});
 
     let hasMobiles = false;
     for (const [cat, nums] of Object.entries(mobilesByCategory)) {

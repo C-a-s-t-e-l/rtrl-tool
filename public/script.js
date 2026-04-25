@@ -693,22 +693,43 @@ supabaseClient.auth.onAuthStateChange(async (event, session) => {
       } catch (error) { }
     };
 
-    window.rtrlApp.validateAndAddTag = async (postcode) => {
-      const v = postcode.trim(); if (!v || isNaN(v) || window.rtrlApp.postalCodes.includes(v)) { elements.postalCodeInput.value = ""; return; }
-      const iso = countries.find((c) => c.text.toLowerCase() === elements.countryInput.value.toLowerCase())?.value;
-      if (!iso || !window.rtrlApp.state.googleMapsGeocoder) return;
-      window.rtrlApp.state.googleMapsGeocoder.geocode({ componentRestrictions: { country: iso, postalCode: v } }, (res, status) => {
-        if (status === google.maps.GeocoderStatus.OK && res[0]) {
-          const pcComp = res[0].address_components.find((c) => c.types.includes("postal_code"));
-          if (pcComp?.long_name === v) {
-            const sub = res[0].address_components.find((c) => c.types.includes("locality"));
-            window.rtrlApp.postalCodes.push(v);
-            const tagEl = document.createElement("span"); tagEl.className = "tag"; tagEl.innerHTML = `<span>${sub ? sub.long_name + " " : ""}${v}</span> <span class="tag-close-btn" data-value="${v}">&times;</span>`;
-            elements.postalCodeContainer.insertBefore(tagEl, elements.postalCodeInput); elements.postalCodeInput.value = "";
-          }
-        }
-      });
-    };
+window.rtrlApp.validateAndAddTag = async (postcode) => {
+  const v = postcode.trim();
+  const countryInputEl = document.getElementById('countryInput');
+  const countryName = countryInputEl ? countryInputEl.value.toLowerCase() : 'australia';
+  const isUK = countryName === 'united kingdom';
+
+  // UK postcodes are alphanumeric (e.g., SW1A), AU are numeric (e.g., 3000)
+  const isValidFormat = isUK ? /^[a-z0-9 ]+$/i.test(v) : !isNaN(v);
+
+  if (!v || !isValidFormat || window.rtrlApp.postalCodes.includes(v)) {
+    if (elements.postalCodeInput) elements.postalCodeInput.value = "";
+    return;
+  }
+
+  const iso = countries.find((c) => c.text.toLowerCase() === countryName)?.value;
+  if (!iso || !window.rtrlApp.state.googleMapsGeocoder) return;
+
+  window.rtrlApp.state.googleMapsGeocoder.geocode({ componentRestrictions: { country: iso, postalCode: v } }, (res, status) => {
+    if (status === google.maps.GeocoderStatus.OK && res[0]) {
+      const pcComp = res[0].address_components.find((c) => c.types.includes("postal_code"));
+      
+      const validatedCode = pcComp ? pcComp.long_name : null;
+
+      if (validatedCode) {
+        const sub = res[0].address_components.find((c) => c.types.includes("locality"));
+        window.rtrlApp.postalCodes.push(v);
+        
+        const tagEl = document.createElement("span");
+        tagEl.className = "tag";
+        tagEl.innerHTML = `<span>${sub ? sub.long_name + " " : ""}${v}</span> <span class="tag-close-btn" data-value="${v}">&times;</span>`;
+        
+        elements.postalCodeContainer.insertBefore(tagEl, elements.postalCodeInput);
+        elements.postalCodeInput.value = "";
+      }
+    }
+  });
+};
 
     window.rtrlApp.setLocationInputsState = (d) => {
       elements.locationInput.disabled = d; elements.postalCodeInput.disabled = d;

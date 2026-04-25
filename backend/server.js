@@ -1323,10 +1323,31 @@ function normalizeStringForKey(str = "") {
     .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()']/g, "")
     .replace(/\s+/g, "");
 }
-function normalizePhoneNumber(phoneStr = "") {
-  if (!phoneStr) return "";
-  return String(phoneStr).replace(/\D/g, "");
+function normalizePhoneNumber(num, country = "australia") {
+    if (!num) return null;
+    let digits = String(num).replace(/\D/g, ''); 
+    const c = country.toLowerCase();
+
+    if (c === 'united kingdom') {
+        // UK Logic: Mobile starts with 07... (447...)
+        if (digits.startsWith('0')) {
+            digits = '44' + digits.substring(1);
+        } else if (!digits.startsWith('44') && digits.length >= 10) {
+            digits = '44' + digits;
+        }
+        // UK mobile check: must start with 447
+        return (digits.length >= 11 && digits.length <= 13) ? digits : null;
+    } else {
+        // Default Australia Logic: Mobile starts with 04... (614...)
+        if (digits.startsWith('0')) {
+            digits = '61' + digits.substring(1);
+        } else if (!digits.startsWith('61') && digits.length >= 8) {
+            digits = '61' + digits;
+        }
+        return (digits.length >= 10 && digits.length <= 13) ? digits : null;
+    }
 }
+
 function normalizeAddress(addressStr = "") {
   if (!addressStr) return "";
   return String(addressStr).toLowerCase().trim().replace(/\s+/g, " ");
@@ -1346,10 +1367,13 @@ const getCleanBusinessName = (name) => {
 };
 
 
-function deduplicateBusinesses(businesses) {
+function deduplicateBusinesses(businesses, country = "australia") {
     if (!businesses || businesses.length === 0) {
         return { uniqueBusinesses: [], duplicates: [] };
     }
+
+    const isUK = country.toLowerCase() === 'united kingdom';
+    const mobilePrefix = isUK ? '447' : '614';
 
     const norm = (s) => (s || "").toLowerCase().replace(/['’`.,()&]/g, "").replace(/\s+/g, "");
 
@@ -1362,12 +1386,6 @@ function deduplicateBusinesses(businesses) {
         } catch (e) { return null; }
     };
 
-    const isMobilePhone = (phone) => {
-        if (!phone) return false;
-        const clean = String(phone).replace(/\D/g, "");
-        return clean.startsWith('614'); 
-    };
-
     const groupedBusinesses = new Map();
 
     for (const business of businesses) {
@@ -1376,14 +1394,11 @@ function deduplicateBusinesses(businesses) {
         const cleanName = getCleanBusinessName(business.BusinessName);
         
         let signature = null;
-
         if (facebookId && instagramId) {
             signature = `SOCIAL_FB:${facebookId}_IG:${instagramId}`;
-        } 
-        else if (cleanName) {
+        } else if (cleanName) {
             signature = `NAME:${cleanName}_${norm(business.Suburb)}`;
-        }
-        else {
+        } else {
             signature = `UNIQUE_${business.GoogleMapsURL || Math.random()}`;
         }
 
@@ -1401,33 +1416,18 @@ function deduplicateBusinesses(businesses) {
             uniqueBusinesses.push(group[0]);
         } else {
             const entryWithValidEmail = group.find(b => isValidEmail(b.Email1) || isValidEmail(b.Email2) || isValidEmail(b.Email3));
-            
-            const entryWithMobile = group.find(b => b.Phone && String(b.Phone).startsWith('614'));
-
+            const entryWithMobile = group.find(b => b.Phone && String(b.Phone).startsWith(mobilePrefix));
             const entryWithAnyPhone = group.find(b => b.Phone && String(b.Phone).length > 5);
 
-            let bestEntry;
-            if (entryWithValidEmail) {
-                bestEntry = entryWithValidEmail;
-            } else if (entryWithMobile) {
-                bestEntry = entryWithMobile;
-            } else if (entryWithAnyPhone) {
-                bestEntry = entryWithAnyPhone;
-            } else {
-                bestEntry = group[0];
-            }
-
+            let bestEntry = entryWithValidEmail || entryWithMobile || entryWithAnyPhone || group[0];
             const bestEntryIndex = group.indexOf(bestEntry);
             uniqueBusinesses.push(bestEntry);
 
             for (let i = 0; i < group.length; i++) {
-                if (i !== bestEntryIndex) {
-                    duplicates.push(group[i]);
-                }
+                if (i !== bestEntryIndex) duplicates.push(group[i]);
             }
         }
     }
-
     return { uniqueBusinesses, duplicates };
 }
 
@@ -1726,7 +1726,7 @@ async function collectGoogleMapsUrlsContinuously(
 async function scrapeGoogleMapsDetails(page, url, jobId, country) {
   await page.goto(url, { waitUntil: "domcontentloaded", timeout: 90000 });
   await page.waitForSelector("h1", { timeout: 60000 });
-  return page.evaluate((countryCode) => {
+  return page.evaluate((countryName) => {
     const cleanText = (text) =>
       text
         ? String(text)
@@ -1735,16 +1735,22 @@ async function scrapeGoogleMapsDetails(page, url, jobId, country) {
             .replace(/\s+/g, " ")
             .trim()
         : "";
-    const cleanPhoneNumber = (num, country) => {
+
+    const cleanPhoneNumber = (num, cName) => {
       if (!num) return "";
       let digits = String(num).replace(/\D/g, "");
-      if (country?.toLowerCase() === "australia") {
+      const c = cName?.toLowerCase();
+      
+      if (c === "australia") {
         if (digits.startsWith("0")) digits = "61" + digits.substring(1);
-        else if (!digits.startsWith("61") && digits.length >= 8)
-          digits = "61" + digits;
+        else if (!digits.startsWith("61") && digits.length >= 8) digits = "61" + digits;
+      } else if (c === "united kingdom") {
+        if (digits.startsWith("0")) digits = "44" + digits.substring(1);
+        else if (!digits.startsWith("44") && digits.length >= 10) digits = "44" + digits;
       }
       return digits;
     };
+
     const categorySelectors = [
       'button[data-item-id="category"]',
       'button[jsaction*="pane.rating.category"]',
@@ -1778,7 +1784,7 @@ async function scrapeGoogleMapsDetails(page, url, jobId, country) {
         document.querySelector('a[data-item-id="authority"]')?.href || "",
       Phone: cleanPhoneNumber(
         document.querySelector('button[data-item-id*="phone"]')?.innerText,
-        countryCode
+        countryName
       ),
       GoogleMapsURL: window.location.href,
       Suburb: "",
