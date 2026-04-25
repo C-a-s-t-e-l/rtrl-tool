@@ -342,30 +342,7 @@ discovered.forEach(url => {
 
         if (finalCount !== -1 && allProcessedBusinesses.length >= finalCount) break;
         const batch = urlsToProcess.slice(i, i + CONCURRENCY);
-        const promises = batch.map(async (processItem) => {
-            let detailPage = null;
-            try {
-                const task = async () => {
-                    detailPage = await browser.newPage();
-                    await detailPage.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36");
-                    let googleData = await scrapeGoogleMapsDetails(detailPage, processItem.url, jobId, country);
-                    if (!googleData || !googleData.BusinessName) return null;
-                    let websiteData = { foundEmails: [], foundPhones: [], OwnerName: "", InstagramURL: "", FacebookURL: "", rawText: "" };
-                    if (googleData.Website) websiteData = await scrapeWebsiteForGoldData(detailPage, googleData.Website);
-                    let aiResult = { ownerName: "", aiEmail: "", aiPhone: "" };
-                    if (useAiEnrichment !== false) aiResult = await findBusinessOwnerWithAI(googleData.BusinessName, googleData.Suburb || country, googleData.Website, jobId);
-                    const uniqueEmails = Array.from(new Set([...websiteData.foundEmails, aiResult.aiEmail].filter(e => e && e.includes('@')).map(e => e.toLowerCase().trim())));
-                    const uniquePhones = Array.from(new Set([aiResult.aiPhone, ...websiteData.foundPhones, googleData.Phone].map(normalizePhoneTo61).filter(Boolean)));
-                    const finalPhone = uniquePhones.find(p => p.startsWith('614')) || uniquePhones[0] || "";
-                    let finalOwner = (aiResult.ownerName && aiResult.ownerName !== "Private Owner") ? aiResult.ownerName : (websiteData.OwnerName || "Private Owner");
-                    const res = { ...googleData, OwnerName: finalOwner, Email1: uniqueEmails[0] || "", Email2: uniqueEmails[1] || "", Email3: uniqueEmails[2] || "", Phone: finalPhone, InstagramURL: websiteData.InstagramURL || googleData.InstagramURL || "", FacebookURL: websiteData.FacebookURL || googleData.FacebookURL || "", rawText: websiteData.rawText || googleData.BusinessName };
-                    if (res.Email1) { const isDeliverable = await verifyEmail(res.Email1); if (!isDeliverable) { res.Email1 = res.Email2; res.Email2 = res.Email3; res.Email3 = ""; } }
-                    res.Category = (processItem.category || "N/A").replace(/"/g, "");
-                    return res;
-                };
-                return await promiseWithRetry(task, 2, 5000, jobId, processItem.url);
-            } catch (err) { return null; } finally { if (detailPage) await detailPage.close(); }
-        });
+
 
             const isUK = country.toLowerCase() === 'united kingdom'; // Add this line here
 
