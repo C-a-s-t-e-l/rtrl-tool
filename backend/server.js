@@ -1892,7 +1892,7 @@ async function scrapeWebsiteForGoldData(page, websiteUrl) {
     data.OwnerName = landing.ownerName;
     data.rawText = landing.pageText;
 
-    if (isUK) return data;
+    // if (isUK) return data;
 
     const subPageLinks = await page.evaluate(() => {
         const keywords = /contact|about|team|staff|meet|connect|info/i;
