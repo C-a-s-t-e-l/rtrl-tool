@@ -247,20 +247,20 @@ const runScrapeJob = async (jobId) => {
     let currentTermIndex = 0;
 
 // --- PHASE 1: DISCOVERY ---
-    if (masterUrlMap.size === 0 || allProcessedBusinesses.length < finalCount || finalCount === -1) {
-        for (const item of searchItems) {
+if (masterUrlMap.size === 0 || allProcessedBusinesses.length < finalCount || finalCount === -1) {
+    for (const item of searchItems) {
 
-            currentTermIndex++;
+        currentTermIndex++;
 
-            await addLog(jobId, `[Loop ${currentTermIndex}/${totalTerms}] Searching for: "${item}"`);
+        await addLog(jobId, `[Loop ${currentTermIndex}/${totalTerms}] Searching for: "${item}"`);
 
-            browser = await launchBrowser(`[System] Initializing browser for: ${item}`);
+        browser = await launchBrowser(`[System] Initializing browser for: ${item}`);
+
+        try {
             let collectionPage = await browser.newPage();
 
-
-            
             let locationQueries = [];
-            
+
             // Generate search points for Multi-Zone or Legacy Radius
             if (parameters.multiRadiusPoints && parameters.multiRadiusPoints.length > 0) {
                 for (const point of parameters.multiRadiusPoints) {
@@ -281,42 +281,59 @@ const runScrapeJob = async (jobId) => {
                 const finalQ = isIndividualSearch || query.startsWith("near ") ? `${item} ${query}` : query;
                 const discovered = new Set();
                 await collectGoogleMapsUrlsContinuously(collectionPage, finalQ, jobId, discovered, country);
-                
-discovered.forEach(url => {
-    if (!masterUrlMap.has(url)) {
-        const businessCoords = extractCoordinatesFromUrl(url);
-        
-        if (businessCoords) {
-            let isInsideAnyZone = false;
-            if (parameters.multiRadiusPoints && parameters.multiRadiusPoints.length > 0) {
-                isInsideAnyZone = parameters.multiRadiusPoints.some(point => {
-                    const [pLat, pLng] = point.coords.split(',').map(Number);
-                    const dist = calculateDistance(pLat, pLng, businessCoords.lat, businessCoords.lng);
-                    return dist <= (parseFloat(point.radius) + 0.5); 
+
+                discovered.forEach(url => {
+                    if (!masterUrlMap.has(url)) {
+                        const businessCoords = extractCoordinatesFromUrl(url);
+
+                        if (businessCoords) {
+                            let isInsideAnyZone = false;
+                            if (parameters.multiRadiusPoints && parameters.multiRadiusPoints.length > 0) {
+                                isInsideAnyZone = parameters.multiRadiusPoints.some(point => {
+                                    const [pLat, pLng] = point.coords.split(',').map(Number);
+                                    const dist = calculateDistance(pLat, pLng, businessCoords.lat, businessCoords.lng);
+                                    return dist <= (parseFloat(point.radius) + 0.5);
+                                });
+                            } else if (radiusKm && anchorPoint && filterCenterLat) {
+                                const dist = calculateDistance(filterCenterLat, filterCenterLng, businessCoords.lat, businessCoords.lng);
+                                isInsideAnyZone = dist <= (parseFloat(radiusKm) + 0.5);
+                            } else {
+                                isInsideAnyZone = true;
+                            }
+
+                            if (!isInsideAnyZone) return;
+                        }
+                        masterUrlMap.set(url, item);
+                    }
                 });
-            } else if (radiusKm && anchorPoint && filterCenterLat) {
-                const dist = calculateDistance(filterCenterLat, filterCenterLng, businessCoords.lat, businessCoords.lng);
-                isInsideAnyZone = dist <= (parseFloat(radiusKm) + 0.5);
-            } else {
-                isInsideAnyZone = true;
-            }
-            
-            if (!isInsideAnyZone) return; 
-        }
-        masterUrlMap.set(url, item);
-    }
-});
-                
+
                 io.to(jobId).emit("progress_update", { phase: 'discovery', discovered: masterUrlMap.size, processed: 0, added: allProcessedBusinesses.length });
             }
 
-            if (browser) { await browser.close(); browser = null; }
-                    // Save the filtered URLs to Supabase so we don't lose progress
-        await supabase.from("jobs").update({ collected_urls: Array.from(masterUrlMap, ([url, cat]) => ({ url, category: cat })) }).eq("id", jobId);
-            await new Promise(r => setTimeout(r, 10000));
+            // Close page at the end of processing
+            if (collectionPage) await collectionPage.close();
+
+        } catch (itemError) {
+            console.error(`Error in discovery loop for ${item}:`, itemError);
+            await addLog(jobId, `[Warning] Discovery for ${item} failed, moving to next.`);
+        } finally {
+            // Ensures browser is ALWAYS closed even if something fails
+            if (browser) {
+                await browser.close();
+                browser = null;
+            }
         }
 
+        // Save the filtered URLs to Supabase so we don't lose progress
+        await supabase.from("jobs").update({
+            collected_urls: Array.from(masterUrlMap, ([url, cat]) => ({ url, category: cat }))
+        }).eq("id", jobId);
+
+        await new Promise(r => setTimeout(r, 10000));
     }
+
+}
+
 
     // --- GRACEFUL CHECK: Did we find anything? ---
     if (masterUrlMap.size === 0) {
