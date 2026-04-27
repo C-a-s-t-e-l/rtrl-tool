@@ -163,19 +163,9 @@ const appendJobResult = async (jobId, newResult) => {
 //Old version
 const runScrapeJob = async (jobId) => {
   await updateJobStatus(jobId, "running");
-  console.log(`[Worker] Job ${jobId} picked up.`); 
+  console.log(`[Worker] Job ${jobId} picked up.`);
 
-  io.to(jobId).emit("progress_update", { 
-      phase: 'discovery', 
-      processed: 0, 
-      discovered: 0, 
-      added: 0, 
-      target: 0,
-      enriched: 0,
-      aiProcessed: 0,
-      aiTarget: 0
-  });
-
+  // 1. Fetch Job Details
   const { data: job, error: fetchError } = await supabase
     .from("jobs")
     .select("*")
@@ -188,7 +178,7 @@ const runScrapeJob = async (jobId) => {
     return;
   }
 
-  // Pre-scrape System Checks
+  // 2. Pre-scrape System & Quota Checks
   const { data: settings } = await supabase.from('system_settings').select('is_paused').eq('id', 1).single();
   if (settings?.is_paused) {
     await addLog(jobId, "[SYSTEM] Research is currently PAUSED by Admin. Job cancelled.");
@@ -205,32 +195,34 @@ const runScrapeJob = async (jobId) => {
 
   const { parameters } = job;
   const {
-    categoriesToLoop, location, postalCode, country, count, businessNames, anchorPoint, radiusKm, userEmail, searchParamsForEmail, exclusionList, useAiEnrichment,
-    clientLocalDate 
+    categoriesToLoop, location, postalCode, country, businessNames, anchorPoint, radiusKm, 
+    userEmail, searchParamsForEmail, exclusionList, useAiEnrichment, clientLocalDate 
   } = parameters;
 
-  // Setup Geofencing for Radius Search
-  let filterCenterLat = null, filterCenterLng = null;
-  if (radiusKm && anchorPoint) {
-    try {
-      if (anchorPoint.includes(",")) {
-        const parts = anchorPoint.split(",");
-        filterCenterLat = parseFloat(parts[0]); filterCenterLng = parseFloat(parts[1]);
-      } else {
-        const geocodeUrl = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(`${anchorPoint}, ${country}`)}&key=${GOOGLE_MAPS_API_KEY}`;
-        const response = await axios.get(geocodeUrl);
-        if (response.data.status === "OK") {
-          const loc = response.data.results[0].geometry.location;
-          filterCenterLat = loc.lat; filterCenterLng = loc.lng;
-        }
-      }
-    } catch (e) { console.error("Filter error", e); }
-  }
+  // --- INITIALIZE RECOVERY TRUTH (Fixes ReferenceErrors) ---
+  const processedUrls = new Set((job.results || []).map(r => r.GoogleMapsURL));
+  const totalProcessedCount = processedUrls.size; 
+  const masterUrlMap = new Map((job.collected_urls || []).map(item => [item.url, item.category]));
+  
+  // Normalize existing categories from DB for reliable recovery skipping
+  const completedCategories = new Set(
+    Array.from(masterUrlMap.values()).map(c => String(c).trim().toLowerCase())
+  );
+
+  const isUK = country?.toLowerCase() === 'united kingdom' || country?.toLowerCase() === 'uk';
+
+  io.to(jobId).emit("progress_update", { 
+      phase: 'discovery', 
+      processed: 0, 
+      discovered: masterUrlMap.size, 
+      added: totalProcessedCount, 
+      target: parameters.count || -1,
+      enriched: 0,
+      aiProcessed: 0,
+      aiTarget: 0
+  });
 
   let browser = null;
-  const processedUrls = new Set((job.results || []).map(r => r.GoogleMapsURL));
-
-  const masterUrlMap = new Map((job.collected_urls || []).map(item => [item.url, item.category]));
 
   try {
     const puppeteerArgs = ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu", "--no-zygote", "--lang=en-US,en", "--ignore-certificate-errors", "--window-size=1920,1080", "--disable-blink-features=AutomationControlled"];
@@ -243,44 +235,27 @@ const runScrapeJob = async (jobId) => {
 
     const isIndividualSearch = businessNames && businessNames.length > 0;
     const searchItems = isIndividualSearch ? businessNames : (categoriesToLoop && categoriesToLoop.length > 0 ? categoriesToLoop : []);
-    const finalCount = businessNames && businessNames.length > 0 ? -1 : parameters.count || -1;
+    const finalCount = isIndividualSearch ? -1 : (parameters.count || -1);
 
-    const totalTerms = searchItems.length;
-    let currentTermIndex = 0;
-    const completedCategories = new Set(masterUrlMap.values());
-
-// --- PHASE 1: DISCOVERY ---
-if (masterUrlMap.size === 0 || totalProcessedCount < finalCount || finalCount === -1) {
-    
-    // Normalize existing categories from DB for reliable matching
-    // We convert everything to lowercase and remove extra spaces
-    const completedCategories = new Set(
-        Array.from(masterUrlMap.values()).map(c => String(c).trim().toLowerCase())
-    );
-
-    // DEBUG LOG: This will show you exactly what the server thinks is finished
-    if (completedCategories.size > 0) {
-        await addLog(jobId, `[System] Found ${completedCategories.size} categories already in database. Checking for skips...`);
-    }
-
+    // --- PHASE 1: DISCOVERY ---
     for (let i = 0; i < searchItems.length; i++) {
         const item = searchItems[i];
         const normalizedItem = String(item).trim().toLowerCase();
 
-        // RECOVERY CHECK: Now uses normalized strings to prevent "Bakery" vs "bakery" mismatches
-        // Also removed the "finalCount === -1" restriction so skipping works even during testing
+        // RECOVERY CHECK: Skip categories already in the database
         if (completedCategories.has(normalizedItem)) {
-            await addLog(jobId, `[Recovery] Skipping "${item}" (Already discovered in database)`);
+            await addLog(jobId, `[Recovery] Skipping "${item}" (Already discovered)`);
             continue;
         }
 
         await addLog(jobId, `[Loop ${i+1}/${searchItems.length}] Searching for: "${item}"`);
-        browser = await launchBrowser(`[System] Initializing browser for: ${item}`);
+        browser = await launchBrowser(`[System] Discovery: ${item}`);
         
         try {
             let collectionPage = await browser.newPage();
             let locationQueries = [];
             
+            // Generate Search Queries
             if (parameters.multiRadiusPoints?.length > 0) {
                 for (const point of parameters.multiRadiusPoints) {
                     locationQueries.push(...await getSearchQueriesForRadius(point.coords, point.radius, country, GOOGLE_MAPS_API_KEY, jobId));
@@ -297,22 +272,11 @@ if (masterUrlMap.size === 0 || totalProcessedCount < finalCount || finalCount ==
 
             for (const query of locationQueries) {
                 const finalQ = isIndividualSearch || query.startsWith("near ") ? `${item} ${query}` : query;
-                const discovered = new Set();
-                await collectGoogleMapsUrlsContinuously(collectionPage, finalQ, jobId, discovered, country);
+                const discoveredInLoop = new Set();
+                await collectGoogleMapsUrlsContinuously(collectionPage, finalQ, jobId, discoveredInLoop, country);
                 
-                discovered.forEach(url => {
+                discoveredInLoop.forEach(url => {
                     if (!masterUrlMap.has(url)) {
-                        const businessCoords = extractCoordinatesFromUrl(url);
-                        if (businessCoords) {
-                            let isInside = true;
-                            if (parameters.multiRadiusPoints?.length > 0) {
-                                isInside = parameters.multiRadiusPoints.some(p => {
-                                    const [pLat, pLng] = p.coords.split(',').map(Number);
-                                    return calculateDistance(pLat, pLng, businessCoords.lat, businessCoords.lng) <= (parseFloat(p.radius) + 0.5);
-                                });
-                            }
-                            if (!isInside) return;
-                        }
                         masterUrlMap.set(url, item);
                     }
                 });
@@ -323,190 +287,146 @@ if (masterUrlMap.size === 0 || totalProcessedCount < finalCount || finalCount ==
             if (browser) { await browser.close(); browser = null; }
         }
 
-        // Save progress immediately after each category is finished
+        // Save discovery progress after every category
         await supabase.from("jobs").update({ 
             collected_urls: Array.from(masterUrlMap, ([url, cat]) => ({ url, category: cat })) 
         }).eq("id", jobId);
         
-        await new Promise(r => setTimeout(r, 10000));
+        await new Promise(r => setTimeout(r, 5000));
     }
-}
 
-
-    // --- GRACEFUL CHECK: Did we find anything? ---
     if (masterUrlMap.size === 0) {
-        await addLog(jobId, "No businesses were found matching your search criteria. Research ended.");
+        await addLog(jobId, "No businesses found.");
         await updateJobStatus(jobId, "completed");
         return; 
     }
 
-    // --- PHASE 2: PROCESSING ---
+    // --- PHASE 2: PROCESSING (Extraction & AI) ---
     await addLog(jobId, `--- Starting Data Extraction & AI Analysis ---`);
     browser = await launchBrowser("[System] Processing businesses...");
+    
+    // TRUTH: Only process URLs that aren't already in the results list
     const urlsToProcess = Array.from(masterUrlMap, ([url, cat]) => ({ url, category: cat }))
-    .filter(item => !processedUrls.has(item.url));
+                               .filter(item => !processedUrls.has(item.url));
 
-    const CONCURRENCY = 1;
-    let processedInSession = 0;
+    let localAddedCount = totalProcessedCount;
 
-    for (let i = 0; i < urlsToProcess.length; i += CONCURRENCY) {
-        // --- CRITICAL FIX: MID-SCRAPE QUOTA CHECK ---
+    for (let i = 0; i < urlsToProcess.length; i++) {
+        // Mid-scrape Quota Check
         const { data: currentProfile } = await supabase.from('profiles').select('usage_today, daily_limit').eq('id', job.user_id).single();
         if (currentProfile && currentProfile.usage_today >= currentProfile.daily_limit) {
-            await addLog(jobId, "[QUOTA STOP] Daily limit reached. Stopping processing to save credits.");
+            await addLog(jobId, "[QUOTA STOP] Daily limit reached. Stopping processing.");
             break; 
         }
 
-        if (finalCount !== -1 && processedUrls.size >= finalCount) break;
-        const batch = urlsToProcess.slice(i, i + CONCURRENCY);
+        // Check against target count (unless unlimited)
+        if (finalCount !== -1 && localAddedCount >= finalCount) break;
 
-
-            const isUK = country.toLowerCase() === 'united kingdom'; // Add this line here
-
-    const promises = batch.map(async (processItem) => {
+        const processItem = urlsToProcess[i];
         let detailPage = null;
+
         try {
             const task = async () => {
                 detailPage = await browser.newPage();
                 await detailPage.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36");
                 
-                // 1. Google Maps Scrape (Updated to be country-aware)
+                // 1. Scrape Google
                 let googleData = await scrapeGoogleMapsDetails(detailPage, processItem.url, jobId, country);
                 if (!googleData || !googleData.BusinessName) return null;
                 
-                let websiteData = { foundEmails: [], foundPhones: [], OwnerName: "", InstagramURL: "", FacebookURL: "", rawText: "" };
-                
-                // 2. Website Scrape (Skip sub-pages if UK to speed up)
-                if (googleData.Website) {
-                    websiteData = await scrapeWebsiteForGoldData(detailPage, googleData.Website, isUK);
-                }
+                // 2. Scrape Website (Optimized for UK)
+                let websiteData = googleData.Website ? await scrapeWebsiteForGoldData(detailPage, googleData.Website, isUK) : {};
 
-                // 3. AI Enrichment (FORCED DISABLE FOR UK)
+                // 3. AI Enrichment (Skip for UK to prioritize speed/privacy)
                 let aiResult = { ownerName: "", aiEmail: "", aiPhone: "" };
-                const shouldRunAI = !isUK && useAiEnrichment !== false;
-                
-                if (shouldRunAI) {
+                if (!isUK && useAiEnrichment !== false) {
                     aiResult = await findBusinessOwnerWithAI(googleData.BusinessName, googleData.Suburb || country, googleData.Website, jobId);
                 }
 
-                // 4. Data Merging with Country-Aware Phone Logic
-                const uniqueEmails = Array.from(new Set([...websiteData.foundEmails, aiResult.aiEmail].filter(e => e && e.includes('@')).map(e => e.toLowerCase().trim())));
-                
-                // Use the new country-aware phone helper
-                const uniquePhones = Array.from(new Set([aiResult.aiPhone, ...websiteData.foundPhones, googleData.Phone]
+                // 4. Data Normalization
+                const uniqueEmails = Array.from(new Set([...(websiteData.foundEmails || []), aiResult.aiEmail].filter(e => e?.includes('@')).map(e => e.toLowerCase().trim())));
+                const uniquePhones = Array.from(new Set([aiResult.aiPhone, ...(websiteData.foundPhones || []), googleData.Phone]
                     .map(p => normalizePhoneNumber(p, country))
                     .filter(Boolean)));
                 
-                const mPrefix = isUK ? '447' : '614';
-                const finalPhone = uniquePhones.find(p => p.startsWith(mPrefix)) || uniquePhones[0] || "";
+                const mobilePrefix = isUK ? '447' : '614';
+                const finalPhone = uniquePhones.find(p => p.startsWith(mobilePrefix)) || uniquePhones[0] || "";
                 
-                let finalOwner = (aiResult.ownerName && aiResult.ownerName !== "Private Owner") ? aiResult.ownerName : (websiteData.OwnerName || "Private Owner");
-                
-                const res = { 
+                let res = { 
                     ...googleData, 
-                    OwnerName: finalOwner, 
-                    Email1: uniqueEmails[0] || "", 
-                    Email2: uniqueEmails[1] || "", 
-                    Email3: uniqueEmails[2] || "", 
-                    Phone: finalPhone, 
-                    InstagramURL: websiteData.InstagramURL || googleData.InstagramURL || "", 
-                    FacebookURL: websiteData.FacebookURL || googleData.FacebookURL || "", 
-                    rawText: websiteData.rawText || googleData.BusinessName 
+                    OwnerName: (aiResult.ownerName && aiResult.ownerName !== "Private Owner") ? aiResult.ownerName : (websiteData.OwnerName || "Private Owner"),
+                    Email1: uniqueEmails[0] || "",
+                    Email2: uniqueEmails[1] || "",
+                    Phone: finalPhone,
+                    InstagramURL: websiteData.InstagramURL || googleData.InstagramURL || "",
+                    FacebookURL: websiteData.FacebookURL || googleData.FacebookURL || "",
+                    Category: (processItem.category || "N/A").replace(/"/g, "")
                 };
-                
+
+                // 5. Email Verification
                 if (res.Email1) { 
                     const isDeliverable = await verifyEmail(res.Email1); 
-                    if (!isDeliverable) { res.Email1 = res.Email2; res.Email2 = res.Email3; res.Email3 = ""; } 
+                    if (!isDeliverable) { res.Email1 = res.Email2 || ""; res.Email2 = ""; } 
                 }
                 
-                res.Category = (processItem.category || "N/A").replace(/"/g, "");
                 return res;
             };
-            return await promiseWithRetry(task, 2, 5000, jobId, processItem.url);
-        } catch (err) { return null; } finally { if (detailPage) await detailPage.close(); }
-    });
 
-        const results = await Promise.all(promises);
-        for (const businessData of results) {
+            const businessData = await promiseWithRetry(task, 2, 5000, jobId, processItem.url);
+
             if (businessData) {
-                if (exclusionList && exclusionList.length > 0) {
-                    const normName = normalizeForExclusionCheck(businessData.BusinessName);
-                    if (exclusionList.some(ex => normName.includes(normalizeForExclusionCheck(ex)))) continue;
+                // Exclusion Check
+                const normName = businessData.BusinessName.toLowerCase().replace(/[^a-z0-9]/g, "");
+                const isExcluded = exclusionList?.some(ex => normName.includes(ex.toLowerCase().replace(/[^a-z0-9]/g, "")));
+
+                if (!isExcluded) {
+                    await appendJobResult(jobId, businessData);
+                    localAddedCount++;
+                    processedUrls.add(businessData.GoogleMapsURL);
+                    await supabase.rpc('increment_usage', { 
+                        user_id_param: job.user_id, 
+                        client_local_date_param: clientLocalDate || new Date().toISOString().split('T')[0] 
+                    });
                 }
-                processedUrls.add(businessData.GoogleMapsURL);
-                await appendJobResult(jobId, businessData);
-                const safeDate = clientLocalDate || new Date().toISOString().split('T')[0];
-                await supabase.rpc('increment_usage', { 
-    user_id_param: job.user_id, 
-    client_local_date_param: safeDate 
-});
             }
+        } catch (err) {
+            console.error(`Error on URL ${processItem.url}:`, err);
+        } finally {
+            if (detailPage) await detailPage.close();
         }
-// --- UPDATE PROGRESS (scraping loop) ---
-const enrichedCount = 0; // cannot compute enriched without full RAM copy
-io.to(jobId).emit("progress_update", {
-    phase: 'scraping',
-    processed: processedInSession,
-    discovered: masterUrlMap.size,
-    added: processedUrls.size,
-    target: finalCount,
-    enriched: enrichedCount,
-    aiTarget: finalCount === -1 ? masterUrlMap.size : finalCount,
-    aiProcessed: processedUrls.size
-});
 
-processedInSession++;
-}
-
-if (browser) await browser.close();
-
-// --- FINALIZATION: fetch fresh results from DB (RAM-SAFE) ---
-const { data: finalJobData } = await supabase
-    .from("jobs")
-    .select("results")
-    .eq("id", jobId)
-    .single();
-
-const allResults = finalJobData?.results || [];
-const { uniqueBusinesses, duplicates } = deduplicateBusinesses(allResults);
-
-console.log(`[Job: ${jobId}] Final Sync: Total records in DB: ${allResults.length}`);
-
-await supabase.from("jobs").update({
-    result_count: uniqueBusinesses.length
-}).eq("id", jobId);
-
-// --- FINAL PROGRESS EMIT ---
-io.to(jobId).emit("progress_update", {
-    phase: 'completed',
-    processed: processedUrls.size,
-    discovered: masterUrlMap.size,
-    added: processedUrls.size,
-    target: finalCount,
-    enriched: uniqueBusinesses.filter(b => b.OwnerName && b.OwnerName !== "Private Owner").length,
-    aiProcessed: processedUrls.size,
-    aiTarget: masterUrlMap.size
-});
-
-// --- EMAIL DELIVERY ---
-if (userEmail && uniqueBusinesses.length > 0) {
-    const emailParams = {
-        ...searchParamsForEmail,
-        radiusKm: parameters.radiusKm,
-        userEmail
-    };
-
-    await sendResultsByEmail(userEmail, uniqueBusinesses, emailParams, duplicates);
-
-    try {
-        const { sendAdminStatsSummary } = require("./emailService");
-        await sendAdminStatsSummary(jobId, uniqueBusinesses, emailParams);
-    } catch (adminErr) {
-        console.error("[Admin Stats] Trigger failed:", adminErr);
+        // Update progress UI
+        io.to(jobId).emit("progress_update", {
+            phase: 'scraping',
+            processed: i + 1,
+            discovered: masterUrlMap.size,
+            added: localAddedCount,
+            target: finalCount,
+            aiProcessed: i + 1,
+            aiTarget: urlsToProcess.length
+        });
     }
-}
 
-await updateJobStatus(jobId, "completed");
+    if (browser) await browser.close();
+
+    // --- PHASE 3: FINALIZATION ---
+    const { data: finalJobData } = await supabase.from("jobs").select("results").eq("id", jobId).single();
+    const allResults = finalJobData?.results || [];
+    const { uniqueBusinesses, duplicates } = deduplicateBusinesses(allResults);
+
+    await supabase.from("jobs").update({ result_count: uniqueBusinesses.length }).eq("id", jobId);
+
+    if (userEmail && uniqueBusinesses.length > 0) {
+        const emailParams = { ...searchParamsForEmail, radiusKm, userEmail };
+        await sendResultsByEmail(userEmail, uniqueBusinesses, emailParams, duplicates);
+        try {
+            const { sendAdminStatsSummary } = require("./emailService");
+            await sendAdminStatsSummary(jobId, uniqueBusinesses, emailParams);
+        } catch (e) {}
+    }
+
+    await updateJobStatus(jobId, "completed");
+    await addLog(jobId, "Research completed successfully.");
 
   } catch (error) {
     console.error(`[Job: ${jobId}] Critical error:`, error);
