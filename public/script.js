@@ -965,7 +965,7 @@ let areaKey = "";
       const originalText = elements.startButton.innerHTML; elements.startButton.innerHTML = '<i class="fas fa-check"></i> Added to Queue!'; elements.startButton.style.backgroundColor = "#10b981"; elements.startButton.disabled = true;
       setTimeout(() => {
         elements.locationInput.value = "";
-        elements.startButton.innerHTML = originalText; elements.startButton.style.backgroundColor = ""; elements.startButton.disabled = false; elements.locationInput.value = ""; elements.businessNamesInput.value = ""; window.rtrlApp.postalCodes = []; window.rtrlApp.customKeywords = []; activeSelections = []; updateSelectionPills(); renderExplorer(); document.querySelectorAll(".tag").forEach(t => t.remove()); if (typeof window.rtrlApp.setRadiusInputsState === 'function') window.rtrlApp.setRadiusInputsState(true);
+        elements.startButton.innerHTML = originalText; elements.startButton.style.backgroundColor = ""; elements.startButton.disabled = false; elements.locationInput.value = ""; elements.businessNamesInput.value = ""; window.rtrlApp.postalCodes = []; window.rtrlApp.customKeywords = []; activeSelections = []; updateSelectionPills(); renderExplorer(); document.querySelectorAll(".tag").forEach(t => t.remove()); if (typeof window.rtrlApp.setRadiusInputsState === 'function') window.rtrlApp.setRadiusInputsState(false);
       }, 2000);
     };
 

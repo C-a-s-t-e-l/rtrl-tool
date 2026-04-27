@@ -199,6 +199,26 @@ const runScrapeJob = async (jobId) => {
     userEmail, searchParamsForEmail, exclusionList, useAiEnrichment, clientLocalDate 
   } = parameters;
 
+  let filterCenterLat = null, filterCenterLng = null;
+  if (radiusKm && anchorPoint) {
+    if (anchorPoint.includes(",")) {
+        const parts = anchorPoint.split(",");
+        filterCenterLat = parseFloat(parts[0]); 
+        filterCenterLng = parseFloat(parts[1]);
+    } else {
+        // This handles the "Typed Name" case so the filter still works
+        try {
+            const geocodeUrl = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(`${anchorPoint}, ${country}`)}&key=${GOOGLE_MAPS_API_KEY}`;
+            const response = await axios.get(geocodeUrl);
+            if (response.data.status === "OK") {
+                const loc = response.data.results[0].geometry.location;
+                filterCenterLat = loc.lat; filterCenterLng = loc.lng;
+            }
+        } catch (e) { console.error("Geofence Geocode Error", e); }
+    }
+  }
+
+
   // --- INITIALIZE RECOVERY TRUTH (Fixes ReferenceErrors) ---
   const processedUrls = new Set((job.results || []).map(r => r.GoogleMapsURL));
   const totalProcessedCount = processedUrls.size; 
@@ -275,11 +295,34 @@ const runScrapeJob = async (jobId) => {
                 const discoveredInLoop = new Set();
                 await collectGoogleMapsUrlsContinuously(collectionPage, finalQ, jobId, discoveredInLoop, country);
                 
-                discoveredInLoop.forEach(url => {
-                    if (!masterUrlMap.has(url)) {
-                        masterUrlMap.set(url, item);
-                    }
+discoveredInLoop.forEach(url => {
+    if (!masterUrlMap.has(url)) {
+        // --- ADD THIS FILTER BACK IN ---
+        const businessCoords = extractCoordinatesFromUrl(url);
+        
+        if (businessCoords) {
+            let isInsideAnyZone = false;
+            
+            // Check against Multi-Radius points
+            if (parameters.multiRadiusPoints?.length > 0) {
+                isInsideAnyZone = parameters.multiRadiusPoints.some(point => {
+                    const [pLat, pLng] = point.coords.split(',').map(Number);
+                    const dist = calculateDistance(pLat, pLng, businessCoords.lat, businessCoords.lng);
+                    return dist <= (parseFloat(point.radius) + 0.5); // 0.5km buffer
                 });
+            } 
+            // Check against Single Radius
+            else if (radiusKm && filterCenterLat) { // 
+                const dist = calculateDistance(filterCenterLat, filterCenterLng, businessCoords.lat, businessCoords.lng);
+                isInsideAnyZone = dist <= (parseFloat(radiusKm) + 0.5);
+            } else {
+                isInsideAnyZone = true;
+            }
+            if (!isInsideAnyZone) return; 
+        }
+        masterUrlMap.set(url, item);
+    }
+});
                 io.to(jobId).emit("progress_update", { phase: 'discovery', discovered: masterUrlMap.size, processed: 0, added: totalProcessedCount });
             }
             if (collectionPage) await collectionPage.close();

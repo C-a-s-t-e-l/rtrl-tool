@@ -92,6 +92,12 @@ function setUiState(isResearching, elements) {
       ? '<i class="fas fa-spinner fa-spin"></i> Researching...'
       : '<i class="fas fa-play"></i> Start Research';
   }
+
+    if (btnOpenMapWorkspace) {
+    btnOpenMapWorkspace.disabled = isResearching;
+    btnOpenMapWorkspace.style.opacity = isResearching ? "0.5" : "1";
+    btnOpenMapWorkspace.style.cursor = isResearching ? "not-allowed" : "pointer";
+  }
   
 }
 
