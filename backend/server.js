@@ -352,6 +352,7 @@ discoveredInLoop.forEach(url => {
                                .filter(item => !processedUrls.has(item.url));
 
     let localAddedCount = totalProcessedCount;
+    let localEnrichedCount = (job.results || []).filter(b => b.OwnerName && b.OwnerName !== "Private Owner").length;
 
     for (let i = 0; i < urlsToProcess.length; i++) {
         // Mid-scrape Quota Check
@@ -424,6 +425,9 @@ discoveredInLoop.forEach(url => {
                 if (!isExcluded) {
                     await appendJobResult(jobId, businessData);
                     localAddedCount++;
+                    if (businessData.OwnerName && businessData.OwnerName !== "Private Owner") {
+                    localEnrichedCount++;
+                                          }
                     processedUrls.add(businessData.GoogleMapsURL);
                     await supabase.rpc('increment_usage', { 
                         user_id_param: job.user_id, 
@@ -437,8 +441,7 @@ discoveredInLoop.forEach(url => {
             if (detailPage) await detailPage.close();
         }
 
-        // Update progress UI
-        const currentEnrichedCount = (job.results || []).filter(b => b.OwnerName && b.OwnerName !== "Private Owner").length;
+        
 
         io.to(jobId).emit("progress_update", {
             phase: 'scraping',
@@ -446,7 +449,7 @@ discoveredInLoop.forEach(url => {
             discovered: masterUrlMap.size,
             added: localAddedCount,
             target: finalCount,
-            enriched: currentEnrichedCount, 
+            enriched: localEnrichedCount, 
             aiProcessed: i + 1,
             aiTarget: urlsToProcess.length
         });

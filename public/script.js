@@ -467,7 +467,7 @@ window.rtrlApp.deleteLocation = async (id) => {
 
     socket.on("job_update", (data) => {
       if (data.status === "running") { currentJobId = data.id; localStorage.setItem("rtrl_active_job_id", data.id); resetStatusUI(); updateDashboardUi("running"); }
-      else if (data.status === "completed" || data.status === "failed") { updateDashboardUi(data.status); localStorage.removeItem("rtrl_active_job_id"); currentJobId = null; setUiState(false, elements); setTimeout(() => { if (window.rtrlApp.jobHistory) { window.rtrlApp.jobHistory.fetchAndRenderJobs(true); } }, 1500); }
+      else if (data.status === "completed" || data.status === "failed") { updateDashboardUi(data.status); localStorage.removeItem("rtrl_active_job_id"); currentJobId = null; setUiState(false, elements); setTimeout(() => { if (window.rtrlApp.jobHistory) { window.rtrlApp.jobHistory.fetchAndRenderJobs(true); } }, 5000); }
     });
 
     socket.on("progress_update", (data) => {
