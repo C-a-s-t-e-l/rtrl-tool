@@ -250,38 +250,45 @@ const runScrapeJob = async (jobId) => {
     const completedCategories = new Set(masterUrlMap.values());
 
 // --- PHASE 1: DISCOVERY ---
-if (masterUrlMap.size === 0 || processedUrls.size < finalCount || finalCount === -1) {
+if (masterUrlMap.size === 0 || totalProcessedCount < finalCount || finalCount === -1) {
+    
+    // Normalize existing categories from DB for reliable matching
+    // We convert everything to lowercase and remove extra spaces
+    const completedCategories = new Set(
+        Array.from(masterUrlMap.values()).map(c => String(c).trim().toLowerCase())
+    );
 
-
-
-    for (const item of searchItems) {
-
-      if (completedCategories.has(item)) {
-        await addLog(jobId, `[Recovery] Skipping "${item}" (already discovered)`);
-        continue;
+    // DEBUG LOG: This will show you exactly what the server thinks is finished
+    if (completedCategories.size > 0) {
+        await addLog(jobId, `[System] Found ${completedCategories.size} categories already in database. Checking for skips...`);
     }
 
-        currentTermIndex++;
+    for (let i = 0; i < searchItems.length; i++) {
+        const item = searchItems[i];
+        const normalizedItem = String(item).trim().toLowerCase();
 
-        await addLog(jobId, `[Loop ${currentTermIndex}/${totalTerms}] Searching for: "${item}"`);
+        // RECOVERY CHECK: Now uses normalized strings to prevent "Bakery" vs "bakery" mismatches
+        // Also removed the "finalCount === -1" restriction so skipping works even during testing
+        if (completedCategories.has(normalizedItem)) {
+            await addLog(jobId, `[Recovery] Skipping "${item}" (Already discovered in database)`);
+            continue;
+        }
 
+        await addLog(jobId, `[Loop ${i+1}/${searchItems.length}] Searching for: "${item}"`);
         browser = await launchBrowser(`[System] Initializing browser for: ${item}`);
-
+        
         try {
             let collectionPage = await browser.newPage();
-
             let locationQueries = [];
-
-            // Generate search points for Multi-Zone or Legacy Radius
-            if (parameters.multiRadiusPoints && parameters.multiRadiusPoints.length > 0) {
+            
+            if (parameters.multiRadiusPoints?.length > 0) {
                 for (const point of parameters.multiRadiusPoints) {
-                    const radiusQueries = await getSearchQueriesForRadius(point.coords, point.radius, country, GOOGLE_MAPS_API_KEY, jobId);
-                    locationQueries.push(...radiusQueries);
+                    locationQueries.push(...await getSearchQueriesForRadius(point.coords, point.radius, country, GOOGLE_MAPS_API_KEY, jobId));
                 }
             } else if (anchorPoint && radiusKm) {
                 locationQueries = await getSearchQueriesForRadius(anchorPoint, radiusKm, country, GOOGLE_MAPS_API_KEY, jobId);
             } else {
-                let searchAreas = postalCode && postalCode.length > 0 ? postalCode : [location];
+                let searchAreas = postalCode?.length > 0 ? postalCode : [location];
                 for (const areaQuery of searchAreas) {
                     const base = isIndividualSearch ? `${item}, ${areaQuery}, ${country}` : `${item} in ${areaQuery}, ${country}`;
                     locationQueries.push(...await getSearchQueriesForLocation(base, areaQuery, country, jobId, isIndividualSearch));
@@ -292,58 +299,37 @@ if (masterUrlMap.size === 0 || processedUrls.size < finalCount || finalCount ===
                 const finalQ = isIndividualSearch || query.startsWith("near ") ? `${item} ${query}` : query;
                 const discovered = new Set();
                 await collectGoogleMapsUrlsContinuously(collectionPage, finalQ, jobId, discovered, country);
-
+                
                 discovered.forEach(url => {
                     if (!masterUrlMap.has(url)) {
                         const businessCoords = extractCoordinatesFromUrl(url);
-
                         if (businessCoords) {
-                            let isInsideAnyZone = false;
-                            if (parameters.multiRadiusPoints && parameters.multiRadiusPoints.length > 0) {
-                                isInsideAnyZone = parameters.multiRadiusPoints.some(point => {
-                                    const [pLat, pLng] = point.coords.split(',').map(Number);
-                                    const dist = calculateDistance(pLat, pLng, businessCoords.lat, businessCoords.lng);
-                                    return dist <= (parseFloat(point.radius) + 0.5);
+                            let isInside = true;
+                            if (parameters.multiRadiusPoints?.length > 0) {
+                                isInside = parameters.multiRadiusPoints.some(p => {
+                                    const [pLat, pLng] = p.coords.split(',').map(Number);
+                                    return calculateDistance(pLat, pLng, businessCoords.lat, businessCoords.lng) <= (parseFloat(p.radius) + 0.5);
                                 });
-                            } else if (radiusKm && anchorPoint && filterCenterLat) {
-                                const dist = calculateDistance(filterCenterLat, filterCenterLng, businessCoords.lat, businessCoords.lng);
-                                isInsideAnyZone = dist <= (parseFloat(radiusKm) + 0.5);
-                            } else {
-                                isInsideAnyZone = true;
                             }
-
-                            if (!isInsideAnyZone) return;
+                            if (!isInside) return;
                         }
                         masterUrlMap.set(url, item);
                     }
                 });
-
-                io.to(jobId).emit("progress_update", { phase: 'discovery', discovered: masterUrlMap.size, processed: 0, added: processedUrls.size });
-
+                io.to(jobId).emit("progress_update", { phase: 'discovery', discovered: masterUrlMap.size, processed: 0, added: totalProcessedCount });
             }
-
-            // Close page at the end of processing
             if (collectionPage) await collectionPage.close();
-
-        } catch (itemError) {
-            console.error(`Error in discovery loop for ${item}:`, itemError);
-            await addLog(jobId, `[Warning] Discovery for ${item} failed, moving to next.`);
         } finally {
-            // Ensures browser is ALWAYS closed even if something fails
-            if (browser) {
-                await browser.close();
-                browser = null;
-            }
+            if (browser) { await browser.close(); browser = null; }
         }
 
-        // Save the filtered URLs to Supabase so we don't lose progress
-        await supabase.from("jobs").update({
-            collected_urls: Array.from(masterUrlMap, ([url, cat]) => ({ url, category: cat }))
+        // Save progress immediately after each category is finished
+        await supabase.from("jobs").update({ 
+            collected_urls: Array.from(masterUrlMap, ([url, cat]) => ({ url, category: cat })) 
         }).eq("id", jobId);
-
+        
         await new Promise(r => setTimeout(r, 10000));
     }
-
 }
 
 
