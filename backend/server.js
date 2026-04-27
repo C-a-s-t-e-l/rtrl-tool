@@ -160,7 +160,6 @@ const appendJobResult = async (jobId, newResult) => {
   }
 };
 
-//Old version
 const runScrapeJob = async (jobId) => {
   await updateJobStatus(jobId, "running");
   console.log(`[Worker] Job ${jobId} picked up.`);
@@ -439,12 +438,15 @@ discoveredInLoop.forEach(url => {
         }
 
         // Update progress UI
+        const currentEnrichedCount = (job.results || []).filter(b => b.OwnerName && b.OwnerName !== "Private Owner").length;
+
         io.to(jobId).emit("progress_update", {
             phase: 'scraping',
             processed: i + 1,
             discovered: masterUrlMap.size,
             added: localAddedCount,
             target: finalCount,
+            enriched: currentEnrichedCount, 
             aiProcessed: i + 1,
             aiTarget: urlsToProcess.length
         });
