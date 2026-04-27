@@ -160,6 +160,7 @@ const appendJobResult = async (jobId, newResult) => {
   }
 };
 
+//Old version
 const runScrapeJob = async (jobId) => {
   await updateJobStatus(jobId, "running");
   console.log(`[Worker] Job ${jobId} picked up.`); 
@@ -227,7 +228,8 @@ const runScrapeJob = async (jobId) => {
   }
 
   let browser = null;
-  let allProcessedBusinesses = job.results || [];
+  const processedUrls = new Set((job.results || []).map(r => r.GoogleMapsURL));
+
   const masterUrlMap = new Map((job.collected_urls || []).map(item => [item.url, item.category]));
 
   try {
@@ -245,10 +247,19 @@ const runScrapeJob = async (jobId) => {
 
     const totalTerms = searchItems.length;
     let currentTermIndex = 0;
+    const completedCategories = new Set(masterUrlMap.values());
 
 // --- PHASE 1: DISCOVERY ---
-if (masterUrlMap.size === 0 || allProcessedBusinesses.length < finalCount || finalCount === -1) {
+if (masterUrlMap.size === 0 || processedUrls.size < finalCount || finalCount === -1) {
+
+
+
     for (const item of searchItems) {
+
+      if (completedCategories.has(item)) {
+        await addLog(jobId, `[Recovery] Skipping "${item}" (already discovered)`);
+        continue;
+    }
 
         currentTermIndex++;
 
@@ -307,7 +318,8 @@ if (masterUrlMap.size === 0 || allProcessedBusinesses.length < finalCount || fin
                     }
                 });
 
-                io.to(jobId).emit("progress_update", { phase: 'discovery', discovered: masterUrlMap.size, processed: 0, added: allProcessedBusinesses.length });
+                io.to(jobId).emit("progress_update", { phase: 'discovery', discovered: masterUrlMap.size, processed: 0, added: processedUrls.size });
+
             }
 
             // Close page at the end of processing
@@ -345,7 +357,9 @@ if (masterUrlMap.size === 0 || allProcessedBusinesses.length < finalCount || fin
     // --- PHASE 2: PROCESSING ---
     await addLog(jobId, `--- Starting Data Extraction & AI Analysis ---`);
     browser = await launchBrowser("[System] Processing businesses...");
-    const urlsToProcess = Array.from(masterUrlMap, ([url, cat]) => ({ url, category: cat })).filter(item => !allProcessedBusinesses.some(b => b.GoogleMapsURL === item.url));
+    const urlsToProcess = Array.from(masterUrlMap, ([url, cat]) => ({ url, category: cat }))
+    .filter(item => !processedUrls.has(item.url));
+
     const CONCURRENCY = 1;
     let processedInSession = 0;
 
@@ -357,7 +371,7 @@ if (masterUrlMap.size === 0 || allProcessedBusinesses.length < finalCount || fin
             break; 
         }
 
-        if (finalCount !== -1 && allProcessedBusinesses.length >= finalCount) break;
+        if (finalCount !== -1 && processedUrls.size >= finalCount) break;
         const batch = urlsToProcess.slice(i, i + CONCURRENCY);
 
 
@@ -433,7 +447,7 @@ if (masterUrlMap.size === 0 || allProcessedBusinesses.length < finalCount || fin
                     const normName = normalizeForExclusionCheck(businessData.BusinessName);
                     if (exclusionList.some(ex => normName.includes(normalizeForExclusionCheck(ex)))) continue;
                 }
-                allProcessedBusinesses.push(businessData);
+                processedUrls.add(businessData.GoogleMapsURL);
                 await appendJobResult(jobId, businessData);
                 const safeDate = clientLocalDate || new Date().toISOString().split('T')[0];
                 await supabase.rpc('increment_usage', { 
@@ -442,50 +456,72 @@ if (masterUrlMap.size === 0 || allProcessedBusinesses.length < finalCount || fin
 });
             }
         }
-        const enrichedCount = allProcessedBusinesses.filter(b => b.OwnerName && b.OwnerName !== "Private Owner").length;
-        io.to(jobId).emit("progress_update", { phase: 'scraping', processed: processedInSession, discovered: masterUrlMap.size, added: allProcessedBusinesses.length, target: finalCount, enriched: enrichedCount, aiTarget: finalCount === -1 ? masterUrlMap.size : finalCount, aiProcessed: allProcessedBusinesses.length });
-        processedInSession++;
-    }
+// --- UPDATE PROGRESS (scraping loop) ---
+const enrichedCount = 0; // cannot compute enriched without full RAM copy
+io.to(jobId).emit("progress_update", {
+    phase: 'scraping',
+    processed: processedInSession,
+    discovered: masterUrlMap.size,
+    added: processedUrls.size,
+    target: finalCount,
+    enriched: enrichedCount,
+    aiTarget: finalCount === -1 ? masterUrlMap.size : finalCount,
+    aiProcessed: processedUrls.size
+});
+
+processedInSession++;
+}
+
 if (browser) await browser.close();
 
-const { uniqueBusinesses, duplicates } = deduplicateBusinesses(allProcessedBusinesses);
+// --- FINALIZATION: fetch fresh results from DB (RAM-SAFE) ---
+const { data: finalJobData } = await supabase
+    .from("jobs")
+    .select("results")
+    .eq("id", jobId)
+    .single();
 
-console.log(`[Job: ${jobId}] Final Sync: Saving all ${allProcessedBusinesses.length} records to database.`);
+const allResults = finalJobData?.results || [];
+const { uniqueBusinesses, duplicates } = deduplicateBusinesses(allResults);
 
-await supabase.from("jobs").update({ 
-    results: allProcessedBusinesses, 
-    result_count: uniqueBusinesses.length 
+console.log(`[Job: ${jobId}] Final Sync: Total records in DB: ${allResults.length}`);
+
+await supabase.from("jobs").update({
+    result_count: uniqueBusinesses.length
 }).eq("id", jobId);
 
-io.to(jobId).emit("progress_update", { 
-    phase: 'completed', 
-    processed: allProcessedBusinesses.length, 
-    discovered: masterUrlMap.size, 
-    added: allProcessedBusinesses.length, 
-    target: finalCount, 
-    enriched: allProcessedBusinesses.filter(b => b.OwnerName && b.OwnerName !== "Private Owner").length,
-    aiProcessed: allProcessedBusinesses.length,
+// --- FINAL PROGRESS EMIT ---
+io.to(jobId).emit("progress_update", {
+    phase: 'completed',
+    processed: processedUrls.size,
+    discovered: masterUrlMap.size,
+    added: processedUrls.size,
+    target: finalCount,
+    enriched: uniqueBusinesses.filter(b => b.OwnerName && b.OwnerName !== "Private Owner").length,
+    aiProcessed: processedUrls.size,
     aiTarget: masterUrlMap.size
 });
 
-    if (userEmail && uniqueBusinesses.length > 0) {
-        const emailParams = { 
-            ...searchParamsForEmail, 
-            radiusKm: parameters.radiusKm,
-            userEmail: userEmail 
-        };
+// --- EMAIL DELIVERY ---
+if (userEmail && uniqueBusinesses.length > 0) {
+    const emailParams = {
+        ...searchParamsForEmail,
+        radiusKm: parameters.radiusKm,
+        userEmail
+    };
 
-        await sendResultsByEmail(userEmail, uniqueBusinesses, emailParams, duplicates);
+    await sendResultsByEmail(userEmail, uniqueBusinesses, emailParams, duplicates);
 
-        try {
-            const { sendAdminStatsSummary } = require("./emailService");
-            await sendAdminStatsSummary(jobId, uniqueBusinesses, emailParams);
-        } catch (adminErr) {
-            console.error("[Admin Stats] Trigger failed:", adminErr);
-        }
+    try {
+        const { sendAdminStatsSummary } = require("./emailService");
+        await sendAdminStatsSummary(jobId, uniqueBusinesses, emailParams);
+    } catch (adminErr) {
+        console.error("[Admin Stats] Trigger failed:", adminErr);
     }
+}
 
-    await updateJobStatus(jobId, "completed");
+await updateJobStatus(jobId, "completed");
+
   } catch (error) {
     console.error(`[Job: ${jobId}] Critical error:`, error);
     await updateJobStatus(jobId, "failed");

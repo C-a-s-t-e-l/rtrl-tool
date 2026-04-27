@@ -84,43 +84,15 @@ function logMessage(el, message, type = "info") {
 }
 
 function setUiState(isResearching, elements) {
-  const {
-    startButton,
-    primaryCategorySelect,
-    customCategoryInput,
-    locationInput,
-    postalCodeInput,
-    btnOpenMapWorkspace, 
-    businessNamesInput,
-  } = elements;
-
-  const disabled = isResearching;
+  const { startButton } = elements;
 
   if (startButton) {
-    startButton.disabled = disabled;
-    startButton.innerHTML = disabled
+    startButton.disabled = isResearching;
+    startButton.innerHTML = isResearching
       ? '<i class="fas fa-spinner fa-spin"></i> Researching...'
       : '<i class="fas fa-play"></i> Start Research';
   }
-
-  const inputs = [
-    primaryCategorySelect,
-    customCategoryInput,
-    locationInput,
-    postalCodeInput,
-    btnOpenMapWorkspace, 
-    businessNamesInput,
-  ];
-
-  inputs.forEach((input) => {
-    if (input) input.disabled = disabled;
-  });
-
-  if (elements.subCategoryCheckboxContainer) {
-    elements.subCategoryCheckboxContainer
-      .querySelectorAll("input")
-      .forEach((cb) => (cb.disabled = disabled));
-  }
+  
 }
 
 function populatePrimaryCategories(selectEl, categories, selectedValue) {
