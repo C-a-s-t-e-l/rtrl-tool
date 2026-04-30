@@ -95,6 +95,25 @@ window.rtrlApp.review = (function () {
       .substring(0, 15);
   };
 
+  function getExportBaseName() {
+    const date = new Date().toISOString().split('T')[0].replace(/-/g, '');
+    let label = "Collection";
+
+ 
+    const jobCard = document.getElementById(`job-card-${currentJobId}`);
+    if (jobCard) {
+      const titleText = jobCard.querySelector('.job-title')?.textContent || "";
+      label = titleText.replace('Search: ', '')
+                       .replace(/["']/g, '')
+                       .replace(/[\s/]/g, '_')
+                       .toLowerCase();
+    } else if (Array.isArray(currentJobId) || currentJobId === 'Merged_Collection') {
+      label = "Merged_Leads";
+    }
+
+    return `Refined_${date}_rtrl_${label}`;
+  }
+
   function processData(results, exclusionList) {
     const seenSignatures = new Set();
     const norm = (s) => (s || "").toLowerCase().replace(/['’`.,()&]/g, "").replace(/\s+/g, "");
@@ -403,42 +422,49 @@ window.rtrlApp.review = (function () {
     }));
   }
 
-  function exportMaster() {
+function exportMaster() {
     const sel = masterData.filter((d) => d._checked);
     if (!sel.length) return alert("Select leads first.");
     const ws = XLSX.utils.json_to_sheet(mapToMaster(sel));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Business List (Unique)");
-    XLSX.writeFile(wb, `Refined_Full_Collection.xlsx`);
+    const fileName = `${getExportBaseName()}_Full.xlsx`;
+    XLSX.writeFile(wb, fileName);
   }
 
-  async function exportZip() {
+async function exportZip() {
     const sel = masterData.filter((d) => d._checked);
     if (!sel.length) return alert("Select leads first.");
-    const zip = new JSZip();
-    const wbFull = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wbFull, XLSX.utils.json_to_sheet(mapToMaster(sel)), "Business List (Unique)");
-    zip.file(`Refined_Full_DuplicatesRemoved.xlsx`, XLSX.write(wbFull, { type: "buffer", bookType: "xlsx" }));
     
-    // Refined SMS List
-    const sms = sel.filter((b) => b.Phone && b.Phone.startsWith("614")).map((b) => {
+    const baseName = getExportBaseName(); // Get the smart name
+    const zip = new JSZip();
+    
+    // 1. XLSX
+    const wbFull = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wbFull, XLSX.utils.json_to_sheet(mapToMaster(sel)), "Business List");
+    zip.file(`${baseName}_Full.xlsx`, XLSX.write(wbFull, { type: "buffer", bookType: "xlsx" }));
+    
+    // 2. SMS CSV
+    const sms = sel.filter((b) => b.Phone && (b.Phone.startsWith("614") || b.Phone.startsWith("04"))).map((b) => {
         let fn = "", ln = "";
         if (b.OwnerName && b.OwnerName.trim() !== "") { const p = b.OwnerName.trim().split(" "); fn = p.shift(); ln = p.join(" "); }
-        return { FirstName: fn, LastName: ln, Organization: b.BusinessName || "", Email: b.Email1 || "", MobileNumber: b.Phone || "", CustomField1: b.Category || "", CustomField2: b.Suburb || "", Notes: b.ManualNotes || "" };
+        return { FirstName: fn, LastName: ln, Organization: b.BusinessName || "", Email: b.Email1 || "", MobileNumber: b.Phone || "", Category: b.Category || "", Suburb: b.Suburb || "", Notes: b.ManualNotes || "" };
     });
-    zip.file(`Refined_Mobile_Numbers_Only.csv`, XLSX.write({ SheetNames: ["S"], Sheets: { S: XLSX.utils.json_to_sheet(sms) } }, { type: "buffer", bookType: "csv" }));
+    zip.file(`${baseName}_Mobile_Numbers.csv`, XLSX.write({ SheetNames: ["S"], Sheets: { S: XLSX.utils.json_to_sheet(sms) } }, { type: "buffer", bookType: "csv" }));
 
-    // Refined Email List
-    const con = sel.filter((d) => d.Email1 || d.Email2 || d.Email3).map((d) => {
-        let st = ""; if (d.StreetAddress) { const m = d.StreetAddress.match(/\b([A-Z]{2,3})\b(?= \d{4,})/); st = m ? m[1] : ""; }
-        return { Company: d.BusinessName || "", Address_Suburb: d.Suburb || "", Address_State: st, Notes: `Refined_Search_Collection`, Category: d.Category || "", facebook: d.FacebookURL || "", instagram: d.InstagramURL || "", email_1: d.Email1 || "", email_2: d.Email2 || "", email_3: d.Email3 || "", linkedin: "", };
+    // 3. Email CSV
+    const con = sel.filter((d) => d.Email1).map((d) => {
+        return { Company: d.BusinessName || "", Suburb: d.Suburb || "", Category: d.Category || "", email_1: d.Email1 || "", email_2: d.Email2 || "", email_3: d.Email3 || "" };
     });
-    zip.file(`Refined_Full_DuplicatesRemoved_Emails.csv`, XLSX.write({ SheetNames: ["C"], Sheets: { C: XLSX.utils.json_to_sheet(con) } }, { type: "buffer", bookType: "csv" }));
+    zip.file(`${baseName}_Emails_Only.csv`, XLSX.write({ SheetNames: ["C"], Sheets: { C: XLSX.utils.json_to_sheet(con) } }, { type: "buffer", bookType: "csv" }));
 
+    // 4. Download Trigger
     const blob = await zip.generateAsync({ type: "blob" });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
-    link.download = `Refined_Full_Collection.zip`;
+    
+    // UPDATED LINE:
+    link.download = `${baseName}_Package.zip`;
     link.click();
   }
 

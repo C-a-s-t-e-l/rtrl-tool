@@ -150,108 +150,112 @@ function attachCheckboxListeners() {
         window.rtrlApp.review.openReview(selectedJobIds);
     }
 
-    function renderJob(job) {
-        const { id, created_at, parameters, status, result_count } = job;
-        const p = parameters || {};
-        const s = p.searchParamsForEmail || {};
-        const date = new Date(created_at).toLocaleString();
-        
-        const isSelected = selectedJobIds.includes(id) ? 'checked' : '';
+function renderJob(job) {
+    const { id, created_at, parameters, status, result_count } = job;
+    const p = parameters || {};
+    const s = p.searchParamsForEmail || {};
+    const date = new Date(created_at).toLocaleString();
+    
+    const isSelected = selectedJobIds.includes(id) ? 'checked' : '';
 
-        let searchType = "Suburb/Area Search";
-        let locationDetail = s.area || p.location || "N/A";
-        if (p.multiRadiusPoints?.length > 0) {
-            searchType = p.multiRadiusPoints.length === 1 ? "Radius Search" : "Multi-Zone Search";
-            locationDetail = `${s.area} (~${Math.round(p.multiRadiusPoints[0].radius)}km radius)`;
-        } else if (p.radiusKm) {
-            searchType = "Radius Search";
-            locationDetail = `${p.radiusKm}km radius around ${s.area}`;
-        }
-
-        const isBroadMode = !s.primaryCategory && s.customCategory;
-        const keywordType = isBroadMode ? "Custom Keyword Search" : "Preset Category Search";
-        const detailedSummary = isBroadMode ? `Keywords: "${s.customCategory}"` : `Cat: ${s.primaryCategory || "N/A"} ; Sub: ${s.subCategoryList?.join(", ") || "None"}`;
-
-        let statusIcon = 'fa-clock', statusClass = 'status-queued', statusText = 'Queued';
-        if (status === 'running') { statusIcon = 'fa-spinner fa-spin'; statusClass = 'status-running'; statusText = 'Running'; }
-        else if (status === 'completed') { statusIcon = 'fa-check-circle'; statusClass = 'status-completed'; statusText = 'Completed'; }
-        else if (status === 'failed') { statusIcon = 'fa-exclamation-triangle'; statusClass = 'status-failed'; statusText = 'Failed'; }
-
-        const authToken = tokenProvider();
-
-        const fileLinks = `
-            <a href="${backendUrl}/api/jobs/${id}/download/full_xlsx?authToken=${authToken}" class="file-link" download><i class="fas fa-file-excel"></i> Full List (.xlsx)</a>
-            <a href="${backendUrl}/api/jobs/${id}/download/duplicates_xlsx?authToken=${authToken}" class="file-link" download><i class="fas fa-copy"></i> Duplicates (.xlsx)</a>
-            <a href="${backendUrl}/api/jobs/${id}/download/sms_csv?authToken=${authToken}" class="file-link" download><i class="fas fa-mobile-alt"></i> SMS List (.csv)</a>
-            <a href="${backendUrl}/api/jobs/${id}/download/contacts_csv?authToken=${authToken}" class="file-link" download><i class="fas fa-address-book"></i> Emails (.csv)</a>
-            <a href="${backendUrl}/api/jobs/${id}/download/mobiles_zip?authToken=${authToken}" class="file-link" download><i class="fas fa-file-zipper"></i> Mobile Splits (.zip)</a>
-            <a href="${backendUrl}/api/jobs/${id}/download/csv_zip?authToken=${authToken}" class="file-link" download><i class="fas fa-file-archive"></i> CSV Splits (.zip)</a>
-            <a href="${backendUrl}/api/jobs/${id}/download/txt_zip?authToken=${authToken}" class="file-link" download><i class="fas fa-file-alt"></i> TXT Splits (.zip)</a>
-        `;
-
-        return `
-            <div class="job-item" id="job-card-${id}">
-                <div class="job-header" style="display: flex; align-items: center; gap: 15px;">
-                    <div style="display: flex; align-items: center; justify-content: center; width: 30px;">
-                        <input type="checkbox" class="job-merge-select" value="${id}" ${isSelected} style="width: 18px; height: 18px; cursor: pointer; margin: 0;">
-                    </div>
-                    <div class="job-title-wrapper" style="flex: 1; display: flex; align-items: center; gap: 10px;">
-                        <i class="fas fa-history job-icon"></i>
-                        <h4 class="job-title" style="margin:0;">Search: "${s.area || 'Unknown'}"</h4>
-                    </div>
-                    <div id="job-status-${id}" class="job-status ${statusClass}" style="margin-left: auto;">
-                        <i class="fas ${statusIcon}"></i>
-                        <span>${statusText}</span>
-                    </div>
-                </div>
-
-                <div class="job-parameter-summary" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; background: #f0f7ff; padding: 15px; border-radius: 10px; border-left: 6px solid #3b82f6; margin: 12px 0; font-size: 0.85rem; color: #1e293b; box-shadow: inset 0 1px 2px rgba(0,0,0,0.05);">
-                    <div style="line-height: 1.6;">
-                        <span style="color: #64748b; font-weight: 700; text-transform: uppercase; font-size: 0.7rem;">Targeting Criteria</span><br>
-                        <strong>Search Type:</strong> ${searchType}<br>
-                        <strong>Specifics:</strong> ${locationDetail}
-                    </div>
-                    <div style="line-height: 1.6;">
-                        <span style="color: #64748b; font-weight: 700; text-transform: uppercase; font-size: 0.7rem;">Keywords & Industry</span><br>
-                        <strong>Method:</strong> ${keywordType}<br>
-                        <strong>Summary:</strong> ${detailedSummary}
-                    </div>
-                    <div style="line-height: 1.6;">
-                        <span style="color: #64748b; font-weight: 700; text-transform: uppercase; font-size: 0.7rem;">System Settings</span><br>
-                        <strong>AI Enrichment:</strong> ${p.useAiEnrichment ? "ENABLED" : "DISABLED"}<br>
-                        <strong>Limit:</strong> ${p.count === -1 ? "All Available" : p.count}
-                    </div>
-                </div>
-
-                <div class="job-meta">
-                    <span><i class="fas fa-calendar-alt"></i> ${date}</span>
-                    <span id="job-count-${id}"><i class="fas fa-database"></i> ${(job.results ? job.results.length : result_count) || 0} Results Found</span>
-                    <span><i class="fas fa-fingerprint"></i> ID: ${id}</span>
-                </div>
-
-                ${status === 'completed' ? `
-                <div class="job-downloads" style="margin-top: 15px;">
-                    <div class="job-files">
-                        <h5>Download Files</h5>
-                        <div class="file-links-container">
-                            ${fileLinks}
-                        </div>
-                    </div>
-                    <div class="job-actions">
-                        <h5>Actions</h5>
-                        <div class="action-buttons-container">
-                            <a href="${backendUrl}/api/jobs/${id}/download/all?authToken=${authToken}" class="job-action-btn" download><i class="fas fa-file-zipper"></i> Download All (.zip)</a>
-                            <button class="job-action-btn resend-email-btn" data-job-id="${id}"><i class="fas fa-paper-plane"></i> Resend Email</button>
-                            <button class="job-action-btn email-body-list-btn" data-job-id="${id}"><i class="fas fa-mobile-alt"></i> Send Mobile List</button>
-                            <button class="job-action-btn clone-job-btn" style="background: #e0f2fe; border-color: #bae6fd; color: #0369a1;" data-job-id="${id}"><i class="fas fa-sync-alt"></i> Repeat Search</button>
-                            <button class="job-action-btn btn-review-trigger" style="background-color: #f0f9ff;" onclick="window.rtrlApp.review.openReview('${id}')"><i class="fas fa-list-check"></i> Review & Filter</button>
-                        </div>
-                    </div>
-                </div>
-                ` : ''}
-            </div>
-        `;
+    let locationDetail = "";
+    if (p.multiRadiusPoints && p.multiRadiusPoints.length > 0) {
+        locationDetail = p.multiRadiusPoints.map(pt => `${pt.name} (${pt.radius}km)`).join(', ');
+    } else if (p.radiusKm) {
+        locationDetail = `${p.radiusKm}km around ${s.area || p.location}`;
+    } else if (p.postalCode && p.postalCode.length > 0) {
+        locationDetail = `Postcodes: ${p.postalCode.join(', ')}`;
+    } else {
+        locationDetail = s.area || p.location || "N/A";
     }
+
+    const displayLabels = s.subCategoryList && s.subCategoryList.length > 0 
+        ? s.subCategoryList.join(', ') 
+        : (s.customCategory || "General Search");
+
+    const searchTermsPreview = p.categoriesToLoop && p.categoriesToLoop.length > 0
+        ? p.categoriesToLoop.join(', ')
+        : "Standard Search";
+
+    let statusIcon = 'fa-clock', statusClass = 'status-queued', statusText = 'Queued';
+    if (status === 'running') { statusIcon = 'fa-spinner fa-spin'; statusClass = 'status-running'; statusText = 'Running'; }
+    else if (status === 'completed') { statusIcon = 'fa-check-circle'; statusClass = 'status-completed'; statusText = 'Completed'; }
+    else if (status === 'failed') { statusIcon = 'fa-exclamation-triangle'; statusClass = 'status-failed'; statusText = 'Failed'; }
+
+    const authToken = tokenProvider();
+
+    const fileLinks = `
+        <a href="${backendUrl}/api/jobs/${id}/download/full_xlsx?authToken=${authToken}" class="file-link" download><i class="fas fa-file-excel"></i> Full List (.xlsx)</a>
+        <a href="${backendUrl}/api/jobs/${id}/download/duplicates_xlsx?authToken=${authToken}" class="file-link" download><i class="fas fa-copy"></i> Duplicates (.xlsx)</a>
+        <a href="${backendUrl}/api/jobs/${id}/download/sms_csv?authToken=${authToken}" class="file-link" download><i class="fas fa-mobile-alt"></i> SMS List (.csv)</a>
+        <a href="${backendUrl}/api/jobs/${id}/download/contacts_csv?authToken=${authToken}" class="file-link" download><i class="fas fa-address-book"></i> Emails (.csv)</a>
+        <a href="${backendUrl}/api/jobs/${id}/download/mobiles_zip?authToken=${authToken}" class="file-link" download><i class="fas fa-file-zipper"></i> Mobile Splits (.zip)</a>
+        <a href="${backendUrl}/api/jobs/${id}/download/csv_zip?authToken=${authToken}" class="file-link" download><i class="fas fa-file-archive"></i> CSV Splits (.zip)</a>
+        <a href="${backendUrl}/api/jobs/${id}/download/txt_zip?authToken=${authToken}" class="file-link" download><i class="fas fa-file-alt"></i> TXT Splits (.zip)</a>
+    `;
+
+    return `
+        <div class="job-item" id="job-card-${id}">
+            <div class="job-header" style="display: flex; align-items: center; gap: 15px;">
+                <div style="display: flex; align-items: center; justify-content: center; width: 30px;">
+                    <input type="checkbox" class="job-merge-select" value="${id}" ${isSelected} style="width: 18px; height: 18px; cursor: pointer; margin: 0;">
+                </div>
+                <div class="job-title-wrapper" style="flex: 1; display: flex; align-items: center; gap: 10px;">
+                    <i class="fas fa-history job-icon"></i>
+                    <h4 class="job-title" style="margin:0;">Search: "${s.area || 'Unknown'}"</h4>
+                </div>
+                <div id="job-status-${id}" class="job-status ${statusClass}" style="margin-left: auto;">
+                    <i class="fas ${statusIcon}"></i>
+                    <span>${statusText}</span>
+                </div>
+            </div>
+
+            <div class="job-parameter-summary" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; background: #f0f7ff; padding: 15px; border-radius: 10px; border-left: 6px solid #3b82f6; margin: 12px 0; font-size: 0.85rem; color: #1e293b; box-shadow: inset 0 1px 2px rgba(0,0,0,0.05);">
+                <div style="line-height: 1.6;">
+                    <span style="color: #64748b; font-weight: 700; text-transform: uppercase; font-size: 0.7rem;">Targeting Criteria</span><br>
+                    <strong>Zones:</strong> ${locationDetail}
+                </div>
+                <div style="line-height: 1.6;">
+                    <span style="color: #64748b; font-weight: 700; text-transform: uppercase; font-size: 0.7rem;">Keywords & Industry</span><br>
+                    <strong>Categories:</strong> ${displayLabels}<br>
+                    <strong>Terms Used:</strong> <span style="color: #64748b; font-style: italic;">${searchTermsPreview}</span>
+                </div>
+                <div style="line-height: 1.6;">
+                    <span style="color: #64748b; font-weight: 700; text-transform: uppercase; font-size: 0.7rem;">System Settings</span><br>
+                    <strong>AI Enrichment:</strong> ${p.useAiEnrichment ? "ENABLED" : "DISABLED"}<br>
+                    <strong>Limit:</strong> ${p.count === -1 ? "All Available" : p.count}
+                </div>
+            </div>
+
+            <div class="job-meta">
+                <span><i class="fas fa-calendar-alt"></i> ${date}</span>
+                <span id="job-count-${id}"><i class="fas fa-database"></i> ${(job.results ? job.results.length : result_count) || 0} Results Found</span>
+                <span><i class="fas fa-fingerprint"></i> ID: ${id}</span>
+            </div>
+
+            ${status === 'completed' ? `
+            <div class="job-downloads" style="margin-top: 15px;">
+                <div class="job-files">
+                    <h5>Download Files</h5>
+                    <div class="file-links-container">
+                        ${fileLinks}
+                    </div>
+                </div>
+                <div class="job-actions">
+                    <h5>Actions</h5>
+                    <div class="action-buttons-container">
+                        <a href="${backendUrl}/api/jobs/${id}/download/all?authToken=${authToken}" class="job-action-btn" download><i class="fas fa-file-zipper"></i> Download All (.zip)</a>
+                        <button class="job-action-btn resend-email-btn" data-job-id="${id}"><i class="fas fa-paper-plane"></i> Resend Email</button>
+                        <button class="job-action-btn email-body-list-btn" data-job-id="${id}"><i class="fas fa-mobile-alt"></i> Send Mobile List</button>
+                        <button class="job-action-btn clone-job-btn" style="background: #e0f2fe; border-color: #bae6fd; color: #0369a1;" data-job-id="${id}"><i class="fas fa-sync-alt"></i> Repeat Search</button>
+                        <button class="job-action-btn btn-review-trigger" style="background-color: #f0f9ff;" onclick="window.rtrlApp.review.openReview('${id}')"><i class="fas fa-list-check"></i> Review & Filter</button>
+                    </div>
+                </div>
+            </div>
+            ` : ''}
+        </div>
+    `;
+}
 
     function renderPagination(totalCount) {
         const totalPages = Math.ceil(totalCount / itemsPerPage);

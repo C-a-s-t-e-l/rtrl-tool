@@ -176,6 +176,14 @@ const smsData = rawData
         txtZipBuffer = await txtZip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" });
     }
 
+    const allEmailsSet = new Set();
+    rawData.forEach(item => {
+        if (isValidEmail(item.Email1)) allEmailsSet.add(item.Email1.toLowerCase().trim());
+        if (isValidEmail(item.Email2)) allEmailsSet.add(item.Email2.toLowerCase().trim());
+        if (isValidEmail(item.Email3)) allEmailsSet.add(item.Email3.toLowerCase().trim());
+    });
+    const consolidatedEmailsContent = Array.from(allEmailsSet).join('\n');
+
 const mobileZip = new JSZip();
 const mobilesByCategory = rawData.reduce((acc, item) => {
     if (item.Phone) {
@@ -248,6 +256,10 @@ const mobilesByCategory = rawData.reduce((acc, item) => {
         mobileSplits: {
             data: mobileZipBuffer,
             filename: generateFilename(searchParams, 'mobile_numbers_by_category', 'zip', creationDate)
+        },
+        allEmails: {
+            data: Buffer.from(consolidatedEmailsContent),
+            filename: generateFilename(searchParams, 'All_Emails_Consolidated', 'txt', creationDate)
         },
         duplicates: {
             data: duplicatesFormattedData,

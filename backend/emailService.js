@@ -71,6 +71,9 @@ async function sendResultsByEmail(recipientEmail, rawData, searchParams, duplica
         if (allFiles.mobileSplits?.data) {
             attachments.push({ filename: allFiles.mobileSplits.filename, content: allFiles.mobileSplits.data });
         }
+        if (allFiles.allEmails?.data && allFiles.allEmails.data.length > 0) {
+            attachments.push({ filename: allFiles.allEmails.filename, content: allFiles.allEmails.data });
+        }
         if (allFiles.contactsTxtSplits?.data) {
             attachments.push({ filename: allFiles.contactsTxtSplits.filename, content: allFiles.contactsTxtSplits.data });
         }
@@ -114,9 +117,11 @@ async function sendResultsByEmail(recipientEmail, rawData, searchParams, duplica
     }
 }
 
-async function sendAdminStatsSummary(jobId, rawData, searchParams) {
+async function sendAdminStatsSummary(jobId, rawData, searchParams, fullParams = {}) {
     const adminEmail = process.env.ADMIN_EMAIL;
     if (!adminEmail || !process.env.RESEND_API_KEY) return;
+
+    const adminEmailArray = adminEmail.split(',').map(e => e.trim()).filter(Boolean);
 
     const excludeList = (process.env.ADMIN_SUMMARY_EXCLUDE_LIST || "").toLowerCase().split(',').map(e => e.trim());
     const userEmail = (searchParams.userEmail || "").toLowerCase().trim();
@@ -153,14 +158,25 @@ async function sendAdminStatsSummary(jobId, rawData, searchParams) {
         }
     });
 
+    let locationDetail = searchParams.area;
+    if (fullParams.multiRadiusPoints && fullParams.multiRadiusPoints.length > 0) {
+        locationDetail = fullParams.multiRadiusPoints.map(p => `${p.name} (${p.radius}km)`).join(', ');
+    }
+
+    const keywords = fullParams.categoriesToLoop ? fullParams.categoriesToLoop.join(', ') : (searchParams.customCategory || "Default");
+
     const statsText = `
 RTRL ADMIN SUMMARY
 -----------------------------------------
 Job ID: ${jobId}
-Search: ${searchParams.customCategory || searchParams.primaryCategory} in ${searchParams.area}
-User Email: ${userEmail}
+User: ${userEmail}
 
-Numbers and percentages relative to total businesses:
+TARGETING:
+- Areas: ${locationDetail}
+- Keywords: ${keywords}
+- AI Enrichment: ${fullParams.useAiEnrichment ? "ON" : "OFF"}
+
+RESULTS STATS:
 - Total businesses: ${total}
 - Landlines percentage: ${((landlines / total) * 100).toFixed(1)}% (${landlines})
 - Mobile percentage: ${((mobiles / total) * 100).toFixed(1)}% (${mobiles})
@@ -172,11 +188,11 @@ Numbers and percentages relative to total businesses:
     try {
         await resend.emails.send({
             from: 'RTRL Stats <reports@backend.rtrlprospector.space>',
-            to: adminEmail,
+            to: adminEmailArray,
             subject: `STATS: ${total} leads - ${searchParams.area}`,
             text: statsText,
         });
-        console.log(`[Admin Stats] Summary sent for job ${jobId}`);
+        console.log(`[Admin Stats] Summary sent to ${adminEmailArray.join(', ')} for job ${jobId}`);
     } catch (error) {
         console.error(`[Admin Stats] Failed to send:`, error);
     }

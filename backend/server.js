@@ -1041,6 +1041,7 @@ app.get("/api/jobs/:jobId/download/:fileType", async (req, res) => {
                     zip.file(allFiles.contacts.filename, XLSX.write(wb, { bookType: 'csv', type: 'buffer' }));
                 }
                 if (allFiles.mobileSplits.data) zip.file(allFiles.mobileSplits.filename, allFiles.mobileSplits.data);
+                if (allFiles.allEmails.data && allFiles.allEmails.data.length > 0) zip.file(allFiles.allEmails.filename, allFiles.allEmails.data);
                 if (allFiles.contactsSplits.data) zip.file(allFiles.contactsSplits.filename, allFiles.contactsSplits.data);
                 if (allFiles.contactsTxtSplits.data) zip.file(allFiles.contactsTxtSplits.filename, allFiles.contactsTxtSplits.data);
 
