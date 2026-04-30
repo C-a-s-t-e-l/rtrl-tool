@@ -154,26 +154,25 @@ async function sendAdminStatsSummary(jobId, rawData, searchParams, fullParams = 
         }
     });
 
-    // --- IMPROVED TARGETING DETAILS ---
     const isCustom = !!searchParams.customCategory || searchParams.primaryCategory === "Custom Search";
     const method = isCustom ? "CUSTOM KEYWORDS" : "PRESET DATASET";
     
-    // Areas detail
-    let locationDetail = searchParams.area;
+    let locationDetail = searchParams.area || "N/A";
     if (fullParams.multiRadiusPoints && fullParams.multiRadiusPoints.length > 0) {
         locationDetail = fullParams.multiRadiusPoints.map(p => `${p.name} (${p.radius}km)`).join(', ');
     }
 
-    // Categories / Keywords detail
     const industry = searchParams.primaryCategory || "N/A";
     const labels = (searchParams.subCategoryList && searchParams.subCategoryList.length > 0) 
                    ? searchParams.subCategoryList.join(', ') 
                    : (searchParams.customCategory || "None");
     
-    // The Tier 4 search terms (for admin debugging)
     const rawTerms = (fullParams.categoriesToLoop && fullParams.categoriesToLoop.length > 0)
                      ? fullParams.categoriesToLoop.join(', ')
                      : "N/A";
+
+    const limitDisplay = (fullParams.count === -1 || !fullParams.count) ? "Unlimited (Find All)" : fullParams.count;
+    const aiDisplay = fullParams.useAiEnrichment ? "ENABLED" : "DISABLED";
 
     const statsText = `
 RTRL ADMIN SUMMARY
@@ -189,15 +188,15 @@ TARGETING STRATEGY:
 - Full Search Terms Used: ${rawTerms}
 
 SYSTEM SETTINGS:
-- AI Enrichment: ${fullParams.useAiEnrichment ? "ENABLED" : "DISABLED"}
-- Lead Limit: ${fullParams.count === -1 ? "Unlimited" : fullParams.count}
+- AI Enrichment: ${aiDisplay}
+- Lead Limit: ${limitDisplay}
 
 RESULTS BREAKDOWN:
 - Total Leads Found: ${total}
-- Landlines: ${((landlines / total) * 100).toFixed(1)}% (${landlines})
-- Mobiles: ${((mobiles / total) * 100).toFixed(1)}% (${mobiles})
-- Person/Real Emails: ${((realEmails / total) * 100).toFixed(1)}% (${realEmails})
-- Generic Emails (info@ etc): ${((genericEmails / total) * 100).toFixed(1)}% (${genericEmails})
+- Landlines percentage: ${((landlines / total) * 100).toFixed(1)}% (${landlines})
+- Mobile percentage: ${((mobiles / total) * 100).toFixed(1)}% (${mobiles})
+- Real Emails percentage: ${((realEmails / total) * 100).toFixed(1)}% (${realEmails})
+- Generic Emails percentage: ${((genericEmails / total) * 100).toFixed(1)}% (${genericEmails})
 -----------------------------------------
     `.trim();
 

@@ -469,7 +469,7 @@ discoveredInLoop.forEach(url => {
         await sendResultsByEmail(userEmail, uniqueBusinesses, emailParams, duplicates);
         try {
             const { sendAdminStatsSummary } = require("./emailService");
-            await sendAdminStatsSummary(jobId, uniqueBusinesses, emailParams);
+            await sendAdminStatsSummary(jobId, uniqueBusinesses, emailParams, job.parameters);
         } catch (e) {}
     }
 
