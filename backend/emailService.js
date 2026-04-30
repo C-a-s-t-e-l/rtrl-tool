@@ -150,20 +150,30 @@ async function sendAdminStatsSummary(jobId, rawData, searchParams, fullParams = 
         if (email && email.includes('@')) {
             const prefix = email.split('@')[0];
             const isGeneric = genericPrefixes.some(p => prefix === p || prefix.startsWith(p + "."));
-            if (isGeneric) {
-                genericEmails++;
-            } else {
-                realEmails++;
-            }
+            if (isGeneric) { genericEmails++; } else { realEmails++; }
         }
     });
 
+    // --- IMPROVED TARGETING DETAILS ---
+    const isCustom = !!searchParams.customCategory || searchParams.primaryCategory === "Custom Search";
+    const method = isCustom ? "CUSTOM KEYWORDS" : "PRESET DATASET";
+    
+    // Areas detail
     let locationDetail = searchParams.area;
     if (fullParams.multiRadiusPoints && fullParams.multiRadiusPoints.length > 0) {
         locationDetail = fullParams.multiRadiusPoints.map(p => `${p.name} (${p.radius}km)`).join(', ');
     }
 
-    const keywords = fullParams.categoriesToLoop ? fullParams.categoriesToLoop.join(', ') : (searchParams.customCategory || "Default");
+    // Categories / Keywords detail
+    const industry = searchParams.primaryCategory || "N/A";
+    const labels = (searchParams.subCategoryList && searchParams.subCategoryList.length > 0) 
+                   ? searchParams.subCategoryList.join(', ') 
+                   : (searchParams.customCategory || "None");
+    
+    // The Tier 4 search terms (for admin debugging)
+    const rawTerms = (fullParams.categoriesToLoop && fullParams.categoriesToLoop.length > 0)
+                     ? fullParams.categoriesToLoop.join(', ')
+                     : "N/A";
 
     const statsText = `
 RTRL ADMIN SUMMARY
@@ -171,17 +181,23 @@ RTRL ADMIN SUMMARY
 Job ID: ${jobId}
 User: ${userEmail}
 
-TARGETING:
-- Areas: ${locationDetail}
-- Keywords: ${keywords}
-- AI Enrichment: ${fullParams.useAiEnrichment ? "ON" : "OFF"}
+TARGETING STRATEGY:
+- Method: ${method}
+- Search Areas: ${locationDetail}
+- Industry: ${industry}
+- Categories (Labels): ${labels}
+- Full Search Terms Used: ${rawTerms}
 
-RESULTS STATS:
-- Total businesses: ${total}
-- Landlines percentage: ${((landlines / total) * 100).toFixed(1)}% (${landlines})
-- Mobile percentage: ${((mobiles / total) * 100).toFixed(1)}% (${mobiles})
-- Real Emails percentage: ${((realEmails / total) * 100).toFixed(1)}% (${realEmails})
-- Generic Emails percentage: ${((genericEmails / total) * 100).toFixed(1)}% (${genericEmails})
+SYSTEM SETTINGS:
+- AI Enrichment: ${fullParams.useAiEnrichment ? "ENABLED" : "DISABLED"}
+- Lead Limit: ${fullParams.count === -1 ? "Unlimited" : fullParams.count}
+
+RESULTS BREAKDOWN:
+- Total Leads Found: ${total}
+- Landlines: ${((landlines / total) * 100).toFixed(1)}% (${landlines})
+- Mobiles: ${((mobiles / total) * 100).toFixed(1)}% (${mobiles})
+- Person/Real Emails: ${((realEmails / total) * 100).toFixed(1)}% (${realEmails})
+- Generic Emails (info@ etc): ${((genericEmails / total) * 100).toFixed(1)}% (${genericEmails})
 -----------------------------------------
     `.trim();
 
@@ -192,7 +208,7 @@ RESULTS STATS:
             subject: `STATS: ${total} leads - ${searchParams.area}`,
             text: statsText,
         });
-        console.log(`[Admin Stats] Summary sent to ${adminEmailArray.join(', ')} for job ${jobId}`);
+        console.log(`[Admin Stats] Summary sent to ${adminEmailArray.join(', ')}`);
     } catch (error) {
         console.error(`[Admin Stats] Failed to send:`, error);
     }
