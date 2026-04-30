@@ -158,6 +158,7 @@ function renderJob(job) {
     
     const isSelected = selectedJobIds.includes(id) ? 'checked' : '';
 
+    // --- 1. ZONE / LOCATION LOGIC ---
     let locationDetail = "";
     if (p.multiRadiusPoints && p.multiRadiusPoints.length > 0) {
         locationDetail = p.multiRadiusPoints.map(pt => `${pt.name} (${pt.radius}km)`).join(', ');
@@ -169,14 +170,32 @@ function renderJob(job) {
         locationDetail = s.area || p.location || "N/A";
     }
 
-    const displayLabels = s.subCategoryList && s.subCategoryList.length > 0 
-        ? s.subCategoryList.join(', ') 
-        : (s.customCategory || "General Search");
+    // --- 2. SEARCH METHOD & CATEGORY LOGIC ---
+    let methodLabel = "";
+    let categoryDetailHTML = "";
 
-    const searchTermsPreview = p.categoriesToLoop && p.categoriesToLoop.length > 0
-        ? p.categoriesToLoop.join(', ')
-        : "Standard Search";
+    const isCustomSearch = !!s.customCategory || s.primaryCategory === "Custom Search";
 
+    if (isCustomSearch) {
+        methodLabel = "Custom Keyword Search";
+        categoryDetailHTML = `
+            <strong>Method:</strong> Custom Keywords<br>
+            <strong>Keywords:</strong> <span style="color: #3b82f6; font-weight: 600;">${s.customCategory || "N/A"}</span>
+        `;
+    } else {
+        methodLabel = "Industry Dataset Search";
+        const industry = s.primaryCategory || "General";
+        const categories = s.subCategoryList && s.subCategoryList.length > 0 
+            ? s.subCategoryList.join(', ') 
+            : "All Categories";
+            
+        categoryDetailHTML = `
+            <strong>Industry:</strong> ${industry}<br>
+            <strong>Categories:</strong> <span style="color: #3b82f6; font-weight: 600;">${categories}</span>
+        `;
+    }
+
+    // --- 3. STATUS & ICON LOGIC ---
     let statusIcon = 'fa-clock', statusClass = 'status-queued', statusText = 'Queued';
     if (status === 'running') { statusIcon = 'fa-spinner fa-spin'; statusClass = 'status-running'; statusText = 'Running'; }
     else if (status === 'completed') { statusIcon = 'fa-check-circle'; statusClass = 'status-completed'; statusText = 'Completed'; }
@@ -216,9 +235,8 @@ function renderJob(job) {
                     <strong>Zones:</strong> ${locationDetail}
                 </div>
                 <div style="line-height: 1.6;">
-                    <span style="color: #64748b; font-weight: 700; text-transform: uppercase; font-size: 0.7rem;">Keywords & Industry</span><br>
-                    <strong>Categories:</strong> ${displayLabels}<br>
-                    <strong>Terms Used:</strong> <span style="color: #64748b; font-style: italic;">${searchTermsPreview}</span>
+                    <span style="color: #64748b; font-weight: 700; text-transform: uppercase; font-size: 0.7rem;">Industry & Keywords</span><br>
+                    ${categoryDetailHTML}
                 </div>
                 <div style="line-height: 1.6;">
                     <span style="color: #64748b; font-weight: 700; text-transform: uppercase; font-size: 0.7rem;">System Settings</span><br>

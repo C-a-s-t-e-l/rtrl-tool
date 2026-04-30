@@ -433,41 +433,112 @@ function exportMaster() {
   }
 
 async function exportZip() {
-    const sel = masterData.filter((d) => d._checked);
-    if (!sel.length) return alert("Select leads first.");
+    const activeLeads = masterData.filter((d) => d._checked);
+    const duplicateLeads = masterData.filter((d) => d._reviewStatus === "Duplicate");
     
-    const baseName = getExportBaseName(); // Get the smart name
+    if (activeLeads.length === 0) return alert("Select leads first.");
+
+    const baseName = getExportBaseName();
     const zip = new JSZip();
-    
-    // 1. XLSX
+    const SPLIT_SIZE = 18;
+
+    // 1. FULL UNIQUE LIST (XLSX)
     const wbFull = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wbFull, XLSX.utils.json_to_sheet(mapToMaster(sel)), "Business List");
-    zip.file(`${baseName}_Full.xlsx`, XLSX.write(wbFull, { type: "buffer", bookType: "xlsx" }));
-    
-    // 2. SMS CSV
-    const sms = sel.filter((b) => b.Phone && (b.Phone.startsWith("614") || b.Phone.startsWith("04"))).map((b) => {
+    XLSX.utils.book_append_sheet(wbFull, XLSX.utils.json_to_sheet(mapToMaster(activeLeads)), "Business List");
+    zip.file(`${baseName}_Full_DuplicatesRemoved.xlsx`, XLSX.write(wbFull, { type: "buffer", bookType: "xlsx" }));
+
+    // 2. DUPLICATES LIST (XLSX)
+    if (duplicateLeads.length > 0) {
+        const wbDup = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wbDup, XLSX.utils.json_to_sheet(mapToMaster(duplicateLeads)), "Duplicates");
+        zip.file(`${baseName}_Duplicates.xlsx`, XLSX.write(wbDup, { type: "buffer", bookType: "xlsx" }));
+    }
+
+    // 3. FULL SMS LIST (CSV)
+    const smsItems = activeLeads.filter((b) => b.Phone && (b.Phone.startsWith("614") || b.Phone.startsWith("04"))).map((b) => {
         let fn = "", ln = "";
         if (b.OwnerName && b.OwnerName.trim() !== "") { const p = b.OwnerName.trim().split(" "); fn = p.shift(); ln = p.join(" "); }
         return { FirstName: fn, LastName: ln, Organization: b.BusinessName || "", Email: b.Email1 || "", MobileNumber: b.Phone || "", Category: b.Category || "", Suburb: b.Suburb || "", Notes: b.ManualNotes || "" };
     });
-    zip.file(`${baseName}_Mobile_Numbers.csv`, XLSX.write({ SheetNames: ["S"], Sheets: { S: XLSX.utils.json_to_sheet(sms) } }, { type: "buffer", bookType: "csv" }));
+    if (smsItems.length > 0) {
+        zip.file(`${baseName}_Mobile_Numbers_Only.csv`, XLSX.write({ SheetNames: ["S"], Sheets: { S: XLSX.utils.json_to_sheet(smsItems) } }, { type: "buffer", bookType: "csv" }));
+    }
 
-    // 3. Email CSV
-    const con = sel.filter((d) => d.Email1).map((d) => {
-        return { Company: d.BusinessName || "", Suburb: d.Suburb || "", Category: d.Category || "", email_1: d.Email1 || "", email_2: d.Email2 || "", email_3: d.Email3 || "" };
+    // 4. FULL EMAILS LIST (CSV)
+    const contactsData = activeLeads.filter(d => d.Email1 || d.Email2 || d.Email3).map(d => {
+        let state = '';
+        if (d.StreetAddress) {
+            const stateMatch = d.StreetAddress.match(/\b([A-Z]{2,3})\b(?= \d{4,})/);
+            state = stateMatch ? stateMatch[1] : '';
+        }
+        return { "Company": d.BusinessName || '', "Address_Suburb": d.Suburb || '', "Address_State": state, "Category": d.Category || '', "email_1": d.Email1 || '', "email_2": d.Email2 || '', "email_3": d.Email3 || '', "facebook": d.FacebookURL || '', "instagram": d.InstagramURL || '', "Notes": d.ManualNotes || "" };
     });
-    zip.file(`${baseName}_Emails_Only.csv`, XLSX.write({ SheetNames: ["C"], Sheets: { C: XLSX.utils.json_to_sheet(con) } }, { type: "buffer", bookType: "csv" }));
+    if (contactsData.length > 0) {
+        zip.file(`${baseName}_Full_DuplicatesRemoved_Emails.csv`, XLSX.write({ SheetNames: ["E"], Sheets: { E: XLSX.utils.json_to_sheet(contactsData) } }, { type: "buffer", bookType: "csv" }));
+    }
 
-    // 4. Download Trigger
+    // 5. CONSOLIDATED EMAILS (TXT)
+    const allEmailsSet = new Set();
+    activeLeads.forEach(i => {
+        if (i.Email1) allEmailsSet.add(i.Email1.toLowerCase().trim());
+        if (i.Email2) allEmailsSet.add(i.Email2.toLowerCase().trim());
+        if (i.Email3) allEmailsSet.add(i.Email3.toLowerCase().trim());
+    });
+    if (allEmailsSet.size > 0) {
+        zip.file(`${baseName}_All_Emails_Consolidated.txt`, Array.from(allEmailsSet).join('\n'));
+    }
+
+    // 6. MOBILE TXT SPLITS (BY CATEGORY)
+    const mobilesByCategory = activeLeads.reduce((acc, item) => {
+        if (item.Phone) {
+            let num = String(item.Phone).replace(/\D/g, '');
+            if (num.startsWith('614')) num = '0' + num.substring(2);
+            if (num.startsWith('04')) {
+                const cat = item.Category || 'General';
+                if (!acc[cat]) acc[cat] = new Set();
+                acc[cat].add(num);
+            }
+        }
+        return acc;
+    }, {});
+
+    for (const [cat, nums] of Object.entries(mobilesByCategory)) {
+        const cleanCat = cat.replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_').toLowerCase();
+        zip.file(`mobile_splits/${cleanCat}_mobiles.txt`, Array.from(nums).join('\n'));
+    }
+
+    // 7. CSV & TXT SPLITS (CHUNKED BY 18)
+    if (contactsData.length > 0) {
+        for (let i = 0; i < contactsData.length; i += SPLIT_SIZE) {
+            const chunk = contactsData.slice(i, i + SPLIT_SIZE);
+            const part = Math.floor(i / SPLIT_SIZE) + 1;
+            zip.file(`email_csv_splits/${baseName}_emails_part_${part}.csv`, XLSX.write({ SheetNames: ["E"], Sheets: { E: XLSX.utils.json_to_sheet(chunk) } }, { type: "buffer", bookType: "csv" }));
+        }
+
+        const contactsByCategory = contactsData.filter(d => d.email_1).reduce((acc, item) => {
+            const cat = item.Category || 'Other';
+            if (!acc[cat]) acc[cat] = [];
+            acc[cat].push(item);
+            return acc;
+        }, {});
+
+        for (const [cat, items] of Object.entries(contactsByCategory)) {
+            for (let i = 0; i < items.length; i += SPLIT_SIZE) {
+                const chunk = items.slice(i, i + SPLIT_SIZE);
+                const part = Math.floor(i / SPLIT_SIZE) + 1;
+                const cleanCat = cat.replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_').toLowerCase();
+                zip.file(`email_txt_splits/${cleanCat}_part_${part}.txt`, chunk.map(item => item.email_1).join('\n'));
+            }
+        }
+    }
+
+    // FINAL DOWNLOAD
     const blob = await zip.generateAsync({ type: "blob" });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
-    
-    // UPDATED LINE:
     link.download = `${baseName}_Package.zip`;
     link.click();
   }
-
   return {
     init,
     toggle: (id) => { const item = masterData.find((d) => d._id === id); if (item) { item._checked = !item._checked; updateRowsOnly(); debouncedSave(); } },
