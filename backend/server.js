@@ -253,17 +253,7 @@ const runScrapeJob = async (jobId) => {
     };
 
     const setupPage = async (browser) => {
-      const page = await browser.newPage();
-      await page.setRequestInterception(true);
-      page.on('request', (req) => {
-        const type = req.resourceType();
-        if (type === 'image' || type === 'media') {
-          req.abort();
-        } else {
-          req.continue();
-        }
-      });
-      return page;
+      return browser.newPage();
     };
 
     const isIndividualSearch = businessNames && businessNames.length > 0;
@@ -370,7 +360,7 @@ discoveredInLoop.forEach(url => {
     let localAddedCount = totalProcessedCount;
     let localEnrichedCount = (job.results || []).filter(b => b.OwnerName && b.OwnerName !== "Private Owner").length;
 
-    const CONCURRENCY = 2;
+    const CONCURRENCY = 1;
 
     // Each slot gets its own isolated browser — prevents one hanging Chromium from blocking others
     const browserPool = [];
