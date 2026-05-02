@@ -1956,7 +1956,7 @@ function promiseWithTimeout(promise, ms) {
 async function promiseWithRetry(task, maxRetries = 3, delay = 2000, jobId, url) {
     for (let i = 0; i < maxRetries; i++) {
         try {
-            return await promiseWithTimeout(task(), 300000); 
+            return await promiseWithTimeout(task(), 60000);
         } catch (error) {
             const isLastAttempt = i === maxRetries - 1;
             if (isLastAttempt) {
