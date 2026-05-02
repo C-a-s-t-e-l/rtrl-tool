@@ -219,7 +219,7 @@ const runScrapeJob = async (jobId) => {
 
 
   // --- INITIALIZE RECOVERY TRUTH (Fixes ReferenceErrors) ---
-  const processedUrls = new Set((job.results || []).map(r => r.GoogleMapsURL));
+  const processedUrls = new Set((job.results || []).map(r => getMapUrlKey(r.GoogleMapsURL)));
   const totalProcessedCount = processedUrls.size; 
   const masterUrlMap = new Map((job.collected_urls || []).map(item => [item.url, item.category]));
   
@@ -244,7 +244,7 @@ const runScrapeJob = async (jobId) => {
   let browser = null;
 
   try {
-    const puppeteerArgs = ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu", "--no-zygote", "--lang=en-US,en", "--ignore-certificate-errors", "--window-size=1920,1080", "--disable-blink-features=AutomationControlled"];
+    const puppeteerArgs = ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu", "--no-zygote", "--lang=en-US,en", "--ignore-certificate-errors", "--window-size=1920,1080", "--disable-blink-features=AutomationControlled", "--disk-cache-size=0", "--media-cache-size=0", "--disable-application-cache"];
     
     const launchBrowser = async (logMessage) => {
       await addLog(jobId, logMessage);
@@ -329,9 +329,12 @@ discoveredInLoop.forEach(url => {
             if (browser) { await browser.close(); browser = null; }
         }
 
+        // Mark category as fully searched so recovery skips it even if zero results were found
+        masterUrlMap.set(`__searched__:${normalizedItem}`, item);
+
         // Save discovery progress after every category
-        await supabase.from("jobs").update({ 
-            collected_urls: Array.from(masterUrlMap, ([url, cat]) => ({ url, category: cat })) 
+        await supabase.from("jobs").update({
+            collected_urls: Array.from(masterUrlMap, ([url, cat]) => ({ url, category: cat }))
         }).eq("id", jobId);
         
         await new Promise(r => setTimeout(r, 5000));
@@ -349,7 +352,7 @@ discoveredInLoop.forEach(url => {
     
     // TRUTH: Only process URLs that aren't already in the results list
     const urlsToProcess = Array.from(masterUrlMap, ([url, cat]) => ({ url, category: cat }))
-                               .filter(item => !processedUrls.has(item.url));
+                               .filter(item => !item.url.startsWith('__searched__:') && !processedUrls.has(getMapUrlKey(item.url)));
 
     let localAddedCount = totalProcessedCount;
     let localEnrichedCount = (job.results || []).filter(b => b.OwnerName && b.OwnerName !== "Private Owner").length;
@@ -365,6 +368,12 @@ discoveredInLoop.forEach(url => {
         // Check against target count (unless unlimited)
         if (finalCount !== -1 && localAddedCount >= finalCount) break;
 
+        // Restart browser every 50 URLs — Chromium heap grows continuously without releasing to OS
+        if (i > 0 && i % 50 === 0) {
+            if (browser) { await browser.close(); browser = null; }
+            browser = await launchBrowser(`[System] Restarting browser to free memory (${i}/${urlsToProcess.length} URLs processed)`);
+        }
+
         const processItem = urlsToProcess[i];
         let detailPage = null;
 
@@ -378,7 +387,7 @@ discoveredInLoop.forEach(url => {
                 if (!googleData || !googleData.BusinessName) return null;
                 
                 // 2. Scrape Website (Optimized for UK)
-                let websiteData = googleData.Website ? await scrapeWebsiteForGoldData(detailPage, googleData.Website, isUK) : {};
+                let websiteData = googleData.Website ? await scrapeWebsiteForGoldData(detailPage, googleData.Website, country) : {};
 
                 // 3. AI Enrichment (Skip for UK to prioritize speed/privacy)
                 let aiResult = { ownerName: "", aiEmail: "", aiPhone: "" };
@@ -460,7 +469,7 @@ discoveredInLoop.forEach(url => {
     // --- PHASE 3: FINALIZATION ---
     const { data: finalJobData } = await supabase.from("jobs").select("results").eq("id", jobId).single();
     const allResults = finalJobData?.results || [];
-    const { uniqueBusinesses, duplicates } = deduplicateBusinesses(allResults);
+    const { uniqueBusinesses, duplicates } = deduplicateBusinesses(allResults, country);
 
     await supabase.from("jobs").update({ result_count: uniqueBusinesses.length }).eq("id", jobId);
 
@@ -943,8 +952,8 @@ app.get("/api/jobs/:jobId/download/:fileType", async (req, res) => {
         if (job.user_id !== user.id) return res.status(403).send('Access denied.');
 
         const rawData = job.results || [];
-        const { uniqueBusinesses, duplicates } = deduplicateBusinesses(rawData);
-        
+        const { uniqueBusinesses, duplicates } = deduplicateBusinesses(rawData, job.parameters.country);
+
         const searchParams = job.parameters.searchParamsForEmail || {};
         if (job.parameters.radiusKm) searchParams.radiusKm = job.parameters.radiusKm;
 
@@ -1158,7 +1167,7 @@ app.post("/api/jobs/:jobId/resend-email", async (req, res) => {
         if (!recipientEmail) return res.status(400).json({ error: 'No recipient email found for this job.' });
         
         const rawData = job.results || [];
-        const { uniqueBusinesses, duplicates } = deduplicateBusinesses(rawData);
+        const { uniqueBusinesses, duplicates } = deduplicateBusinesses(rawData, job.parameters.country);
 
         if (uniqueBusinesses.length === 0) return res.status(400).json({ error: 'No unique data to send.' });
 
@@ -1853,18 +1862,20 @@ async function scrapeGoogleMapsDetails(page, url, jobId, country) {
     return data;
   }, country);
 }
-async function scrapePageContent(page) {
+async function scrapePageContent(page, country = 'australia') {
   const ownerTitleKeywords = ["owner", "founder", "director", "principal", "proprietor", "ceo", "manager"];
   const pageText = await page.evaluate(() => document.body.innerText);
   const links = await page.$$eval("a", (as) => as.map((a) => a.href));
-  
+
   const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
   const emails = [...new Set([
     ...links.filter(h => h.startsWith("mailto:")).map(h => h.replace("mailto:", "").split("?")[0]),
     ...(pageText.match(emailRegex) || [])
   ])];
 
-  const phoneRegex = /(?:\+61|61|0)[2-478](?:[ -]?[0-9]){8,11}/g;
+  const phoneRegex = country.toLowerCase() === 'united kingdom'
+    ? /(?:\+44\s?|44|0)[1-9][0-9](?:[ -]?[0-9]){7,9}/g
+    : /(?:\+61|61|0)[2-478](?:[ -]?[0-9]){8,11}/g;
   const rawPhones = pageText.match(phoneRegex) || [];
 
   let ownerName = "";
@@ -1885,8 +1896,8 @@ async function scrapePageContent(page) {
   return { emails, ownerName, rawPhones, pageText };
 }
 
-async function scrapeWebsiteForGoldData(page, websiteUrl) {
-  const data = { foundEmails: [], foundPhones: [], OwnerName: "", InstagramURL: "", FacebookURL: "", rawText: "" };
+async function scrapeWebsiteForGoldData(page, websiteUrl, country = 'australia') {
+  const data = { foundEmails: [], foundPhones: [], OwnerName: "", InstagramURL: "", FacebookURL: "" };
   try {
     await page.goto(websiteUrl, { waitUntil: "domcontentloaded", timeout: 25000 });
     
@@ -1894,11 +1905,10 @@ async function scrapeWebsiteForGoldData(page, websiteUrl) {
     data.InstagramURL = initialLinks.find((l) => l.href.includes("instagram.com"))?.href || "";
     data.FacebookURL = initialLinks.find((l) => l.href.includes("facebook.com"))?.href || "";
     
-    const landing = await scrapePageContent(page);
+    const landing = await scrapePageContent(page, country);
     data.foundEmails.push(...landing.emails);
     data.foundPhones.push(...landing.rawPhones);
     data.OwnerName = landing.ownerName;
-    data.rawText = landing.pageText;
 
     // if (isUK) return data;
 
@@ -1912,11 +1922,10 @@ async function scrapeWebsiteForGoldData(page, websiteUrl) {
     for (const link of [...new Set(subPageLinks)].slice(0, 2)) {
         try {
             await page.goto(link, { waitUntil: "domcontentloaded", timeout: 12000 });
-            const subData = await scrapePageContent(page);
+            const subData = await scrapePageContent(page, country);
             data.foundEmails.push(...subData.emails);
             data.foundPhones.push(...subData.rawPhones);
             if (!data.OwnerName) data.OwnerName = subData.ownerName;
-            data.rawText += `\n\n--- Subpage: ${link} ---\n` + subData.pageText;
         } catch (e) { continue; }
     }
   } catch (error) { }
@@ -1976,4 +1985,16 @@ function extractCoordinatesFromUrl(url) {
   }
 
   return null;
+}
+
+// Returns a stable coordinate-based key from a Google Maps URL.
+// Discovery URLs and post-navigation window.location.href can differ in data params,
+// so comparing raw URL strings is unreliable for dedup.
+function getMapUrlKey(url) {
+  if (!url) return url;
+  const pinMatch = url.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/);
+  if (pinMatch) return `${parseFloat(pinMatch[1]).toFixed(5)},${parseFloat(pinMatch[2]).toFixed(5)}`;
+  const atMatch = url.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
+  if (atMatch) return `${parseFloat(atMatch[1]).toFixed(5)},${parseFloat(atMatch[2]).toFixed(5)}`;
+  return url;
 }

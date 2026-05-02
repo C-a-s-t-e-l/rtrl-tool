@@ -368,17 +368,49 @@
   background-color: rgba(59, 130, 246, 0.03);
 }
 
-.review-table th:nth-child(4), 
-.review-table td:nth-child(4) {
+/* Frozen columns: #, checkbox, Business Name */
+.review-table th:nth-child(1),
+.review-table td:nth-child(1) {
     position: sticky;
     left: 0;
+    background: white;
+    z-index: 10;
+}
+.review-table th:nth-child(1) {
+    z-index: 15;
+    background: #f8fafc;
+}
+
+.review-table th:nth-child(2),
+.review-table td:nth-child(2) {
+    position: sticky;
+    left: 50px;
+    background: white;
+    z-index: 10;
+}
+.review-table th:nth-child(2) {
+    z-index: 15;
+    background: #f8fafc;
+}
+
+.review-table th:nth-child(4),
+.review-table td:nth-child(4) {
+    position: sticky;
+    left: 100px;
     background: white;
     z-index: 10;
     border-right: 2px solid #e2e8f0;
 }
 .review-table th:nth-child(4) {
-    z-index: 15; 
+    z-index: 15;
     background: #f8fafc;
+}
+
+/* Opaque background on hover for sticky cells — prevents scrolled content bleeding through the semi-transparent hover colour */
+.review-table tr:hover td:nth-child(1),
+.review-table tr:hover td:nth-child(2),
+.review-table tr:hover td:nth-child(4) {
+    background-color: #f8fbff;
 }
 
 .editable-cell {
