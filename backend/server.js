@@ -357,109 +357,114 @@ discoveredInLoop.forEach(url => {
     let localAddedCount = totalProcessedCount;
     let localEnrichedCount = (job.results || []).filter(b => b.OwnerName && b.OwnerName !== "Private Owner").length;
 
-    for (let i = 0; i < urlsToProcess.length; i++) {
+    const CONCURRENCY = 4;
+
+    for (let i = 0; i < urlsToProcess.length; i += CONCURRENCY) {
         // Mid-scrape Quota Check
         const { data: currentProfile } = await supabase.from('profiles').select('usage_today, daily_limit').eq('id', job.user_id).single();
         if (currentProfile && currentProfile.usage_today >= currentProfile.daily_limit) {
             await addLog(jobId, "[QUOTA STOP] Daily limit reached. Stopping processing.");
-            break; 
+            break;
         }
 
         // Check against target count (unless unlimited)
         if (finalCount !== -1 && localAddedCount >= finalCount) break;
 
-        // Restart browser every 50 URLs — Chromium heap grows continuously without releasing to OS
-        if (i > 0 && i % 50 === 0) {
+        // Restart browser every 48 URLs (12 batches × 4) to free Chromium memory
+        if (i > 0 && i % 48 === 0) {
             if (browser) { await browser.close(); browser = null; }
             browser = await launchBrowser(`[System] Restarting browser to free memory (${i}/${urlsToProcess.length} URLs processed)`);
         }
 
-        const processItem = urlsToProcess[i];
-        let detailPage = null;
+        const batch = urlsToProcess.slice(i, Math.min(i + CONCURRENCY, urlsToProcess.length));
 
-        try {
-            const task = async () => {
-                detailPage = await browser.newPage();
-                await detailPage.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36");
-                
-                // 1. Scrape Google
-                let googleData = await scrapeGoogleMapsDetails(detailPage, processItem.url, jobId, country);
-                if (!googleData || !googleData.BusinessName) return null;
-                
-                // 2. Scrape Website (Optimized for UK)
-                let websiteData = googleData.Website ? await scrapeWebsiteForGoldData(detailPage, googleData.Website, country) : {};
+        const batchResults = await Promise.all(batch.map(async (processItem, batchIdx) => {
+            // Stagger each slot by 600ms to avoid hitting Google Maps simultaneously
+            await new Promise(r => setTimeout(r, batchIdx * 600));
 
-                // 3. AI Enrichment (Skip for UK to prioritize speed/privacy)
-                let aiResult = { ownerName: "", aiEmail: "", aiPhone: "" };
-                if (!isUK && useAiEnrichment !== false) {
-                    aiResult = await findBusinessOwnerWithAI(googleData.BusinessName, googleData.Suburb || country, googleData.Website, jobId);
-                }
+            let detailPage = null;
+            try {
+                const task = async () => {
+                    if (detailPage) { try { await detailPage.close(); } catch(e) {} }
+                    detailPage = await browser.newPage();
+                    await detailPage.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36");
 
-                // 4. Data Normalization
-                const uniqueEmails = Array.from(new Set([...(websiteData.foundEmails || []), aiResult.aiEmail].filter(e => e?.includes('@')).map(e => e.toLowerCase().trim())));
-                const uniquePhones = Array.from(new Set([aiResult.aiPhone, ...(websiteData.foundPhones || []), googleData.Phone]
-                    .map(p => normalizePhoneNumber(p, country))
-                    .filter(Boolean)));
-                
-                const mobilePrefix = isUK ? '447' : '614';
-                const finalPhone = uniquePhones.find(p => p.startsWith(mobilePrefix)) || uniquePhones[0] || "";
-                
-                let res = { 
-                    ...googleData, 
-                    OwnerName: (aiResult.ownerName && aiResult.ownerName !== "Private Owner") ? aiResult.ownerName : (websiteData.OwnerName || "Private Owner"),
-                    Email1: uniqueEmails[0] || "",
-                    Email2: uniqueEmails[1] || "",
-                    Phone: finalPhone,
-                    InstagramURL: websiteData.InstagramURL || googleData.InstagramURL || "",
-                    FacebookURL: websiteData.FacebookURL || googleData.FacebookURL || "",
-                    Category: (processItem.category || "N/A").replace(/"/g, "")
+                    // 1. Scrape Google
+                    let googleData = await scrapeGoogleMapsDetails(detailPage, processItem.url, jobId, country);
+                    if (!googleData || !googleData.BusinessName) return null;
+
+                    // 2. Scrape Website (Optimized for UK)
+                    let websiteData = googleData.Website ? await scrapeWebsiteForGoldData(detailPage, googleData.Website, country) : {};
+
+                    // 3. AI Enrichment (Skip for UK to prioritize speed/privacy)
+                    let aiResult = { ownerName: "", aiEmail: "", aiPhone: "" };
+                    if (!isUK && useAiEnrichment !== false) {
+                        aiResult = await findBusinessOwnerWithAI(googleData.BusinessName, googleData.Suburb || country, googleData.Website, jobId);
+                    }
+
+                    // 4. Data Normalization
+                    const uniqueEmails = Array.from(new Set([...(websiteData.foundEmails || []), aiResult.aiEmail].filter(e => e?.includes('@')).map(e => e.toLowerCase().trim())));
+                    const uniquePhones = Array.from(new Set([aiResult.aiPhone, ...(websiteData.foundPhones || []), googleData.Phone]
+                        .map(p => normalizePhoneNumber(p, country))
+                        .filter(Boolean)));
+
+                    const mobilePrefix = isUK ? '447' : '614';
+                    const finalPhone = uniquePhones.find(p => p.startsWith(mobilePrefix)) || uniquePhones[0] || "";
+
+                    let res = {
+                        ...googleData,
+                        OwnerName: (aiResult.ownerName && aiResult.ownerName !== "Private Owner") ? aiResult.ownerName : (websiteData.OwnerName || "Private Owner"),
+                        Email1: uniqueEmails[0] || "",
+                        Email2: uniqueEmails[1] || "",
+                        Phone: finalPhone,
+                        InstagramURL: websiteData.InstagramURL || googleData.InstagramURL || "",
+                        FacebookURL: websiteData.FacebookURL || googleData.FacebookURL || "",
+                        Category: (processItem.category || "N/A").replace(/"/g, "")
+                    };
+
+                    // 5. Email Verification (disabled — re-enable when API key is active)
+                    // if (res.Email1) {
+                    //     const isDeliverable = await verifyEmail(res.Email1);
+                    //     if (!isDeliverable) { res.Email1 = res.Email2 || ""; res.Email2 = ""; }
+                    // }
+
+                    return res;
                 };
 
-                // 5. Email Verification
-                if (res.Email1) { 
-                    const isDeliverable = await verifyEmail(res.Email1); 
-                    if (!isDeliverable) { res.Email1 = res.Email2 || ""; res.Email2 = ""; } 
-                }
-                
-                return res;
-            };
-
-            const businessData = await promiseWithRetry(task, 2, 5000, jobId, processItem.url);
-
-            if (businessData) {
-                // Exclusion Check
-                const normName = businessData.BusinessName.toLowerCase().replace(/[^a-z0-9]/g, "");
-                const isExcluded = exclusionList?.some(ex => normName.includes(ex.toLowerCase().replace(/[^a-z0-9]/g, "")));
-
-                if (!isExcluded) {
-                    await appendJobResult(jobId, businessData);
-                    localAddedCount++;
-                    if (businessData.OwnerName && businessData.OwnerName !== "Private Owner") {
-                    localEnrichedCount++;
-                                          }
-                    processedUrls.add(businessData.GoogleMapsURL);
-                    await supabase.rpc('increment_usage', { 
-                        user_id_param: job.user_id, 
-                        client_local_date_param: clientLocalDate || new Date().toISOString().split('T')[0] 
-                    });
-                }
+                return await promiseWithRetry(task, 2, 5000, jobId, processItem.url);
+            } catch (err) {
+                console.error(`Error on URL ${processItem.url}:`, err);
+                return null;
+            } finally {
+                if (detailPage) await detailPage.close();
             }
-        } catch (err) {
-            console.error(`Error on URL ${processItem.url}:`, err);
-        } finally {
-            if (detailPage) await detailPage.close();
-        }
+        }));
 
-        
+        // Save results from this batch sequentially
+        for (const businessData of batchResults) {
+            if (!businessData) continue;
+            const normName = businessData.BusinessName.toLowerCase().replace(/[^a-z0-9]/g, "");
+            const isExcluded = exclusionList?.some(ex => normName.includes(ex.toLowerCase().replace(/[^a-z0-9]/g, "")));
+            if (!isExcluded) {
+                await appendJobResult(jobId, businessData);
+                localAddedCount++;
+                if (businessData.OwnerName && businessData.OwnerName !== "Private Owner") localEnrichedCount++;
+                processedUrls.add(businessData.GoogleMapsURL);
+                await supabase.rpc('increment_usage', {
+                    user_id_param: job.user_id,
+                    client_local_date_param: clientLocalDate || new Date().toISOString().split('T')[0]
+                });
+            }
+        }
 
         io.to(jobId).emit("progress_update", {
             phase: 'scraping',
-            processed: i + 1,
+            processed: Math.min(i + CONCURRENCY, urlsToProcess.length),
             discovered: masterUrlMap.size,
             added: localAddedCount,
             target: finalCount,
-            enriched: localEnrichedCount, 
-            aiProcessed: i + 1,
+            enriched: localEnrichedCount,
+            aiProcessed: Math.min(i + CONCURRENCY, urlsToProcess.length),
             aiTarget: urlsToProcess.length
         });
     }
