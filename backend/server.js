@@ -1591,7 +1591,7 @@ async function getSearchQueriesForRadius(
   // This creates a 5-point "Cross" pattern, which is much faster than a square grid.
   if (radiusVal > 2) {
     // We place the points at 60% of the radius to ensure overlap but cover the edges
-    const distOffset = radiusVal * 0.6; 
+    const distOffset = radiusVal * 0.7;
     const latOffset = distOffset / 111.0;
     const lngOffset = distOffset / (111.0 * Math.cos(degToRad(centerLat)));
 
