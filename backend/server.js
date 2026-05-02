@@ -326,7 +326,7 @@ discoveredInLoop.forEach(url => {
         masterUrlMap.set(url, item);
     }
 });
-                io.to(jobId).emit("progress_update", { phase: 'discovery', discovered: masterUrlMap.size, processed: 0, added: totalProcessedCount });
+                io.to(jobId).emit("progress_update", { phase: 'discovery', discovered: masterUrlMap.size - (i + 1), processed: 0, added: totalProcessedCount });
             }
             if (collectionPage) await collectionPage.close();
         } finally {
@@ -482,7 +482,7 @@ discoveredInLoop.forEach(url => {
         io.to(jobId).emit("progress_update", {
             phase: 'scraping',
             processed: Math.min(i + CONCURRENCY, urlsToProcess.length),
-            discovered: masterUrlMap.size,
+            discovered: urlsToProcess.length,
             added: localAddedCount,
             target: finalCount,
             enriched: localEnrichedCount,
