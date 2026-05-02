@@ -356,7 +356,7 @@ discoveredInLoop.forEach(url => {
     let localAddedCount = totalProcessedCount;
     let localEnrichedCount = (job.results || []).filter(b => b.OwnerName && b.OwnerName !== "Private Owner").length;
 
-    const CONCURRENCY = 3;
+    const CONCURRENCY = 2;
 
     // Each slot gets its own isolated browser — prevents one hanging Chromium from blocking others
     const browserPool = [];
