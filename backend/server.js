@@ -252,6 +252,20 @@ const runScrapeJob = async (jobId) => {
       return await puppeteer.launch({ headless: true, args: [...puppeteerArgs, `--user-data-dir=${userDataDir}`], protocolTimeout: 300000, userDataDir: userDataDir });
     };
 
+    const setupPage = async (browser) => {
+      const page = await browser.newPage();
+      await page.setRequestInterception(true);
+      page.on('request', (req) => {
+        const type = req.resourceType();
+        if (type === 'image' || type === 'media' || type === 'font' || type === 'stylesheet') {
+          req.abort();
+        } else {
+          req.continue();
+        }
+      });
+      return page;
+    };
+
     const isIndividualSearch = businessNames && businessNames.length > 0;
     const searchItems = isIndividualSearch ? businessNames : (categoriesToLoop && categoriesToLoop.length > 0 ? categoriesToLoop : []);
     const finalCount = isIndividualSearch ? -1 : (parameters.count || -1);
@@ -271,7 +285,7 @@ const runScrapeJob = async (jobId) => {
         browser = await launchBrowser(`[System] Discovery: ${item}`);
         
         try {
-            let collectionPage = await browser.newPage();
+            let collectionPage = await setupPage(browser);
             let locationQueries = [];
             
             // Generate Search Queries
@@ -394,7 +408,7 @@ discoveredInLoop.forEach(url => {
             try {
                 const task = async () => {
                     if (detailPage) { try { await detailPage.close(); } catch(e) {} }
-                    detailPage = await workerBrowser.newPage();
+                    detailPage = await setupPage(workerBrowser);
                     await detailPage.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36");
 
                     // 1. Scrape Google
