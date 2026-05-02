@@ -991,7 +991,7 @@ let areaKey = "";
     window.rtrlApp.state.isDirty = false;
     const el = { primaryCat: document.getElementById("primaryCategorySelect"), customCat: document.getElementById("customCategoryInput"), location: document.getElementById("locationInput"), country: document.getElementById("countryInput"), count: document.getElementById("count"), findAll: document.getElementById("findAllBusinesses"), names: document.getElementById("businessNamesInput"), aiToggle: document.getElementById("useAiToggle"), };
     if (window.rtrlApp.state.anchors && window.rtrlApp.state.anchors.length > 0) { window.rtrlApp.state.anchors.forEach(a => { if (a.marker) window.rtrlApp.map.removeLayer(a.marker); if (a.circle) window.rtrlApp.map.removeLayer(a.circle); }); }
-    window.rtrlApp.state.anchors = []; window.rtrlApp.postalCodes = []; window.rtrlApp.customKeywords = [];
+    window.rtrlApp.state.anchors = []; window.rtrlApp.postalCodes.length = 0; window.rtrlApp.customKeywords.length = 0;
     if (el.location) el.location.value = ""; if (el.names) el.names.value = ""; document.querySelectorAll(".tag").forEach((t) => t.remove());
     if (window.rtrlApp.renderZoneList) window.rtrlApp.renderZoneList(); if (window.rtrlApp.updateMapPreviewText) window.rtrlApp.updateMapPreviewText();
     if (el.aiToggle) el.aiToggle.checked = p.useAiEnrichment !== false; if (el.country) el.country.value = p.country || "Australia";
