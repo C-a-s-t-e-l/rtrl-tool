@@ -257,7 +257,7 @@ const runScrapeJob = async (jobId) => {
       await page.setRequestInterception(true);
       page.on('request', (req) => {
         const type = req.resourceType();
-        if (type === 'image' || type === 'media' || type === 'font' || type === 'stylesheet') {
+        if (type === 'image' || type === 'media') {
           req.abort();
         } else {
           req.continue();
@@ -413,7 +413,10 @@ discoveredInLoop.forEach(url => {
 
                     // 1. Scrape Google
                     let googleData = await scrapeGoogleMapsDetails(detailPage, processItem.url, jobId, country);
-                    if (!googleData || !googleData.BusinessName) return null;
+                    if (!googleData || !googleData.BusinessName) {
+                        await addLog(jobId, `[No Data] ${processItem.url}`);
+                        return null;
+                    }
 
                     // 2. Scrape Website (Optimized for UK)
                     let websiteData = googleData.Website ? await scrapeWebsiteForGoldData(detailPage, googleData.Website, country) : {};
@@ -470,6 +473,10 @@ discoveredInLoop.forEach(url => {
             if (!businessData) continue;
             const normName = businessData.BusinessName.toLowerCase().replace(/[^a-z0-9]/g, "");
             const isExcluded = exclusionList?.some(ex => normName.includes(ex.toLowerCase().replace(/[^a-z0-9]/g, "")));
+            if (isExcluded) {
+                await addLog(jobId, `[Excluded] ${businessData.BusinessName}`);
+                continue;
+            }
             if (!isExcluded) {
                 await appendJobResult(jobId, businessData);
                 localAddedCount++;
