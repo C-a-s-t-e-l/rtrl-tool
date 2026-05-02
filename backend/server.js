@@ -348,8 +348,7 @@ discoveredInLoop.forEach(url => {
 
     // --- PHASE 2: PROCESSING (Extraction & AI) ---
     await addLog(jobId, `--- Starting Data Extraction & AI Analysis ---`);
-    browser = await launchBrowser("[System] Processing businesses...");
-    
+
     // TRUTH: Only process URLs that aren't already in the results list
     const urlsToProcess = Array.from(masterUrlMap, ([url, cat]) => ({ url, category: cat }))
                                .filter(item => !item.url.startsWith('__searched__:') && !processedUrls.has(getMapUrlKey(item.url)));
@@ -357,7 +356,13 @@ discoveredInLoop.forEach(url => {
     let localAddedCount = totalProcessedCount;
     let localEnrichedCount = (job.results || []).filter(b => b.OwnerName && b.OwnerName !== "Private Owner").length;
 
-    const CONCURRENCY = 4;
+    const CONCURRENCY = 3;
+
+    // Each slot gets its own isolated browser — prevents one hanging Chromium from blocking others
+    const browserPool = [];
+    for (let b = 0; b < CONCURRENCY; b++) {
+        browserPool.push(await launchBrowser(`[System] Starting worker ${b + 1}`));
+    }
 
     for (let i = 0; i < urlsToProcess.length; i += CONCURRENCY) {
         // Mid-scrape Quota Check
@@ -370,23 +375,26 @@ discoveredInLoop.forEach(url => {
         // Check against target count (unless unlimited)
         if (finalCount !== -1 && localAddedCount >= finalCount) break;
 
-        // Restart browser every 48 URLs (12 batches × 4) to free Chromium memory
+        // Restart all pool browsers every 48 URLs to free Chromium memory
         if (i > 0 && i % 48 === 0) {
-            if (browser) { await browser.close(); browser = null; }
-            browser = await launchBrowser(`[System] Restarting browser to free memory (${i}/${urlsToProcess.length} URLs processed)`);
+            for (let b = 0; b < browserPool.length; b++) {
+                try { await browserPool[b].close(); } catch(e) {}
+                browserPool[b] = await launchBrowser(`[System] Restarting worker ${b + 1} (${i}/${urlsToProcess.length})`);
+            }
         }
 
         const batch = urlsToProcess.slice(i, Math.min(i + CONCURRENCY, urlsToProcess.length));
 
         const batchResults = await Promise.all(batch.map(async (processItem, batchIdx) => {
-            // Stagger each slot by 600ms to avoid hitting Google Maps simultaneously
-            await new Promise(r => setTimeout(r, batchIdx * 600));
+            // Stagger each slot by 2s to reduce simultaneous Google Maps connections
+            await new Promise(r => setTimeout(r, batchIdx * 2000));
 
+            let workerBrowser = browserPool[batchIdx];
             let detailPage = null;
             try {
                 const task = async () => {
                     if (detailPage) { try { await detailPage.close(); } catch(e) {} }
-                    detailPage = await browser.newPage();
+                    detailPage = await workerBrowser.newPage();
                     await detailPage.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36");
 
                     // 1. Scrape Google
@@ -433,10 +441,13 @@ discoveredInLoop.forEach(url => {
 
                 return await promiseWithRetry(task, 2, 5000, jobId, processItem.url);
             } catch (err) {
-                console.error(`Error on URL ${processItem.url}:`, err);
+                await addLog(jobId, `[Skip] ${processItem.url} — ${err.message}`);
+                // Restart this slot's browser so the next batch isn't affected
+                try { await browserPool[batchIdx].close(); } catch(e) {}
+                browserPool[batchIdx] = await launchBrowser(`[System] Restarting worker ${batchIdx + 1} after error`);
                 return null;
             } finally {
-                if (detailPage) await detailPage.close();
+                if (detailPage) { try { await detailPage.close(); } catch(e) {} }
             }
         }));
 
@@ -469,7 +480,7 @@ discoveredInLoop.forEach(url => {
         });
     }
 
-    if (browser) await browser.close();
+    for (const b of browserPool) { try { await b.close(); } catch(e) {} }
 
     // --- PHASE 3: FINALIZATION ---
     const { data: finalJobData } = await supabase.from("jobs").select("results").eq("id", jobId).single();
