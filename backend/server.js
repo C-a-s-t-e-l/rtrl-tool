@@ -251,12 +251,20 @@ const runScrapeJob = async (jobId) => {
     
     const launchBrowser = async (logMessage) => {
       await addLog(jobId, logMessage);
-      const userDataDir = path.join(__dirname, "puppeteer_temp", `user_data_${Date.now()}`);
-      return await puppeteer.launch({ headless: true, args: [...puppeteerArgs, `--user-data-dir=${userDataDir}`], protocolTimeout: 300000, userDataDir: userDataDir });
+      return await puppeteer.launch({ headless: true, args: puppeteerArgs, protocolTimeout: 300000 });
     };
 
     const setupPage = async (browser) => {
-      return browser.newPage();
+      const page = await browser.newPage();
+      await page.setRequestInterception(true);
+      page.on('request', (req) => {
+        if (['image', 'stylesheet', 'font', 'media'].includes(req.resourceType())) {
+          req.abort();
+        } else {
+          req.continue();
+        }
+      });
+      return page;
     };
 
     const isIndividualSearch = businessNames && businessNames.length > 0;
