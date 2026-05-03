@@ -258,7 +258,7 @@ const runScrapeJob = async (jobId) => {
       const page = await browser.newPage();
       await page.setRequestInterception(true);
       page.on('request', (req) => {
-        if (['image', 'stylesheet', 'font', 'media'].includes(req.resourceType())) {
+        if (['image', 'font', 'media'].includes(req.resourceType())) {
           req.abort();
         } else {
           req.continue();
