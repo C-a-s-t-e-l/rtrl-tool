@@ -14,7 +14,22 @@
       window.BACKEND_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
         ? 'http://localhost:3000'
         : 'https://rtrl-tool-production.up.railway.app';
-      window.rtrlApp = window.rtrlApp || {};
+      window.rtrlApp = {
+        state: {
+          anchors: [],
+          currentSearchParameters: {},
+          googleMapsService: null,
+          googleMapsGeocoder: null,
+          activeLocationId: null,
+          isDirty: false,
+          locations: []
+        },
+        timers: {},
+        postalCodes: [],
+        customKeywords: [],
+        map: null,
+        searchCircle: null,
+      };
       window.initMap = function () {
         if (typeof window.rtrlApp.initializeMapServices === 'function') {
           window.rtrlApp.initializeMapServices();
@@ -23,11 +38,11 @@
     </script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <link rel="stylesheet" href="style.css" />
-    <link rel="stylesheet" href="login.css" />
-    <link rel="stylesheet" href="dashboard.css" />
-    <link rel="stylesheet" href="job-history.css" />
-    <link rel="stylesheet" href="review.css" />
+    <link rel="stylesheet" href="css/style.css" />
+    <link rel="stylesheet" href="css/login.css" />
+    <link rel="stylesheet" href="css/dashboard.css" />
+    <link rel="stylesheet" href="css/job-history.css" />
+    <link rel="stylesheet" href="css/review.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   </head>
@@ -49,7 +64,7 @@
             </button>
             <div id="user-menu-dropdown" class="user-menu-dropdown">
               <div class="dropdown-item non-clickable"><i class="fas fa-user"></i><span id="user-email-display"></span></div>
-              <a href="admin.html" id="admin-control-link" class="dropdown-item" style="display: none;"><i class="fas fa-user-shield" style="color: #8b5cf6;"></i><span>Admin Control</span></a>
+              <a href="admin/admin.html" id="admin-control-link" class="dropdown-item" style="display: none;"><i class="fas fa-user-shield" style="color: #8b5cf6;"></i><span>Admin Control</span></a>
               <div class="dropdown-divider"></div>
               <a href="#" id="logout-button" class="dropdown-item"><i class="fas fa-sign-out-alt"></i> Logout</a>
             </div>
@@ -283,11 +298,16 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-    <script src="ui-helpers.js"></script>
-    <script src="exclusion-feature.js"></script>
-    <script src="job-history.js"></script>
-    <script src="review.js"></script>
-    <script src="event-handlers.js"></script>
-    <script src="script.js?v=4"></script>
+    <script src="js/ui-helpers.js"></script>
+    <script src="js/exclusion-feature.js"></script>
+    <script src="js/job-history.js"></script>
+    <script src="js/review.js"></script>
+    <script src="js/event-handlers.js"></script>
+    <script src="js/dashboard-ui.js"></script>
+    <script src="js/categories.js"></script>
+    <script src="js/maps.js"></script>
+    <script src="js/search.js"></script>
+    <script src="js/socket-client.js"></script>
+    <script src="js/script.js?v=5"></script>
   </body>
 </html>

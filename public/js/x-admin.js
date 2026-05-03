@@ -7,9 +7,9 @@ const supabaseClient = supabase.createClient(SB_URL, SB_KEY);
 let allUsers = [];
 document.addEventListener("DOMContentLoaded", async () => {
     const { data: { session } } = await supabaseClient.auth.getSession();
-    if (!session) return window.location.href = "index.html";
+    if (!session) return window.location.href = "../index.html";
     const { data: profile } = await supabaseClient.from('profiles').select('role').eq('id', session.user.id).single();
-    if (!profile || profile.role !== 'admin') { window.location.href = "index.html"; return; }
+    if (!profile || profile.role !== 'admin') { window.location.href = "../index.html"; return; }
     const sidebar = document.getElementById('sidebar');
     const toggleBtn = document.getElementById('sidebar-toggle');
     if (toggleBtn) {

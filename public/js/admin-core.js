@@ -18,7 +18,7 @@ async function initAdminCore() {
         const { data: { session } } = await supabaseClient.auth.getSession();
 
         if (!session) {
-            window.location.replace("index.html");
+            window.location.replace("../index.html");
             return null;
         }
 
@@ -34,7 +34,7 @@ async function initAdminCore() {
             if (unauthorized) unauthorized.style.display = 'flex';
             
             setTimeout(() => {
-                window.location.replace("index.html");
+                window.location.replace("../index.html");
             }, 1000);
             return null;
         }
@@ -59,7 +59,7 @@ async function initAdminCore() {
 
     } catch (err) {
         console.error("Auth System Error:", err);
-        window.location.replace("index.html");
+        window.location.replace("../index.html");
         return null;
     }
 }
