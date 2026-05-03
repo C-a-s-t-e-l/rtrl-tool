@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/x-icon" href="https://cdn-icons-png.flaticon.com/512/2248/2248814.png" />
+    <title>RTRL Property Prospector</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>
+      window.CONFIG = {
+        SUPABASE_URL: "https://qbktnernawpprarckvzx.supabase.co",
+        SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFia3RuZXJuYXdwcHJhcmNrdnp4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTc1OTQ3NTgsImV4cCI6MjA3MzE3MDc1OH0.9asOynIZEOqc8f_mNTjWTNXIPK1ph6IQF6ADbYdFclM"
+      };
+      window.BACKEND_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+        ? 'http://localhost:3000'
+        : 'https://rtrl-tool-production.up.railway.app';
+      window.rtrlApp = window.rtrlApp || {};
+      window.initMap = function () {
+        if (typeof window.rtrlApp.initializeMapServices === 'function') {
+          window.rtrlApp.initializeMapServices();
+        }
+      };
+    </script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="login.css" />
+    <link rel="stylesheet" href="dashboard.css" />
+    <link rel="stylesheet" href="job-history.css" />
+    <link rel="stylesheet" href="review.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  </head>
+  <body>
+    <div class="app-container">
+      <header>
+        <div class="header-left">
+          <div class="logo"><i class="fas fa-building"></i></div>
+          <div class="header-text">
+            <h1>RTRL Property Prospector</h1>
+            <p>Intelligent Client Prospecting for Commercial Real Estate</p>
+          </div>
+        </div>
+        <div id="auth-container">
+          <div id="user-menu" class="user-menu" style="display: none">
+            <button id="user-menu-button" class="user-menu-button">
+              <span id="user-info"></span>
+              <i class="fas fa-chevron-down toggle-icon"></i>
+            </button>
+            <div id="user-menu-dropdown" class="user-menu-dropdown">
+              <div class="dropdown-item non-clickable"><i class="fas fa-user"></i><span id="user-email-display"></span></div>
+              <a href="admin.html" id="admin-control-link" class="dropdown-item" style="display: none;"><i class="fas fa-user-shield" style="color: #8b5cf6;"></i><span>Admin Control</span></a>
+              <div class="dropdown-divider"></div>
+              <a href="#" id="logout-button" class="dropdown-item"><i class="fas fa-sign-out-alt"></i> Logout</a>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <main class="main-layout">
+        <aside class="search-controls">
+          <div class="search-controls-header">
+            <h2><i class="fas fa-search"></i> Define Your Search</h2>
+            <p>Configure search parameters to find potential clients</p>
+          </div>
+
+          <div class="collapsible-section">
+            <div class="collapsible-header">
+              <h3><i class="fas fa-layer-group icon-bulk-search"></i> Bulk Search by Category</h3>
+              <i class="fas fa-chevron-down toggle-icon open"></i>
+            </div>
+            <div class="collapsible-content" id="bulkSearchContainer">
+              <div class="form-group toggle-wrapper">
+                <div class="toggle-header">
+                  <label class="toggle-label-main"><i class="fas fa-robot" style="color: #8b5cf6"></i> Enable AI Enrichment</label>
+                  <label class="switch"><input type="checkbox" id="useAiToggle" checked /><span class="slider round"></span></label>
+                </div>
+                <p class="toggle-description">Finds Owner Names and specialized contact info.<br /><strong>Note:</strong> Consumes API rates. Disable for faster, general scraping.</p>
+              </div>
+              <div class="form-group" id="customCategoryGroup">
+                <label for="customCategoryInput">Custom Keywords / Category</label>
+                <div id="customKeywordContainer" class="tag-container"><input type="text" id="customCategoryInput" placeholder="Add keywords then press enter..." /></div>
+              </div>
+              <div class="form-group" id="subCategoryGroup" style="display: none">
+                <label>Industry Dataset</label>
+                <div id="industryPillsContainer" class="industry-pills-container"></div>
+                <div class="category-search-wrapper">
+                  <i class="fas fa-search"></i>
+                  <input type="text" id="categorySearchInput" class="category-search-input" placeholder="Search categories...">
+                </div>
+                <div id="selectionPillsContainer" class="selection-pills-container"></div>
+                <div id="explorerScrollArea" class="explorer-scroll-area">
+                  <div id="subCategoryCheckboxContainer" class="checkbox-container" style="border:none; padding:0; max-height:none;"></div>
+                </div>
+                <div id="categorySummaryText" style="font-size: 0.75rem; color: #94a3b8; margin-top: 8px; font-weight: 600;">0 Categories selected (0 Search loops)</div>
+              </div>
+              <div class="form-group" id="categoryModifierGroup" style="display: none"><label for="categoryModifierInput">Refine Category (Optional)</label><input type="text" id="categoryModifierInput" placeholder="e.g. Dog friendly, 24 Hour, Emergency..." /></div>
+              <div class="form-group">
+                <label for="countryInput">Country</label>
+                <input type="text" id="countryInput" placeholder="e.g. Australia" autocomplete="off" value="Australia" />
+                <div id="countrySuggestions" class="autocomplete-suggestions"></div>
+              </div>
+              <div class="form-group"><label for="count">Number of Businesses</label><input type="number" id="count" placeholder="10" min="1" /></div>
+              <div class="form-group checkbox-group"><input type="checkbox" id="findAllBusinesses" name="find_option" checked /><label for="findAllBusinesses">Find all available businesses</label></div>
+            </div>
+          </div>
+
+          <div class="collapsible-section">
+            <div class="collapsible-header">
+              <h3><i class="fas fa-map-marker-alt icon-location-search"></i> Search by Location</h3>
+              <i class="fas fa-chevron-down toggle-icon"></i>
+            </div>
+            <div class="collapsible-content collapsed" id="locationSearchContainer">
+              <div class="form-group">
+                <label>Suburb / Area</label>
+                <input type="text" id="locationInput" placeholder="e.g. Melbourne" autocomplete="off" />
+                <div id="locationSuggestions" class="autocomplete-suggestions"></div>
+              </div>
+              <div class="form-group">
+                <label>Postal Code(s)</label>
+                <div id="postalCodeContainer" class="tag-container"><input type="text" id="postalCodeInput" placeholder="Enter postcodes..." /></div>
+                <div id="postalCodeSuggestions" class="autocomplete-suggestions"></div>
+              </div>
+              <div id="postcodeListContainer">
+                <div class="form-group"><select id="postcodeListSelect"><option value="">Load a saved list...</option></select></div>
+                <button id="savePostcodeListButton" class="btn btn-secondary" disabled><i class="fas fa-save"></i> Save Current Postcode List</button>
+                <button id="deletePostcodeListButton" class="btn-icon" title="Delete selected list" style="display: none"><i class="fas fa-trash-alt"></i></button>
+              </div>
+            </div>
+          </div>
+
+          <div class="collapsible-section">
+            <div class="collapsible-header">
+              <h3><i class="fas fa-bullseye icon-radius-search"></i> Search by Radius</h3>
+              <i class="fas fa-chevron-down toggle-icon"></i>
+            </div>
+            <div class="collapsible-content collapsed" id="radiusSearchContainer">
+              <div class="form-group" style="margin-bottom: 12px;">
+                <button id="btn-open-map-workspace" class="btn-secondary" style="width: 100%; font-size: 0.9rem; padding: 12px; margin: 0; background: #f8fafc; border-color: #cbd5e1; font-weight: 700; color: #334155; border-radius: 8px; display: flex; align-items: center; justify-content: center; gap: 10px; transition: all 0.2s; cursor: pointer;">
+                  <i class="fas fa-expand-arrows-alt"></i> Open Full Map Workspace
+                </button>
+              </div>
+              <div id="map-preview-text" style="font-size: 0.8rem; color: #64748b; margin-bottom: 12px; font-weight: 500;">0 active search zones. Click "Open Full Map" to add pins.</div>
+              <div id="map-parent-container" style="height: 250px; width: 100%; position: relative; border-radius: 8px; overflow: hidden; border: 1px solid #e2e8f0; z-index: 1;">
+                <div id="map" style="height: 100%; width: 100%;"></div>
+              </div>
+              <div id="map-workspace-modal" class="review-overlay" style="display: none;">
+                <div class="review-window" style="width: 96vw; height: 92vh; max-width: none;">
+                  <div class="review-header" style="display: flex; flex-direction: row; justify-content: space-between; align-items: center; padding: 1rem 2rem;">
+                    <div>
+                      <h3 style="margin:0; font-size: 1.2rem;">Map Planning Workspace</h3>
+                      <p style="margin:4px 0 0 0; font-size: 0.85rem; color: #64748b;">Search suburbs to drop pins or click anywhere on the map. Drag pins to adjust.</p>
+                    </div>
+                    <div style="display: flex; gap: 12px; align-items: center;">
+                      <div class="search-wrapper" style="position: relative; width: 350px; margin: 0;">
+                        <i class="fas fa-search" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: #94a3b8; pointer-events: none;"></i>
+                        <input type="text" id="workspace-search-input" placeholder="Search suburb to drop pin..." style="width: 100%; padding: 10px 16px 10px 38px; border-radius: 8px; border: 1px solid #cbd5e1; outline: none; font-size: 0.95rem; font-family: inherit; transition: border-color 0.2s; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
+                        <div id="workspace-suggestions" class="autocomplete-suggestions"></div>
+                      </div>
+                      <button class="btn-review-export" id="btn-close-map-workspace" style="white-space: nowrap;">Save & Close</button>
+                    </div>
+                  </div>
+                  <div style="display: flex; flex: 1; overflow: hidden; position: relative;">
+                    <div id="big-map-container" style="flex: 1; background: #f1f5f9; position: relative; z-index: 1;"></div>
+                    <div id="map-sidebar" style="width: 340px; border-left: 1px solid #e2e8f0; background: #f8fafc; display: flex; flex-direction: column; z-index: 2;">
+                      <div id="zone-list" style="flex: 1; overflow-y: auto;"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="collapsible-section">
+            <div class="collapsible-header">
+              <h3><i class="fas fa-store icon-name-search"></i> Search by Specific Name(s)</h3>
+              <i class="fas fa-chevron-down toggle-icon"></i>
+            </div>
+            <div class="collapsible-content collapsed" id="individualSearchContainer">
+              <div class="form-group">
+                <label for="businessNamesInput">Business Names (one per line)</label>
+                <textarea id="businessNamesInput" rows="5" placeholder="e.g., Johnny's Bakery..."></textarea>
+              </div>
+            </div>
+          </div>
+
+          <div class="collapsible-section">
+            <div class="collapsible-header">
+              <h3><i class="fas fa-ban icon-exclude-search"></i> Exclude Retailers</h3>
+              <i class="fas fa-chevron-down toggle-icon"></i>
+            </div>
+            <div class="collapsible-content collapsed" id="exclusionSearchContainer">
+              <div class="form-group">
+                <label for="exclusionInput">Retailers to Exclude</label>
+                <div id="exclusionContainer" class="tag-container"><input type="text" id="exclusionInput" placeholder="e.g., Woolworths, Coles..." /></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="collapsible-section">
+            <div class="collapsible-header">
+              <h3><i class="fas fa-envelope icon-email-search"></i> Email Results To (Optional)</h3>
+              <i class="fas fa-chevron-down toggle-icon"></i>
+            </div>
+            <div class="collapsible-content collapsed">
+              <div class="form-group"><input type="email" id="userEmailInput" placeholder="your.email@example.com" autocomplete="email" /></div>
+            </div>
+          </div>
+
+          <button id="startButton" class="btn btn-primary"><i class="fas fa-play"></i> Start Research</button>
+        </aside>
+
+        <div class="results-display">
+          <div id="usage-dashboard-card" class="usage-dashboard-card">
+            <div class="usage-dash-header">
+              <div class="usage-title-area">
+                <span class="usage-label">Daily Prospecting Quota</span>
+                <div class="usage-main-numbers"><h2 id="dash-usage-current">0</h2><span class="usage-divider">/</span><h3 id="dash-usage-limit">500</h3></div>
+              </div>
+              <div class="plan-status-area"><span id="dash-plan-badge" class="plan-badge-large">Standard Plan</span><span id="reset-timer" class="reset-timer">Resets in 12h</span></div>
+            </div>
+            <div class="usage-progress-container">
+              <div class="usage-progress-bar"><div id="dash-usage-fill" class="usage-progress-fill" style="width: 0%"></div></div>
+              <div class="usage-footer-labels"><span id="usage-percentage-label">0% consumed</span><span id="usage-status-text">Account in good standing</span></div>
+            </div>
+          </div>
+
+          <div id="status-card" class="status-card">
+            <div class="status-content">
+              <div class="status-icon-box"><i id="status-icon" class="fas fa-play"></i></div>
+              <h3 id="status-headline" class="status-headline">Ready to Start</h3>
+              <p id="status-subtext" class="status-subtext">Waiting for input...</p>
+              <div class="progress-container">
+                <div class="progress-track"><div id="progress-fill" class="progress-fill"></div></div>
+                <div class="progress-labels"><span id="phase-label">Phase 0/3</span><span id="pct-label">0%</span></div>
+              </div>
+              <div class="stats-grid">
+                <div class="stat-item"><span id="stat-found" class="stat-value">0</span><span class="stat-label">Found</span></div>
+                <div class="stat-item"><span id="stat-processed" class="stat-value">0</span><span class="stat-label">Scraped</span></div>
+                <div class="stat-item"><span id="stat-enriched" class="stat-value">0</span><span class="stat-label">Enriched</span></div>
+              </div>
+            </div>
+          </div>
+
+          <div id="queue-card" class="usage-dashboard-card" style="display:none; border-left: 4px solid #f59e0b;">
+            <div class="usage-dash-header" style="margin-bottom: 0.5rem;">
+              <div class="usage-title-area"><span class="usage-label"><i class="fas fa-clock"></i> My Waiting List</span></div>
+              <div class="plan-status-area"><span id="queue-count-badge" class="plan-badge-large" style="background: #fffbeb; color: #b45309; border-color: #fcd34d;">0 Jobs</span></div>
+            </div>
+            <div id="queue-list-container" class="queue-list"></div>
+          </div>
+
+          <div class="card" id="jobHistoryCard">
+            <div class="card-header results-header" style="border-bottom: 1px solid #e2e8f0; padding-bottom: 15px;">
+              <div style="display: flex; align-items: center; justify-content: space-between; gap: 20px; width: 100%;">
+                <h2 style="margin: 0; white-space: nowrap; font-size: 1.1rem; color: #1e293b;"><i class="fas fa-history" style="color: #64748b; margin-right: 8px;"></i> Job History</h2>
+                <div style="display: flex; gap: 8px; align-items: center;">
+                  <button id="merge-trigger-btn" onclick="window.rtrlApp.jobHistory.triggerMerge()" class="job-action-btn" style="height: 42px; border-radius: 10px; font-weight: 700; transition: all 0.2s;">Merge & Review Selected (0)</button>
+                  <button id="clear-merges-btn" onclick="window.rtrlApp.jobHistory.clearSelection()" class="job-action-btn" style="display: none; background: #fee2e2; color: #ef4444; border: 1px solid #fecaca; width: 42px; height: 42px; justify-content: center; align-items: center; border-radius: 10px; font-size: 1.2rem;" title="Clear Selection"><i class="fas fa-times"></i></button>
+                </div>
+                <div class="history-search-container" style="flex-grow: 1; position: relative; display: flex; align-items: center;">
+                  <i class="fas fa-search" style="position: absolute; left: 15px; color: #94a3b8; pointer-events: none;"></i>
+                  <input type="text" id="history-search-input" placeholder="Search history by area, category, or keyword..." style="width: 100%; height: 42px; padding: 0 15px 0 45px; border-radius: 10px; border: 1px solid #e2e8f0; background: #f8fafc; font-size: 0.9rem; outline: none; transition: all 0.2s;">
+                </div>
+              </div>
+            </div>
+            <div id="job-list-container" style="padding-top: 15px;">
+              <p class="placeholder-text">Your past jobs will appear here.</p>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <div id="alert-modal" class="login-overlay" style="display: none; background: rgba(15, 23, 42, 0.4); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); z-index: 11000; align-items: center; justify-content: center;">
+      <div class="card" style="max-width: 420px; width: 90%; text-align: center; padding: 2.5rem; border-radius: 20px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04); border: none;">
+        <div style="width: 70px; height: 70px; background: #fff1f2; color: #e11d48; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.5rem; font-size: 2rem;"><i class="fas fa-search-minus"></i></div>
+        <h3 style="margin-bottom: 0.75rem; font-size: 1.5rem; color: #1e293b; font-weight: 800;">Search Incomplete</h3>
+        <p id="alert-modal-message" style="color: #64748b; font-size: 1rem; line-height: 1.6; margin-bottom: 2rem;"></p>
+        <button onclick="document.getElementById('alert-modal').style.display='none'" class="btn btn-primary" style="margin-top: 0; background: #1e293b; width: 100%; height: 50px; font-size: 1rem; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);">Continue</button>
+      </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="ui-helpers.js"></script>
+    <script src="exclusion-feature.js"></script>
+    <script src="job-history.js"></script>
+    <script src="review.js"></script>
+    <script src="event-handlers.js"></script>
+    <script src="script.js?v=4"></script>
+  </body>
+</html>

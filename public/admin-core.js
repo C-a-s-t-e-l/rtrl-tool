@@ -5,7 +5,9 @@ window.CONFIG = {
 
 const SB_URL = window.CONFIG.SUPABASE_URL;
 const SB_KEY = window.CONFIG.SUPABASE_ANON_KEY;
-const API_URL = "https://backend.rtrlprospector.space";
+const API_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+    ? 'http://localhost:3000'
+    : 'https://rtrl-tool-production.up.railway.app';
 const supabaseClient = supabase.createClient(SB_URL, SB_KEY);
 
 async function initAdminCore() {

@@ -178,7 +178,7 @@ const runScrapeJob = async (jobId) => {
   }
 
   // 2. Pre-scrape System & Quota Checks
-  const { data: settings } = await supabase.from('system_settings').select('is_paused').eq('id', 1).single();
+  const { data: settings } = await supabase.from('system_settings').select('is_paused, global_exclusions').eq('id', 1).single();
   if (settings?.is_paused) {
     await addLog(jobId, "[SYSTEM] Research is currently PAUSED by Admin. Job cancelled.");
     await updateJobStatus(jobId, "failed");
@@ -194,9 +194,12 @@ const runScrapeJob = async (jobId) => {
 
   const { parameters } = job;
   const {
-    categoriesToLoop, location, postalCode, country, businessNames, anchorPoint, radiusKm, 
-    userEmail, searchParamsForEmail, exclusionList, useAiEnrichment, clientLocalDate 
+    categoriesToLoop, location, postalCode, country, businessNames, anchorPoint, radiusKm,
+    userEmail, searchParamsForEmail, exclusionList, useAiEnrichment, clientLocalDate
   } = parameters;
+
+  const globalExclusions = settings?.global_exclusions || [];
+  const mergedExclusionList = [...new Set([...(exclusionList || []), ...globalExclusions])];
 
   let filterCenterLat = null, filterCenterLng = null;
   if (radiusKm && anchorPoint) {
@@ -462,7 +465,7 @@ discoveredInLoop.forEach(url => {
         for (const businessData of batchResults) {
             if (!businessData) continue;
             const normName = businessData.BusinessName.toLowerCase().replace(/[^a-z0-9]/g, "");
-            const isExcluded = exclusionList?.some(ex => normName.includes(ex.toLowerCase().replace(/[^a-z0-9]/g, "")));
+            const isExcluded = mergedExclusionList.some(ex => normName.includes(ex.toLowerCase().replace(/[^a-z0-9]/g, "")));
             if (isExcluded) {
                 await addLog(jobId, `[Excluded] ${businessData.BusinessName}`);
                 continue;
@@ -778,6 +781,41 @@ app.post("/api/exclusions", async (req, res) => {
     } catch (dbError) {
         console.error("Error saving exclusion list:", dbError);
         res.status(500).json({ error: 'Failed to save exclusion list.' });
+    }
+});
+
+app.get("/api/admin/global-exclusions", async (req, res) => {
+    try {
+        const authHeader = req.headers.authorization;
+        if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
+        const { data: { user }, error: authError } = await supabase.auth.getUser(authHeader.split(' ')[1]);
+        if (authError || !user) return res.status(401).json({ error: 'Authentication failed.' });
+        const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+        if (profile?.role !== 'admin') return res.status(403).json({ error: 'Admin only.' });
+
+        const { data } = await supabase.from('system_settings').select('global_exclusions').eq('id', 1).single();
+        res.json({ exclusionList: data?.global_exclusions || [] });
+    } catch (e) {
+        res.status(500).json({ error: 'Failed to fetch global exclusions.' });
+    }
+});
+
+app.post("/api/admin/global-exclusions", async (req, res) => {
+    try {
+        const authHeader = req.headers.authorization;
+        if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
+        const { data: { user }, error: authError } = await supabase.auth.getUser(authHeader.split(' ')[1]);
+        if (authError || !user) return res.status(401).json({ error: 'Authentication failed.' });
+        const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+        if (profile?.role !== 'admin') return res.status(403).json({ error: 'Admin only.' });
+
+        const { exclusionList } = req.body;
+        if (!Array.isArray(exclusionList)) return res.status(400).json({ error: 'Invalid data format.' });
+
+        await supabase.from('system_settings').update({ global_exclusions: exclusionList }).eq('id', 1);
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: 'Failed to save global exclusions.' });
     }
 });
 

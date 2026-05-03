@@ -1,12 +1,10 @@
 document.addEventListener("DOMContentLoaded", () => {
   let isSubscribed = false;
 
-  const BACKEND_URL = "https://rtrl-tool-production.up.railway.app";
-  const SUPABASE_URL = window.CONFIG.SUPABASE_URL;
-  const SUPABASE_ANON_KEY = window.CONFIG.SUPABASE_ANON_KEY;
-
+  const BACKEND_URL = window.BACKEND_URL;
   const { createClient } = supabase;
-  const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  const supabaseClient = createClient(window.CONFIG.SUPABASE_URL, window.CONFIG.SUPABASE_ANON_KEY);
+  window.BACKEND_URL = BACKEND_URL;
 
   let currentUserSession = null;
   let currentJobId = null;
@@ -40,7 +38,9 @@ document.addEventListener("DOMContentLoaded", () => {
     addAnchor: () => {}
   };
 
-  function initializeMainApp() {
+  async function initializeMainApp() {
+    const { data: { session: initialSession } } = await supabaseClient.auth.getSession();
+    if (!initialSession) { window.location.href = 'index.html'; return; }
     let masterCategoryData = [];
     let categoryHierarchy = {};
     let selectedIndustry = null;
@@ -373,21 +373,10 @@ window.rtrlApp.deleteLocation = async (id) => {
       savePostcodeListButton: document.getElementById("savePostcodeListButton"),
       deletePostcodeListButton: document.getElementById("deletePostcodeListButton"),
       categoryModifierInput: document.getElementById("categoryModifierInput"),
-      loginOverlay: document.getElementById("login-overlay"),
-      appContent: document.getElementById("app-content"),
       logoutButton: document.getElementById("logout-button"),
       userInfoSpan: document.getElementById("user-info"),
       userMenu: document.getElementById("user-menu"),
       userEmailDisplay: document.getElementById("user-email-display"),
-      flipCardContainer: document.getElementById("flip-card"),
-      toSignupBtn: document.getElementById("to-signup-btn"),
-      toSigninBtn: document.getElementById("to-signin-btn"),
-      emailInputAuth: document.getElementById("email-input"),
-      passwordInputAuth: document.getElementById("password-input"),
-      loginEmailBtn: document.getElementById("login-email-btn"),
-      signupEmailInput: document.getElementById("signup-email-input"),
-      signupPasswordInput: document.getElementById("signup-password-input"),
-      signupEmailBtn: document.getElementById("signup-email-btn"),
       dashUsageCurrent: document.getElementById("dash-usage-current"),
       dashUsageLimit: document.getElementById("dash-usage-limit"),
       dashUsageFill: document.getElementById("dash-usage-fill"),
@@ -534,101 +523,40 @@ window.rtrlApp.deleteLocation = async (id) => {
     if (elements.btnOpenMapWorkspace) { elements.btnOpenMapWorkspace.onclick = (e) => { e.preventDefault(); toggleMapWorkspace(true); }; }
     if (elements.btnCloseMapWorkspace) { elements.btnCloseMapWorkspace.onclick = (e) => { e.preventDefault(); toggleMapWorkspace(false); }; }
 
-    function setupPasswordToggle(toggleId, inputId) {
-      const toggleBtn = document.getElementById(toggleId), inputField = document.getElementById(inputId);
-      if (toggleBtn && inputField) { toggleBtn.addEventListener("click", () => { const type = inputField.getAttribute("type") === "password" ? "text" : "password"; inputField.setAttribute("type", type); toggleBtn.classList.toggle("fa-eye"); toggleBtn.classList.toggle("fa-eye-slash"); }); }
-    }
-    setupPasswordToggle("toggle-login-password", "password-input");
-    setupPasswordToggle("toggle-signup-password", "signup-password-input");
-
-        document.getElementById("login-google")?.addEventListener("click", () =>
-      supabaseClient.auth.signInWithOAuth({ 
-        provider: "google", 
-        options: { redirectTo: window.location.origin } 
-      })
-    );
-
-    // Microsoft Login
-    document.getElementById("login-microsoft")?.addEventListener("click", () =>
-      supabaseClient.auth.signInWithOAuth({ 
-        provider: "azure", 
-        options: { scopes: "email", redirectTo: window.location.origin } 
-      })
-    );
-
-    // Navigation: Switch to Signup
-    document.getElementById("to-signup-btn")?.addEventListener("click", (e) => {
-      e.preventDefault();
-      elements.flipCardContainer.classList.add("flipped");
-    });
-
-    // Navigation: Switch to Signin
-    document.getElementById("to-signin-btn")?.addEventListener("click", (e) => {
-      e.preventDefault();
-      elements.flipCardContainer.classList.remove("flipped");
-    });
-//loginFx
-
-    elements.loginEmailBtn?.addEventListener("click", async () => {
-      const email = elements.emailInputAuth.value, password = elements.passwordInputAuth.value;
-      if (!email || !password) return alert("Please enter credentials.");
-      elements.loginEmailBtn.disabled = true;
-      const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
-      if (error) { alert(error.message); elements.loginEmailBtn.disabled = false; }
-    });
-
-    elements.signupEmailBtn?.addEventListener("click", async () => {
-      const email = elements.signupEmailInput.value, password = elements.signupPasswordInput.value;
-      if (!email || !password) return alert("Please enter credentials.");
-      elements.signupEmailBtn.disabled = true;
-      const { data, error } = await supabaseClient.auth.signUp({ email, password });
-      if (error) { alert(error.message); elements.signupEmailBtn.disabled = false; } else if (!data.session) { alert("Check email!"); elements.flipCardContainer.classList.remove("flipped"); elements.signupEmailBtn.disabled = false; }
-    });
-
-    elements.logoutButton?.addEventListener("click", async (e) => { e.preventDefault(); await supabaseClient.auth.signOut(); window.location.reload(); });
+    elements.logoutButton?.addEventListener("click", async (e) => { e.preventDefault(); await supabaseClient.auth.signOut(); });
 
 supabaseClient.auth.onAuthStateChange(async (event, session) => {
+      if (!session) { window.location.href = 'index.html'; return; }
+
       currentUserSession = session;
-      if (session) {
-        const currentSocketId = socket.id;
-        const currentToken = session.access_token;
+      const currentSocketId = socket.id;
+      const currentToken = session.access_token;
 
-        if (socket.connected && (currentSocketId !== lastAuthenticatedSocketId || currentToken !== lastAuthenticatedToken)) {
-            socket.emit("authenticate_socket", currentToken);
-            lastAuthenticatedSocketId = currentSocketId;
-            lastAuthenticatedToken = currentToken;
-        }
-
-        elements.loginOverlay.style.display = "none"; 
-        elements.appContent.style.display = "block"; 
-        elements.userMenu.style.display = "block";
-        elements.userInfoSpan.textContent = session.user.user_metadata.full_name || "User"; 
-        elements.userEmailDisplay.textContent = session.user.email;
-        
-        refreshUsageTracker();
-        
-        supabaseClient.from("profiles").select("role").eq("id", session.user.id).single().then(({ data: profile }) => { 
-            if (profile?.role === "admin") document.getElementById("admin-control-link").style.display = "flex"; 
-        });
-
-        if (elements.userEmailInput.value === "") elements.userEmailInput.value = session.user.email;
-        
-        fetchPostcodeLists();
-        window.rtrlApp.fetchLocations(); 
-        window.rtrlApp.jobHistory.fetchAndRenderJobs();
-
-        fetch(`${BACKEND_URL}/api/exclusions`, { headers: { Authorization: `Bearer ${session.access_token}` } })
-            .then((res) => (res.ok ? res.json() : null))
-            .then((data) => { 
-                if (data) window.rtrlApp.exclusionFeature.populateTags(data.exclusionList); 
-            });
-      } else {
-        elements.loginOverlay.style.display = "flex"; 
-        elements.appContent.style.display = "none"; 
-        elements.userMenu.style.display = "none";
-        lastAuthenticatedSocketId = null;
-        lastAuthenticatedToken = null;
+      if (socket.connected && (currentSocketId !== lastAuthenticatedSocketId || currentToken !== lastAuthenticatedToken)) {
+          socket.emit("authenticate_socket", currentToken);
+          lastAuthenticatedSocketId = currentSocketId;
+          lastAuthenticatedToken = currentToken;
       }
+
+      elements.userMenu.style.display = "block";
+      elements.userInfoSpan.textContent = session.user.user_metadata.full_name || "User";
+      elements.userEmailDisplay.textContent = session.user.email;
+
+      refreshUsageTracker();
+
+      supabaseClient.from("profiles").select("role").eq("id", session.user.id).single().then(({ data: profile }) => {
+          if (profile?.role === "admin") document.getElementById("admin-control-link").style.display = "flex";
+      });
+
+      if (elements.userEmailInput.value === "") elements.userEmailInput.value = session.user.email;
+
+      fetchPostcodeLists();
+      window.rtrlApp.fetchLocations();
+      window.rtrlApp.jobHistory.fetchAndRenderJobs();
+
+      fetch(`${BACKEND_URL}/api/exclusions`, { headers: { Authorization: `Bearer ${session.access_token}` } })
+          .then((res) => (res.ok ? res.json() : null))
+          .then((data) => { if (data) window.rtrlApp.exclusionFeature.populateTags(data.exclusionList); });
     });
 
     let savedPostcodeLists = [];

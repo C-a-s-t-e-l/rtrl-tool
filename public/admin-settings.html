@@ -43,19 +43,107 @@
                 </div>
             </header>
 
-            <div class="placeholder-banner">
-                <i class="fas fa-hard-hat fa-2x"></i>
-                <div><strong>Work in Progress</strong><p style="margin:0; font-size:0.9rem">Global configuration options coming soon.</p></div>
-            </div>
-
-            <div class="mock-container">
-                <div class="content-card">
-                    <div style="margin-bottom: 20px;">
-                        <label style="display:block; font-weight:600; margin-bottom:5px;">Global Exclusion List</label>
-                        <textarea style="width:100%; height:100px; padding:10px; border:1px solid #e2e8f0; border-radius:8px;">Woolworths, Coles, Aldi</textarea>
+            <div class="content-card" style="max-width: 700px;">
+                <div style="margin-bottom: 6px; display: flex; align-items: center; justify-content: space-between;">
+                    <div>
+                        <h3 style="margin: 0; font-size: 1rem; font-weight: 700; color: #1e293b;">Global Exclusion List</h3>
+                        <p style="margin: 4px 0 0; font-size: 0.85rem; color: #64748b;">These retailers are excluded from all scrape jobs across all users.</p>
                     </div>
+                    <span id="save-status" style="font-size: 0.8rem; color: #94a3b8; font-weight: 500;"></span>
+                </div>
+                <div id="global-exclusion-container" style="display:flex; flex-wrap:wrap; align-items:center; gap:6px; padding:10px; border:1px solid #e2e8f0; border-radius:8px; background:#fff; cursor:text; margin-top: 14px; min-height: 48px;">
+                    <input id="global-exclusion-input" type="text" placeholder="Type a retailer name and press Enter..." style="flex-grow:1; border:none; outline:none; padding:4px 2px; font-size:0.9rem; background:transparent; min-width:180px; font-family: inherit;" />
                 </div>
             </div>
+
+            <style>
+                .exclusion-tag { display:inline-flex; align-items:center; background:#e9ecef; padding:4px 10px; border-radius:4px; font-size:0.85rem; font-weight:500; gap:6px; }
+                .exclusion-tag-remove { cursor:pointer; color:#94a3b8; font-size:1rem; line-height:1; }
+                .exclusion-tag-remove:hover { color:#1e293b; }
+            </style>
+
+            <script>
+            document.addEventListener('DOMContentLoaded', async () => {
+                await initAdminCore();
+
+                const container = document.getElementById('global-exclusion-container');
+                const input = document.getElementById('global-exclusion-input');
+                const saveStatus = document.getElementById('save-status');
+                let exclusionList = [];
+                let saveTimeout;
+
+                async function getToken() {
+                    const { data: { session } } = await supabaseClient.auth.getSession();
+                    return session?.access_token || null;
+                }
+
+                function renderTags() {
+                    container.querySelectorAll('.exclusion-tag').forEach(t => t.remove());
+                    exclusionList.forEach(name => {
+                        const tag = document.createElement('span');
+                        tag.className = 'exclusion-tag';
+                        tag.innerHTML = `<span>${name}</span><span class="exclusion-tag-remove" data-value="${name}">&times;</span>`;
+                        container.insertBefore(tag, input);
+                    });
+                }
+
+                async function save() {
+                    const token = await getToken();
+                    if (!token) return;
+                    saveStatus.textContent = 'Saving...';
+                    try {
+                        await fetch(`${API_URL}/api/admin/global-exclusions`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                            body: JSON.stringify({ exclusionList })
+                        });
+                        saveStatus.textContent = 'Saved';
+                        setTimeout(() => saveStatus.textContent = '', 2000);
+                    } catch { saveStatus.textContent = 'Save failed'; }
+                }
+
+                function debouncedSave() {
+                    clearTimeout(saveTimeout);
+                    saveTimeout = setTimeout(save, 800);
+                }
+
+                function addTag(name) {
+                    const cleaned = name.trim();
+                    if (!cleaned || exclusionList.map(n => n.toLowerCase()).includes(cleaned.toLowerCase())) { input.value = ''; return; }
+                    exclusionList.push(cleaned);
+                    renderTags();
+                    debouncedSave();
+                    input.value = '';
+                }
+
+                function removeTag(name) {
+                    exclusionList = exclusionList.filter(n => n.toLowerCase() !== name.toLowerCase());
+                    renderTags();
+                    debouncedSave();
+                }
+
+                container.addEventListener('click', e => {
+                    if (e.target.classList.contains('exclusion-tag-remove')) removeTag(e.target.dataset.value);
+                    else input.focus();
+                });
+
+                input.addEventListener('keydown', e => {
+                    if (e.key === 'Enter') { e.preventDefault(); addTag(input.value); }
+                    if (e.key === 'Backspace' && !input.value && exclusionList.length) { removeTag(exclusionList[exclusionList.length - 1]); }
+                });
+
+                // Load existing list
+                const token = await getToken();
+                if (token) {
+                    try {
+                        const res = await fetch(`${API_URL}/api/admin/global-exclusions`, { headers: { 'Authorization': `Bearer ${token}` } });
+                        const data = await res.json();
+                        exclusionList = data.exclusionList || [];
+                        renderTags();
+                    } catch { saveStatus.textContent = 'Failed to load'; }
+                }
+            });
+            </script>
         </main>
     </div>
 
@@ -72,6 +160,5 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="admin-core.js"></script>
-    <script>document.addEventListener("DOMContentLoaded", ()=> initAdminCore());</script>
 </body>
 </html>
