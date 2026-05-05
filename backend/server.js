@@ -1401,11 +1401,26 @@ const initSupabaseRealtime = () => {
     console.log('[Supabase Realtime] Subscribed to profiles and jobs table changes.');
 };
 
+const reconcileQueue = async () => {
+    if (jobQueue.length === 0) return;
+    const ids = jobQueue.map(j => j.id);
+    const { data } = await supabase.from('jobs').select('id').in('id', ids);
+    if (!data) return;
+    const existingIds = new Set(data.map(j => j.id));
+    const before = jobQueue.length;
+    jobQueue = jobQueue.filter(j => existingIds.has(j.id));
+    if (jobQueue.length !== before) {
+        console.log(`[Queue Reconcile] Removed ${before - jobQueue.length} deleted job(s) from in-memory queue.`);
+        broadcastQueuePositions();
+    }
+};
+
 // Railway (and most cloud providers) require 0.0.0.0 to expose the port
 server.listen(PORT, "0.0.0.0", () => {
   console.log(`Scraping server running on port ${PORT}`);
   recoverStuckJobs();
   initSupabaseRealtime();
+  setInterval(reconcileQueue, 15000);
 });
 
 const countryBoundingBoxes = {
