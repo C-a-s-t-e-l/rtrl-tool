@@ -47,6 +47,15 @@
         }
     }
 
+    function showStatusCard() {
+        const card = document.getElementById("status-card");
+        if (!card) return;
+        card.classList.remove("status-card-enter");
+        void card.offsetWidth;
+        card.style.display = "";
+        card.classList.add("status-card-enter");
+    }
+
     function resetStatusUI() {
         const fill = document.getElementById("progress-fill");
         const pctLabel = document.getElementById("pct-label");
@@ -64,6 +73,7 @@
         if (icon) icon.className = "fas fa-satellite-dish spin-slow";
         if (headline) headline.textContent = "Extracting Data...";
         if (subtext) subtext.textContent = "Moving job from queue to active thread...";
+        showStatusCard();
     }
 
     function updateDashboardUi(status) {
@@ -78,6 +88,7 @@
             if (!headline.textContent.includes("(")) headline.textContent = "Job Active";
             if (!subtext.textContent.includes("Current:")) subtext.textContent = "Processing data...";
             if (icon) icon.className = "fas fa-circle-notch fa-spin";
+            showStatusCard();
         } else if (status === "completed") {
             card.classList.add("phase-complete");
             headline.textContent = "Job Completed";
@@ -89,11 +100,13 @@
             if (fill) fill.style.width = "100%";
             if (pct) pct.textContent = "100%";
             if (phase) phase.textContent = "Phase 3/3: Complete";
+            showStatusCard();
         } else if (status === "failed") {
             card.classList.add("phase-error");
             headline.textContent = "Job Failed";
             subtext.textContent = "Please check job history or try again.";
             if (icon) icon.className = "fas fa-times-circle";
+            showStatusCard();
         } else {
             headline.textContent = "Ready to Start";
             subtext.textContent = "Waiting for input...";
@@ -129,6 +142,7 @@
     window.rtrlApp.refreshUsageTracker = refreshUsageTracker;
     window.rtrlApp.loadGoogleMaps = loadGoogleMaps;
     window.rtrlApp.resetStatusUI = resetStatusUI;
+    window.rtrlApp.showStatusCard = showStatusCard;
     window.rtrlApp.updateDashboardUi = updateDashboardUi;
     window.rtrlApp.updateStatusCardPhase = updateStatusCardPhase;
 })();

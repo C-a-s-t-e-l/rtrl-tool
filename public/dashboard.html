@@ -47,33 +47,56 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   </head>
   <body>
-    <div class="app-container">
-      <header>
-        <div class="header-left">
-          <div class="logo"><i class="fas fa-building"></i></div>
-          <div class="header-text">
-            <h1>RTRL Property Prospector</h1>
-            <p>Intelligent Client Prospecting for Commercial Real Estate</p>
+    <header>
+      <div class="header-inner">
+        <div class="header-main-row">
+          <div class="header-left">
+            <img src="https://cdn-icons-png.flaticon.com/512/2248/2248814.png" alt="RTRL Logo" class="logo-img">
+            <div class="header-text">
+              <h1>RTRL Property Prospector</h1>
+              <p>Intelligent Client Prospecting for Commercial Real Estate</p>
+            </div>
           </div>
-        </div>
-        <div id="auth-container">
-          <div id="user-menu" class="user-menu" style="display: none">
-            <button id="user-menu-button" class="user-menu-button">
-              <span id="user-info"></span>
-              <i class="fas fa-chevron-down toggle-icon"></i>
-            </button>
-            <div id="user-menu-dropdown" class="user-menu-dropdown">
-              <div class="dropdown-item non-clickable"><i class="fas fa-user"></i><span id="user-email-display"></span></div>
-              <a href="admin/admin.html" id="admin-control-link" class="dropdown-item" style="display: none;"><i class="fas fa-user-shield" style="color: #8b5cf6;"></i><span>Admin Control</span></a>
-              <div class="dropdown-divider"></div>
-              <a href="#" id="logout-button" class="dropdown-item"><i class="fas fa-sign-out-alt"></i> Logout</a>
+          <div id="auth-container">
+            <div id="user-menu" class="user-menu" style="display: none">
+              <button id="user-menu-button" class="user-menu-button">
+                <span id="user-info"></span>
+                <i class="fas fa-chevron-down toggle-icon"></i>
+              </button>
+              <div id="user-menu-dropdown" class="user-menu-dropdown">
+                <div class="dropdown-item non-clickable"><i class="fas fa-user"></i><span id="user-email-display"></span></div>
+                <a href="admin/admin.html" id="admin-control-link" class="dropdown-item" style="display: none;"><i class="fas fa-user-shield" style="color: #8b5cf6;"></i><span>Admin Control</span></a>
+                <div class="dropdown-divider"></div>
+                <a href="#" id="logout-button" class="dropdown-item"><i class="fas fa-sign-out-alt"></i> Logout</a>
+              </div>
             </div>
           </div>
         </div>
-      </header>
-
+        <div class="header-quota-row" id="usage-dashboard-card">
+          <div class="header-quota-left">
+            <span class="usage-label">Daily Quota</span>
+            <div class="usage-main-numbers">
+              <h2 id="dash-usage-current">0</h2>
+              <span class="usage-divider">/</span>
+              <h3 id="dash-usage-limit">500</h3>
+            </div>
+            <div class="usage-progress-bar header-quota-bar">
+              <div id="dash-usage-fill" class="usage-progress-fill" style="width: 0%"></div>
+            </div>
+            <span id="usage-percentage-label">0% consumed</span>
+          </div>
+          <div class="header-quota-right">
+            <span id="dash-plan-badge" class="plan-badge-large">Standard Plan</span>
+            <span id="reset-timer" class="reset-timer">Resets in 12h</span>
+            <span id="usage-status-text">Account in good standing</span>
+          </div>
+        </div>
+      </div>
+    </header>
+    <div class="app-container">
       <main class="main-layout">
         <aside class="search-controls">
+          <div class="sidebar-scroll-area">
           <div class="search-controls-header">
             <h2><i class="fas fa-search"></i> Define Your Search</h2>
             <p>Configure search parameters to find potential clients</p>
@@ -87,10 +110,9 @@
             <div class="collapsible-content" id="bulkSearchContainer">
               <div class="form-group toggle-wrapper">
                 <div class="toggle-header">
-                  <label class="toggle-label-main"><i class="fas fa-robot" style="color: #8b5cf6"></i> Enable AI Enrichment</label>
+                  <label class="toggle-label-main">Enable AI Enrichment</label>
                   <label class="switch"><input type="checkbox" id="useAiToggle" checked /><span class="slider round"></span></label>
                 </div>
-                <p class="toggle-description">Finds Owner Names and specialized contact info.<br /><strong>Note:</strong> Consumes API rates. Disable for faster, general scraping.</p>
               </div>
               <div class="form-group" id="customCategoryGroup">
                 <label for="customCategoryInput">Custom Keywords / Category</label>
@@ -222,25 +244,15 @@
             </div>
           </div>
 
-          <button id="startButton" class="btn btn-primary"><i class="fas fa-play"></i> Start Research</button>
+          </div><!-- /.sidebar-scroll-area -->
+          <div class="sidebar-cta">
+            <button id="startButton" class="btn btn-primary"><i class="fas fa-play"></i> Start Research</button>
+          </div>
         </aside>
 
         <div class="results-display">
-          <div id="usage-dashboard-card" class="usage-dashboard-card">
-            <div class="usage-dash-header">
-              <div class="usage-title-area">
-                <span class="usage-label">Daily Prospecting Quota</span>
-                <div class="usage-main-numbers"><h2 id="dash-usage-current">0</h2><span class="usage-divider">/</span><h3 id="dash-usage-limit">500</h3></div>
-              </div>
-              <div class="plan-status-area"><span id="dash-plan-badge" class="plan-badge-large">Standard Plan</span><span id="reset-timer" class="reset-timer">Resets in 12h</span></div>
-            </div>
-            <div class="usage-progress-container">
-              <div class="usage-progress-bar"><div id="dash-usage-fill" class="usage-progress-fill" style="width: 0%"></div></div>
-              <div class="usage-footer-labels"><span id="usage-percentage-label">0% consumed</span><span id="usage-status-text">Account in good standing</span></div>
-            </div>
-          </div>
 
-          <div id="status-card" class="status-card">
+          <div id="status-card" class="status-card" style="display:none">
             <div class="status-content">
               <div class="status-icon-box"><i id="status-icon" class="fas fa-play"></i></div>
               <h3 id="status-headline" class="status-headline">Ready to Start</h3>
@@ -268,7 +280,7 @@
           <div class="card" id="jobHistoryCard">
             <div class="card-header results-header" style="border-bottom: 1px solid #e2e8f0; padding-bottom: 15px;">
               <div style="display: flex; align-items: center; justify-content: space-between; gap: 20px; width: 100%;">
-                <h2 style="margin: 0; white-space: nowrap; font-size: 1.1rem; color: #1e293b;"><i class="fas fa-history" style="color: #64748b; margin-right: 8px;"></i> Job History</h2>
+                <h2 style="margin: 0; white-space: nowrap; font-size: 1.1rem; color: #1e293b;"><i class="fas fa-history" style="color: #64748b; margin-right: 8px;"></i> Search History</h2>
                 <div style="display: flex; gap: 8px; align-items: center;">
                   <button id="merge-trigger-btn" onclick="window.rtrlApp.jobHistory.triggerMerge()" class="job-action-btn" style="height: 42px; border-radius: 10px; font-weight: 700; transition: all 0.2s;">Merge & Review Selected (0)</button>
                   <button id="clear-merges-btn" onclick="window.rtrlApp.jobHistory.clearSelection()" class="job-action-btn" style="display: none; background: #fee2e2; color: #ef4444; border: 1px solid #fecaca; width: 42px; height: 42px; justify-content: center; align-items: center; border-radius: 10px; font-size: 1.2rem;" title="Clear Selection"><i class="fas fa-times"></i></button>
@@ -309,5 +321,33 @@
     <script src="js/search.js"></script>
     <script src="js/socket-client.js"></script>
     <script src="js/script.js?v=5"></script>
+    <script>
+      (function () {
+        var sidebar        = document.querySelector('.search-controls');
+        var header         = document.querySelector('header');
+        var appContainer   = document.querySelector('.app-container');
+        var jobHistoryCard = document.querySelector('#jobHistoryCard');
+        if (!sidebar || !header) return;
+        function syncSidebarTop() {
+          var h         = header.offsetHeight + parseFloat(getComputedStyle(header).marginBottom);
+          var appPadBot = appContainer ? parseFloat(getComputedStyle(appContainer).paddingBottom) : 32;
+          var maxH      = 'calc(100vh - ' + h + 'px - ' + appPadBot + 'px)';
+          sidebar.style.top       = h + 'px';
+          sidebar.style.maxHeight = maxH;
+          if (jobHistoryCard) {
+            jobHistoryCard.style.top       = h + 'px';
+            jobHistoryCard.style.maxHeight = maxH;
+          }
+          document.documentElement.style.setProperty('--header-h', h + 'px');
+          document.documentElement.style.setProperty('scroll-padding-top', h + 'px');
+        }
+        if (document.fonts && document.fonts.ready) {
+          document.fonts.ready.then(syncSidebarTop);
+        } else {
+          document.addEventListener('DOMContentLoaded', syncSidebarTop);
+        }
+        window.addEventListener('resize', syncSidebarTop);
+      })();
+    </script>
   </body>
 </html>

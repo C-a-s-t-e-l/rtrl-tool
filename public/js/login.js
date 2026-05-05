@@ -1,4 +1,22 @@
 document.addEventListener('DOMContentLoaded', () => {
+    // Modal open/close
+    const loginModal = document.getElementById('login-modal');
+    const flipCard   = document.getElementById('flip-card');
+
+    function openModal(startAtSignup = false) {
+        flipCard.classList.toggle('flipped', startAtSignup);
+        loginModal.classList.add('open');
+    }
+    function closeModal() {
+        loginModal.classList.remove('open');
+    }
+
+    document.getElementById('open-signin-btn')?.addEventListener('click', () => openModal(false));
+    document.getElementById('hero-signin-btn')?.addEventListener('click', () => openModal(false));
+    document.getElementById('hero-signup-btn')?.addEventListener('click', () => openModal(true));
+    document.getElementById('close-modal-btn')?.addEventListener('click', closeModal);
+    document.getElementById('modal-backdrop')?.addEventListener('click', closeModal);
+
     const { createClient } = supabase;
     const supabaseClient = createClient(window.CONFIG.SUPABASE_URL, window.CONFIG.SUPABASE_ANON_KEY);
 

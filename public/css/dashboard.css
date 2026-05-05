@@ -1,3 +1,11 @@
+@keyframes statusCardIn {
+  from { opacity: 0; transform: translateY(-12px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0)     scale(1); }
+}
+.status-card-enter {
+  animation: statusCardIn 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
 .status-card {
     background: #ffffff;
     border: 1px solid #e2e8f0;

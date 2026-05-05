@@ -53,21 +53,28 @@
     function renderIndustryPills(industries) {
         const container = document.getElementById('industryPillsContainer');
         if (!container) return;
-        container.innerHTML = industries.map(ind =>
-            `<div class="industry-pill" data-industry="${ind}">${ind}</div>`
-        ).join('');
-        container.querySelectorAll('.industry-pill').forEach(pill => {
-            pill.onclick = () => {
-                selectedIndustry = pill.dataset.industry;
-                container.querySelectorAll('.industry-pill').forEach(p => p.classList.remove('active'));
-                pill.classList.add('active');
-                clearCustomKeywords();
-                activeSelections = [];
-                renderExplorer();
-                updateSelectionPills();
-            };
+        const select = document.createElement('select');
+        select.id = 'industrySelect';
+        industries.forEach(ind => {
+            const opt = document.createElement('option');
+            opt.value = ind;
+            opt.textContent = ind;
+            select.appendChild(opt);
         });
-        if (industries.length > 0) container.querySelector('.industry-pill').click();
+        select.onchange = () => {
+            selectedIndustry = select.value;
+            clearCustomKeywords();
+            activeSelections = [];
+            renderExplorer();
+            updateSelectionPills();
+        };
+        container.innerHTML = '';
+        container.appendChild(select);
+        if (industries.length > 0) {
+            selectedIndustry = industries[0];
+            renderExplorer();
+            updateSelectionPills();
+        }
     }
 
     async function fetchCategoryDefinitions() {

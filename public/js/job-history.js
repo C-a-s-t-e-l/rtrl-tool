@@ -33,15 +33,37 @@ window.rtrlApp.jobHistory = (function () {
                     if (job && window.rtrlApp.cloneJobIntoForm) window.rtrlApp.cloneJobIntoForm(job.parameters);
                 }
 
+                const kwToggle = e.target.closest('.kw-toggle');
+                if (kwToggle) {
+                    const overflow = document.getElementById(kwToggle.dataset.target);
+                    const expanded = overflow.style.display !== 'none';
+                    overflow.style.display = expanded ? 'none' : 'inline';
+                    kwToggle.textContent = expanded ? `+ ${kwToggle.dataset.count} more` : 'show less';
+                }
+
+                const dropdownBtn = e.target.closest('.download-dropdown-btn');
+                if (dropdownBtn) {
+                    const menu = dropdownBtn.closest('.download-dropdown').querySelector('.download-dropdown-menu');
+                    document.querySelectorAll('.download-dropdown-menu').forEach(m => { if (m !== menu) m.classList.remove('open'); });
+                    menu.classList.toggle('open');
+                    e.stopPropagation();
+                }
+
                 const pageBtn = e.target.closest('.page-nav-btn');
                 if (pageBtn && !pageBtn.disabled) {
                     currentPage = parseInt(pageBtn.dataset.page);
                     localStorage.setItem('rtrl_history_page', currentPage);
                     fetchAndRenderJobs(true);
-                    window.scrollTo({ top: document.getElementById('jobHistoryCard').offsetTop - 20, behavior: 'smooth' });
+                    var card = document.getElementById('jobHistoryCard');
+                    var headerH = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--header-h')) || 144;
+                    window.scrollTo({ top: card.getBoundingClientRect().top + window.pageYOffset - headerH, behavior: 'smooth' });
                 }
             });
         }
+
+        document.addEventListener('click', () => {
+            document.querySelectorAll('.download-dropdown-menu.open').forEach(m => m.classList.remove('open'));
+        });
 
         if (searchInput) {
             searchInput.addEventListener('input', (e) => {
@@ -150,6 +172,16 @@ function attachCheckboxListeners() {
         window.rtrlApp.review.openReview(selectedJobIds);
     }
 
+function buildTruncatedList(items, jobId, fieldKey) {
+    const LIMIT = 4;
+    if (items.length <= LIMIT) {
+        return `<span style="color:#3b82f6;font-weight:600;">${items.join(', ')}</span>`;
+    }
+    const uid = `kw-${jobId}-${fieldKey}`;
+    const count = items.length - LIMIT;
+    return `<span style="color:#3b82f6;font-weight:600;">${items.slice(0, LIMIT).join(', ')}</span><span class="kw-overflow" id="${uid}" style="display:none;color:#3b82f6;font-weight:600;">, ${items.slice(LIMIT).join(', ')}</span> <button class="kw-toggle" data-target="${uid}" data-count="${count}">+ ${count} more</button>`;
+}
+
 function renderJob(job) {
     const { id, created_at, parameters, status, result_count } = job;
     const p = parameters || {};
@@ -178,20 +210,20 @@ function renderJob(job) {
 
     if (isCustomSearch) {
         methodLabel = "Custom Keyword Search";
+        const kwItems = (s.customCategory || "").split(',').map(k => k.trim()).filter(Boolean);
+        const kwHTML = kwItems.length > 0 ? buildTruncatedList(kwItems, id, 'kw') : 'N/A';
         categoryDetailHTML = `
             <strong>Method:</strong> Custom Keywords<br>
-            <strong>Keywords:</strong> <span style="color: #3b82f6; font-weight: 600;">${s.customCategory || "N/A"}</span>
+            <strong>Keywords:</strong> ${kwHTML}
         `;
     } else {
         methodLabel = "Industry Dataset Search";
         const industry = s.primaryCategory || "General";
-        const categories = s.subCategoryList && s.subCategoryList.length > 0 
-            ? s.subCategoryList.join(', ') 
-            : "All Categories";
-            
+        const subCats = s.subCategoryList && s.subCategoryList.length > 0 ? s.subCategoryList : null;
+        const catHTML = subCats ? buildTruncatedList(subCats, id, 'cat') : '<span style="color:#3b82f6;font-weight:600;">All Categories</span>';
         categoryDetailHTML = `
             <strong>Industry:</strong> ${industry}<br>
-            <strong>Categories:</strong> <span style="color: #3b82f6; font-weight: 600;">${categories}</span>
+            <strong>Categories:</strong> ${catHTML}
         `;
     }
 
@@ -203,15 +235,6 @@ function renderJob(job) {
 
     const authToken = tokenProvider();
 
-    const fileLinks = `
-        <a href="${backendUrl}/api/jobs/${id}/download/full_xlsx?authToken=${authToken}" class="file-link" download><i class="fas fa-file-excel"></i> Full List (.xlsx)</a>
-        <a href="${backendUrl}/api/jobs/${id}/download/duplicates_xlsx?authToken=${authToken}" class="file-link" download><i class="fas fa-copy"></i> Duplicates (.xlsx)</a>
-        <a href="${backendUrl}/api/jobs/${id}/download/sms_csv?authToken=${authToken}" class="file-link" download><i class="fas fa-mobile-alt"></i> SMS List (.csv)</a>
-        <a href="${backendUrl}/api/jobs/${id}/download/contacts_csv?authToken=${authToken}" class="file-link" download><i class="fas fa-address-book"></i> Emails (.csv)</a>
-        <a href="${backendUrl}/api/jobs/${id}/download/mobiles_zip?authToken=${authToken}" class="file-link" download><i class="fas fa-file-zipper"></i> Mobile Splits (.zip)</a>
-        <a href="${backendUrl}/api/jobs/${id}/download/csv_zip?authToken=${authToken}" class="file-link" download><i class="fas fa-file-archive"></i> CSV Splits (.zip)</a>
-        <a href="${backendUrl}/api/jobs/${id}/download/txt_zip?authToken=${authToken}" class="file-link" download><i class="fas fa-file-alt"></i> TXT Splits (.zip)</a>
-    `;
 
     return `
         <div class="job-item" id="job-card-${id}">
@@ -252,22 +275,26 @@ function renderJob(job) {
             </div>
 
             ${status === 'completed' ? `
-            <div class="job-downloads" style="margin-top: 15px;">
-                <div class="job-files">
-                    <h5>Download Files</h5>
-                    <div class="file-links-container">
-                        ${fileLinks}
+            <div class="job-actions" style="margin-top: 15px;">
+                <div class="action-buttons-container">
+                    <div class="download-dropdown">
+                        <button class="job-action-btn download-dropdown-btn"><i class="fas fa-download"></i> Download <i class="fas fa-chevron-down dl-chevron"></i></button>
+                        <div class="download-dropdown-menu">
+                            <a href="${backendUrl}/api/jobs/${id}/download/all?authToken=${authToken}" class="download-dropdown-item" download><i class="fas fa-file-zipper"></i> Download All (.zip)</a>
+                            <div class="download-dropdown-divider"></div>
+                            <a href="${backendUrl}/api/jobs/${id}/download/full_xlsx?authToken=${authToken}" class="download-dropdown-item" download><i class="fas fa-file-excel"></i> Full List (.xlsx)</a>
+                            <a href="${backendUrl}/api/jobs/${id}/download/duplicates_xlsx?authToken=${authToken}" class="download-dropdown-item" download><i class="fas fa-copy"></i> Duplicates (.xlsx)</a>
+                            <a href="${backendUrl}/api/jobs/${id}/download/sms_csv?authToken=${authToken}" class="download-dropdown-item" download><i class="fas fa-mobile-alt"></i> SMS List (.csv)</a>
+                            <a href="${backendUrl}/api/jobs/${id}/download/contacts_csv?authToken=${authToken}" class="download-dropdown-item" download><i class="fas fa-address-book"></i> Emails (.csv)</a>
+                            <a href="${backendUrl}/api/jobs/${id}/download/mobiles_zip?authToken=${authToken}" class="download-dropdown-item" download><i class="fas fa-file-zipper"></i> Mobile Splits (.zip)</a>
+                            <a href="${backendUrl}/api/jobs/${id}/download/csv_zip?authToken=${authToken}" class="download-dropdown-item" download><i class="fas fa-file-archive"></i> CSV Splits (.zip)</a>
+                            <a href="${backendUrl}/api/jobs/${id}/download/txt_zip?authToken=${authToken}" class="download-dropdown-item" download><i class="fas fa-file-alt"></i> TXT Splits (.zip)</a>
+                        </div>
                     </div>
-                </div>
-                <div class="job-actions">
-                    <h5>Actions</h5>
-                    <div class="action-buttons-container">
-                        <a href="${backendUrl}/api/jobs/${id}/download/all?authToken=${authToken}" class="job-action-btn" download><i class="fas fa-file-zipper"></i> Download All (.zip)</a>
-                        <button class="job-action-btn resend-email-btn" data-job-id="${id}"><i class="fas fa-paper-plane"></i> Resend Email</button>
-                        <button class="job-action-btn email-body-list-btn" data-job-id="${id}"><i class="fas fa-mobile-alt"></i> Send Mobile List</button>
-                        <button class="job-action-btn clone-job-btn" style="background: #e0f2fe; border-color: #bae6fd; color: #0369a1;" data-job-id="${id}"><i class="fas fa-sync-alt"></i> Repeat Search</button>
-                        <button class="job-action-btn btn-review-trigger" style="background-color: #f0f9ff;" onclick="window.rtrlApp.review.openReview('${id}')"><i class="fas fa-list-check"></i> Review & Filter</button>
-                    </div>
+                    <button class="job-action-btn resend-email-btn" data-job-id="${id}"><i class="fas fa-paper-plane"></i> Resend Email</button>
+                    <button class="job-action-btn email-body-list-btn" data-job-id="${id}"><i class="fas fa-mobile-alt"></i> Send Mobile List</button>
+                    <button class="job-action-btn clone-job-btn" style="background: #e0f2fe; border-color: #bae6fd; color: #0369a1;" data-job-id="${id}"><i class="fas fa-sync-alt"></i> Repeat Search</button>
+                    <button class="job-action-btn btn-review-trigger" style="background-color: #f0f9ff;" onclick="window.rtrlApp.review.openReview('${id}')"><i class="fas fa-list-check"></i> Review & Filter</button>
                 </div>
             </div>
             ` : ''}

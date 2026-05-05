@@ -14,6 +14,7 @@
                 socket.emit("authenticate_socket", window.rtrlApp.session.access_token);
                 const savedJobId = localStorage.getItem("rtrl_active_job_id");
                 if (savedJobId) {
+                    if (window.rtrlApp.showStatusCard) window.rtrlApp.showStatusCard();
                     socket.emit("subscribe_to_job", { jobId: savedJobId, authToken: window.rtrlApp.session.access_token });
                 } else {
                     window.rtrlApp.updateDashboardUi("ready");
