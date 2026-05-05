@@ -374,17 +374,38 @@
     position: sticky;
     left: 0;
     background: white;
-    z-index: 10;
+    z-index: 11;
 }
 .review-table th:nth-child(1) {
-    z-index: 15;
+    z-index: 16;
     background: #f8fafc;
+}
+.review-table td:nth-child(1)::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: -2px;
+    bottom: 0;
+    width: 2px;
+    background: white;
+}
+.review-table th:nth-child(1)::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: -2px;
+    bottom: 0;
+    width: 2px;
+    background: #f8fafc;
+}
+.review-table tr:hover td:nth-child(1)::after {
+    background: #f8fbff;
 }
 
 .review-table th:nth-child(2),
 .review-table td:nth-child(2) {
     position: sticky;
-    left: 50px;
+    left: 49px;
     background: white;
     z-index: 10;
 }
@@ -396,7 +417,7 @@
 .review-table th:nth-child(3),
 .review-table td:nth-child(3) {
     position: sticky;
-    left: 100px;
+    left: 99px;
     background: white;
     z-index: 10;
 }
@@ -408,7 +429,7 @@
 .review-table th:nth-child(4),
 .review-table td:nth-child(4) {
     position: sticky;
-    left: 210px;
+    left: 209px;
     background: white;
     z-index: 10;
     border-right: 2px solid #e2e8f0;

@@ -391,9 +391,10 @@ window.rtrlApp.review = (function () {
                 <td style="font-size:0.75rem; color:#64748b">${d.StreetAddress || ""}</td>
                 <td style="font-weight:600">${d.StarRating ? d.StarRating + " ★" : ""}</td>
                 <td><div style="display:flex; gap:10px; font-size:0.9rem">
-                    ${d.Website ? `<a href="${d.Website}" target="_blank" style="color:#3b82f6"><i class="fas fa-link"></i></a>` : ""}
-                    ${d.FacebookURL ? `<a href="${d.FacebookURL}" target="_blank" style="color:#1877f2"><i class="fab fa-facebook"></i></a>` : ""}
-                    ${d.InstagramURL ? `<a href="${d.InstagramURL}" target="_blank" style="color:#e4405f"><i class="fab fa-instagram"></i></a>` : ""}
+                    ${d.GoogleMapsURL ? `<a href="${d.GoogleMapsURL}" target="_blank" style="color:#34a853" title="Google Maps"><i class="fas fa-map-marker-alt"></i></a>` : ""}
+                    ${d.Website ? `<a href="${d.Website}" target="_blank" style="color:#3b82f6" title="Website"><i class="fas fa-link"></i></a>` : ""}
+                    ${d.FacebookURL ? `<a href="${d.FacebookURL}" target="_blank" style="color:#1877f2" title="Facebook"><i class="fab fa-facebook"></i></a>` : ""}
+                    ${d.InstagramURL ? `<a href="${d.InstagramURL}" target="_blank" style="color:#e4405f" title="Instagram"><i class="fab fa-instagram"></i></a>` : ""}
                 </div></td>
                 <td class="editable-cell col-notes" contenteditable="true" onblur="window.rtrlApp.review.edit(${d._id}, 'ManualNotes', this.innerText)">${d.ManualNotes || ""}</td>
             </tr>`).join("");
