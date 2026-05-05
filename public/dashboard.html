@@ -181,30 +181,6 @@
               <div id="map-parent-container" style="height: 250px; width: 100%; position: relative; border-radius: 8px; overflow: hidden; border: 1px solid #e2e8f0; z-index: 1;">
                 <div id="map" style="height: 100%; width: 100%;"></div>
               </div>
-              <div id="map-workspace-modal" class="review-overlay" style="display: none;">
-                <div class="review-window" style="width: 96vw; height: 92vh; max-width: none;">
-                  <div class="review-header" style="display: flex; flex-direction: row; justify-content: space-between; align-items: center; padding: 1rem 2rem;">
-                    <div>
-                      <h3 style="margin:0; font-size: 1.2rem;">Map Planning Workspace</h3>
-                      <p style="margin:4px 0 0 0; font-size: 0.85rem; color: #64748b;">Search suburbs to drop pins or click anywhere on the map. Drag pins to adjust.</p>
-                    </div>
-                    <div style="display: flex; gap: 12px; align-items: center;">
-                      <div class="search-wrapper" style="position: relative; width: 350px; margin: 0;">
-                        <i class="fas fa-search" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: #94a3b8; pointer-events: none;"></i>
-                        <input type="text" id="workspace-search-input" placeholder="Search suburb to drop pin..." style="width: 100%; padding: 10px 16px 10px 38px; border-radius: 8px; border: 1px solid #cbd5e1; outline: none; font-size: 0.95rem; font-family: inherit; transition: border-color 0.2s; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
-                        <div id="workspace-suggestions" class="autocomplete-suggestions"></div>
-                      </div>
-                      <button class="btn-review-export" id="btn-close-map-workspace" style="white-space: nowrap;">Save & Close</button>
-                    </div>
-                  </div>
-                  <div style="display: flex; flex: 1; overflow: hidden; position: relative;">
-                    <div id="big-map-container" style="flex: 1; background: #f1f5f9; position: relative; z-index: 1;"></div>
-                    <div id="map-sidebar" style="width: 340px; border-left: 1px solid #e2e8f0; background: #f8fafc; display: flex; flex-direction: column; z-index: 2;">
-                      <div id="zone-list" style="flex: 1; overflow-y: auto;"></div>
-                    </div>
-                  </div>
-                </div>
-              </div>
             </div>
           </div>
 
@@ -297,6 +273,31 @@
           </div>
         </div>
       </main>
+    </div>
+
+    <div id="map-workspace-modal" class="review-overlay" style="display: none;">
+      <div class="review-window" style="width: 96vw; height: 92vh; max-width: none;">
+        <div class="review-header" style="display: flex; flex-direction: row; justify-content: space-between; align-items: center; padding: 1rem 2rem;">
+          <div>
+            <h3 style="margin:0; font-size: 1.2rem;">Map Planning Workspace</h3>
+            <p style="margin:4px 0 0 0; font-size: 0.85rem; color: #64748b;">Search suburbs to drop pins or click anywhere on the map. Drag pins to adjust.</p>
+          </div>
+          <div style="display: flex; gap: 12px; align-items: center;">
+            <div class="search-wrapper" style="position: relative; width: 350px; margin: 0;">
+              <i class="fas fa-search" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: #94a3b8; pointer-events: none;"></i>
+              <input type="text" id="workspace-search-input" placeholder="Search suburb to drop pin..." style="width: 100%; padding: 10px 16px 10px 38px; border-radius: 8px; border: 1px solid #cbd5e1; outline: none; font-size: 0.95rem; font-family: inherit; transition: border-color 0.2s; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
+              <div id="workspace-suggestions" class="autocomplete-suggestions"></div>
+            </div>
+            <button class="btn-review-export" id="btn-close-map-workspace" style="white-space: nowrap;">Save & Close</button>
+          </div>
+        </div>
+        <div style="display: flex; flex: 1; overflow: hidden; position: relative;">
+          <div id="big-map-container" style="flex: 1; background: #f1f5f9; position: relative; z-index: 1;"></div>
+          <div id="map-sidebar" style="width: 340px; border-left: 1px solid #e2e8f0; background: #f8fafc; display: flex; flex-direction: column; z-index: 2;">
+            <div id="zone-list" style="flex: 1; overflow-y: auto;"></div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div id="alert-modal" class="login-overlay" style="display: none; background: rgba(15, 23, 42, 0.4); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); z-index: 11000; align-items: center; justify-content: center;">
